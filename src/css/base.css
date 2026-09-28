@@ -1,0 +1,6 @@
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:'Space Grotesk','Segoe UI',system-ui,sans-serif; overflow:hidden;}
+  .mono{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;}
+  #app{display:grid;grid-template-rows:52px 1fr 84px;height:100vh;width:100vw;}
+

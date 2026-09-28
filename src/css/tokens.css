@@ -1,0 +1,17 @@
+  :root{
+    --logo:url('../assets/logo.png');
+    --bg:#060d16;
+    --bg-2:#081221;
+    --panel:#0c1826;
+    --panel-2:#101f30;
+    --border:#1b3247;
+    --border-soft:#142838;
+    --text:#dcebf1;
+    --text-dim:#6e8ba0;
+    --text-dimmer:#4b6577;
+    --accent:#2fe0c4;
+    --accent-dim:#1a8f7d;
+    --coral:#ff8058;
+    --glider:#6fa8ff;
+    --warn:#ffcf5c;
+  }
