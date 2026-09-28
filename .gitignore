@@ -1,0 +1,11 @@
+# old copies kept by hand
+backup/
+# code-graph tool output
+graphify-out/
+# raw third-party downloads for the data pipeline (tens of MB); see data-pipeline/README
+data-pipeline/cache/
+# build and test output
+dist/
+tests/output/
+__pycache__/
+*.pyc
