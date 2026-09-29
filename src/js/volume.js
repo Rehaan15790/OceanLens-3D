@@ -111,7 +111,7 @@ function contourSegments(vals, level){
   const pts = [];
   const edge = (a,b)=>{
     const va = vals[a], vb = vals[b];
-    if((va-level)*(vb-level) >= 0) return null;
+    if((va >= level) === (vb >= level)) return null;
     const f = (level-va)/(vb-va);
     const [x0,z0] = toXZ(gridPts[a].lat, gridPts[a].lon), [x1,z1] = toXZ(gridPts[b].lat, gridPts[b].lon);
     return [lerp(x0,x1,f), lerp(z0,z1,f)];

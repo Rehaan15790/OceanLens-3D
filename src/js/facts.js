@@ -58,29 +58,9 @@ function realFacts(){
   F.argo = {profiles:P.length, floats:new Set(P.map(p=>p.id)).size,
     perAnalysis:times.map((_,t)=>P.filter(p=>p.snap===t).length), tempOnly:P.filter(p=>!p.salOk).length};
 
-  // track
-  const T = REAL_TRACK, sea = T.filter(p=>!p.landfall), lf = T[T.length-1];
-  const peak = key=>T.reduce((a,b)=>(b[key]||0) > (a[key]||0) ? b : a);
-  const ri = key=>{
-    let best = null;
-    T.forEach((a,i)=>T.slice(i+1).forEach(b=>{
-      if(Date.parse(b.t)-Date.parse(a.t)!==864e5 || a[key]==null || b[key]==null) return;
-      // ties go to the later window (17 May 06Z 70->140 kt beats 00Z 60->130 kt)
-      if(!best || b[key]-a[key] >= best.to-best.from) best = {from:a[key], to:b[key], start:a.t, end:b.t};
-    }));
-    return best;
-  };
-  const pj = peak('usa'), pi = peak('nd');
-  F.track = {firstFix:T[0].t, inMapFixes:sea.length,
-    leadDays:times.map(x=>(Date.parse(T[0].t)-x)/864e5),
-    landfall:{time:lf.t, lat:lf.lat, lon:lf.lon, windJtwc:lf.usa, windImd:lf.nd},
-    peakJtwc:{kt:pj.usa, time:pj.t}, peakImd:{kt:pi.nd, time:pi.t, grade:pi.grade},
-    ri24Jtwc:ri('usa'), ri24Imd:ri('nd')};
-
-  const before = Math.max(0, times.filter(x=>x <= Date.parse(T[0].t)-12*3.6e6).length-1);
-  const after = Math.max(before+1, times.findIndex(x=>x >= Date.parse(lf.t)+12*3.6e6));
-  const heat = t=>mean(sea.map(p=>tchpAt(p.lat, p.lon, t, bathyDepth(p.lat, p.lon))));
-  F.path = {beforeIndex:before, afterIndex:after, heatBefore:heat(before), heatAfter:heat(after)};
+  const T = REAL_TRACK;
+  if(T.length) Object.assign(F, trackFacts(T));
+  else Object.assign(F, {track:null, path:null, section:null});
 
   // basins
   const bay = [], ars = [];
@@ -119,22 +99,6 @@ function realFacts(){
     return best;
   })};
 
-  // the straight line from the first fix to landfall (the "track" section preset), 200 columns
-  const chord = t=>{
-    const sst = [], d26 = [];
-    for(let k=0;k<200;k++){
-      const u = k/199, lat = lerp(T[0].lat, lf.lat, u), lon = lerp(T[0].lon, lf.lon, u);
-      if(isLand(lat, lon)) continue;
-      const c = col(0, lat, lon, t);
-      sst.push(c[0]);
-      const d = crossDepth(c, Math.min(bathyDepth(lat, lon), DEPTHS[NL-1]), 26);
-      if(d!==null) d26.push(d);
-    }
-    return [mean(sst), mean(d26)];
-  };
-  const [sb, db] = chord(before), [sa, da] = chord(after);
-  F.section = {track:{columns:200, sstBefore:sb, sstAfter:sa, cooling:sb-sa, d26Before:db, d26After:da}};
-
   // model-Argo comparison, exactly what the comparison panel shows
   const bands = [[0,100],[100,300],[300,1000]];
   const comp = times.map((_,t)=>{
@@ -157,12 +121,60 @@ function realFacts(){
   const deep = comp.map(r=>r.temp[2] && r.temp[2].rmse).filter(Number.isFinite);
   F.comparison = {matchedInTime:P.every(p=>!!p.model), bands:comp.map(({temp, sal})=>({temp, sal})),
     worst:comp.map(r=>r.worst),
-    deepRmse:{median:percentile(deep, 50), min:Math.min(...deep), max:Math.max(...deep)}};
+    deepRmse:deep.length ? {median:percentile(deep, 50), min:Math.min(...deep), max:Math.max(...deep)} : null};
 
   F.view = viewFacts();
   F.ranges = rangeFacts((vi, t, k, i, j)=>node(t, vi, k, i, j),
     (t, k, i, j)=>Math.hypot(node(t,2,k,i,j), node(t,3,k,i,j)),
     (p, t, seabed)=>tchpAt(p.lat, p.lon, t, seabed));
+  return F;
+}
+
+// Amphan's track, the heat under its path and the genesis-to-landfall section (needs at least one fix)
+function trackFacts(T){
+  const m = REAL.meta, NL = DEPTHS.length, times = m.times.map(Date.parse), F = {};
+  const col = (vi, lat, lon, t)=>DEPTHS.map(d=>realAt(vi, lat, lon, d, t));
+  const tchpAt = (lat, lon, t, seabed)=>tchpColumn(columnInterp(col(0, lat, lon, t)), columnInterp(col(1, lat, lon, t)),
+    Math.min(seabed, DEPTHS[NL-1])).q;
+  const sea = T.filter(p=>!p.landfall), lf = T[T.length-1];
+  const peak = key=>T.reduce((a,b)=>(b[key]||0) > (a[key]||0) ? b : a);
+  const ri = key=>{
+    let best = null;
+    T.forEach((a,i)=>T.slice(i+1).forEach(b=>{
+      if(Date.parse(b.t)-Date.parse(a.t)!==864e5 || a[key]==null || b[key]==null) return;
+      // ties go to the later window (17 May 06Z 70->140 kt beats 00Z 60->130 kt)
+      if(!best || b[key]-a[key] >= best.to-best.from) best = {from:a[key], to:b[key], start:a.t, end:b.t};
+    }));
+    return best;
+  };
+  const pj = peak('usa'), pi = peak('nd');
+  F.track = {firstFix:T[0].t, inMapFixes:sea.length,
+    leadDays:times.map(x=>(Date.parse(T[0].t)-x)/864e5),
+    landfall:{time:lf.t, lat:lf.lat, lon:lf.lon, windJtwc:lf.usa, windImd:lf.nd},
+    peakJtwc:{kt:pj.usa, time:pj.t}, peakImd:{kt:pi.nd, time:pi.t, grade:pi.grade},
+    ri24Jtwc:ri('usa'), ri24Imd:ri('nd')};
+
+  const before = Math.max(0, times.filter(x=>x <= Date.parse(T[0].t)-12*3.6e6).length-1);
+  const after = Math.max(before+1, times.findIndex(x=>x >= Date.parse(lf.t)+12*3.6e6));
+  const heat = t=>mean(sea.map(p=>tchpAt(p.lat, p.lon, t, bathyDepth(p.lat, p.lon))));
+  F.path = {beforeIndex:before, afterIndex:after, heatBefore:heat(before), heatAfter:heat(after)};
+
+  // the straight line from the first fix to landfall (the "track" section preset), 200 columns
+  const chord = t=>{
+    const sst = [], d26 = [];
+    for(let k=0;k<200;k++){
+      const u = k/199, lat = lerp(T[0].lat, lf.lat, u), lon = lerp(T[0].lon, lf.lon, u);
+      if(isLand(lat, lon)) continue;
+      const c = col(0, lat, lon, t);
+      sst.push(c[0]);
+      const d = crossDepth(c, Math.min(bathyDepth(lat, lon), DEPTHS[NL-1]), 26);
+      if(d!==null) d26.push(d);
+    }
+    return [mean(sst), mean(d26)];
+  };
+  const [sb, db] = chord(before), [sa, da] = chord(after);
+  F.section = {track:{columns:200, sstBefore:sb, sstAfter:sa, cooling:sb-sa, d26Before:db, d26After:da}};
+
   return F;
 }
 

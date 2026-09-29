@@ -7,7 +7,8 @@ keeps its own licence or terms of use. The project's own code has no licence yet
 
 ### three.js r128
 
-Inlined in the built file from `vendor/three.r128.min.js`, unmodified.
+Inlined in the built file from `vendor/three.r128.min.js`, unmodified, with this notice as a comment in front of it
+(also in `vendor/three.LICENSE`).
 
 ```
 The MIT License
@@ -40,36 +41,31 @@ None. The app uses the operating system's fonts.
 ## Data
 
 The real-data snapshot embedded in the built file is derived from the datasets below. None of them needs an
-account. Each asks to be acknowledged or cited when used.
+account. Each asks to be acknowledged or cited when used. The same texts are in the app's About panel and in the
+snapshot's `meta.citations`.
 
-<!-- science: replace each "to confirm" line with the final acknowledgement text and citation (PLAN 3.1). -->
+### HYCOM + NCODA Global 1/12° Analysis
 
-### HYCOM + NCODA Global 1/12° Analysis (GOFS 3.1, GLBy0.08/expt_93.0)
+HYCOM + NCODA Global 1/12° Analysis (GOFS 3.1, GLBy0.08/expt_93.0), provided by the HYCOM consortium and the U.S.
+Naval Research Laboratory (hycom.org). Chassignet et al. (2007), J. Mar. Syst. 65, 60–83; Cummings (2005),
+Q. J. R. Meteorol. Soc. 131, 3583–3604.
 
-Temperature, salinity and currents for eight analyses, 4–25 May 2020, averaged into 0.5° cells.
-- Acknowledgement: to confirm (HYCOM Consortium wording from hycom.org).
-- References: to confirm (GOFS 3.1 and NCODA).
+### Argo float data
 
-### Argo float data (Argo GDAC, accessed through the Ifremer ERDDAP server)
+These data were collected and made freely available by the International Argo Program and the national programs
+that contribute to it (https://argo.ucsd.edu, https://www.ocean-ops.org). The Argo Program is part of the Global
+Ocean Observing System. Argo (2000), Argo float data and metadata from Global Data Assembly Centre (Argo GDAC),
+SEANOE, doi:10.17882/42182; accessed through the Ifremer ERDDAP server.
 
-Temperature and salinity profiles, May 2020, delayed-mode or adjusted values where available.
-- Acknowledgement: "These data were collected and made freely available by the International Argo Program and
-  the national programs that contribute to it (https://argo.ucsd.edu, https://www.ocean-ops.org). The Argo
-  Program is part of the Global Ocean Observing System." (to confirm)
-- Citation: Argo (2000). Argo float data and metadata from Global Data Assembly Centre (Argo GDAC). SEANOE.
-  https://doi.org/10.17882/42182, accessed on the date recorded in the data provenance. (to confirm)
+### ETOPO1 Global Relief Model
 
-### ETOPO1 Global Relief Model (NOAA NCEI, through the NOAA ERDDAP server)
+Amante, C. and B. W. Eakins (2009), ETOPO1 1 Arc-Minute Global Relief Model: Procedures, Data Sources and Analysis,
+NOAA Technical Memorandum NESDIS NGDC-24, doi:10.7289/V5C8276M. (ETOPO1 is superseded by ETOPO 2022.) A US
+government work in the public domain.
 
-Coastline and sea floor, sampled every 0.1°. A US government work in the public domain.
-- Citation: Amante, C. and B. W. Eakins (2009). ETOPO1 1 Arc-Minute Global Relief Model: Procedures, Data
-  Sources and Analysis. NOAA Technical Memorandum NESDIS NGDC-24. https://doi.org/10.7289/V5C8276M (to confirm)
+### IBTrACS
 
-### IBTrACS v04r01, North Indian basin (NOAA NCEI)
-
-Cyclone Amphan's six-hourly positions and winds, from RSMC New Delhi (IMD) and JTWC. A US government work in the
-public domain; the originating agencies should be credited.
-- Citations: Knapp, K. R., M. C. Kruk, D. H. Levinson, H. J. Diamond and C. J. Neumann (2010). The International
-  Best Track Archive for Climate Stewardship (IBTrACS). Bulletin of the American Meteorological Society 91,
-  363–376. https://doi.org/10.1175/2009BAMS2755.1 and the v04 dataset, https://doi.org/10.25921/82ty-9e16
-  (to confirm)
+Knapp, K. R., M. C. Kruk, D. H. Levinson, H. J. Diamond and C. J. Neumann (2010), The International Best Track
+Archive for Climate Stewardship (IBTrACS), Bull. Amer. Meteor. Soc. 91, 363–376, doi:10.1175/2009BAMS2755.1;
+IBTrACS v04r01, NOAA NCEI, doi:10.25921/82ty-9e16. Positions and winds from RSMC New Delhi (IMD) and the Joint
+Typhoon Warning Center. A US government work in the public domain.

@@ -59,7 +59,7 @@ const ISO_META = {
   sal: {min:32.4, max:36.6, step:0.05, def:35, dp:2},
   cur: {min:0.02, max:0.36, step:0.01, def:0.1, dp:2}
 };
-// ranges that depend on the data source (real ones: 0.5–99.5th percentiles of the snapshot)
+// iso-slider limits and fallback colour ranges per data source; the colour defaults per view come from facts
 const MODE_DEFAULTS = {
   synth:{temp:[5,32], sal:[32.4,36.6], cur:[0,0.36]},
   real: {temp:[6,32], sal:[32.6,36.8], cur:[0,1.0]}

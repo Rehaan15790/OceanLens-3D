@@ -1,12 +1,12 @@
 # OceanLens 3D
 
 A browser-based 3D viewer for ocean model output and Argo float profiles over the Arabian Sea and the Bay of
-Bengal (6–22° N, 61–92° E, 0–1000 m). It was built by Team ByteForge for Smart India Hackathon 2026, problem
+Bengal (6–22°N, 61–92°E, 0–1000 m). It was built by Team ByteForge for Smart India Hackathon 2026, problem
 statement 26067 (problem owner: INCOIS). It is a student prototype and is not affiliated with or endorsed by
 INCOIS or the Ministry of Earth Sciences.
 
 Two data modes:
-- **Real data:** Cyclone Amphan, May 2020. It combines eight HYCOM GOFS 3.1 analyses, QC'd Argo profiles, ETOPO1
+- **Real data:** Cyclone Amphan, May 2020. It combines eight HYCOM GOFS 3.1 analyses, quality-controlled Argo profiles, ETOPO1
   relief and the IBTrACS track. HYCOM assimilates Argo, so the model–Argo comparison is a consistency check, not
   independent validation.
 - **Synthetic demo data:** analytic fields with synthetic floats and gliders, labelled as such. It is not a real
@@ -57,14 +57,16 @@ with a client written against the Python standard library. See `docs/TESTING.md`
 
 ## Rebuild the data
 
-The pipeline caches every raw response, so a rebuild from an existing cache works offline:
+The pipeline caches every raw response, so a rebuild from an existing cache works offline. By default it reads
+the cache from `data-pipeline/cache/`, which git ignores. Pass `--cache <path-to-raw-cache>` or set
+`OCEANLENS_CACHE` to use another folder:
 
 ```
-python data-pipeline/build_snapshot.py --cache <path-to-raw-cache>
+python data-pipeline/build_snapshot.py
 ```
 
-A first run, or a run with a missing cache file, needs network access and must be explicitly allowed with the
-pipeline's fetch option; see `python data-pipeline/build_snapshot.py --help`. Behind antivirus software that
+A first run, or a run with a missing cache file, needs network access and must be allowed with `--fetch`; see
+`python data-pipeline/build_snapshot.py --help`. Behind antivirus software that
 inspects TLS traffic, pass the antivirus root certificate with `--ca-bundle <your-ca-bundle.pem>`.
 
 ## Deploy

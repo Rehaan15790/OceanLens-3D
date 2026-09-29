@@ -15,16 +15,20 @@ const shell = (()=>{
     btn.setAttribute('aria-label', label); btn.title = label;
     // the canvas is sized by a ResizeObserver on #viewport (graphics), so nothing else to call here
   }
+  let userToggled = false;
   ['left','right'].forEach(side=>document.getElementById(side+'Toggle')
-    .addEventListener('click', ()=>setPanel(side, app.classList.contains(side+'-collapsed'))));
+    .addEventListener('click', ()=>{ userToggled = true; setPanel(side, app.classList.contains(side+'-collapsed')); }));
+  let widthTimer = 0;
+  window.addEventListener('resize', ()=>{ clearTimeout(widthTimer);
+    widthTimer = setTimeout(()=>{ if(!userToggled) applyWidth(); }, 200); });
 
   // panels.js calls this when a float, the track or a section is opened, so a collapsed panel comes back
   function revealRight(){ if(app.classList.contains('right-collapsed')) setPanel('right', true); }
 
   function applyWidth(){
     const w = window.innerWidth;
-    if(w < NARROW) setPanel('right', false);
-    if(w < SMALL){ setPanel('left', false); }
+    setPanel('right', w >= NARROW);
+    setPanel('left', w >= SMALL);
   }
 
   // small screens: an honest notice with a way through (owner decision 4)

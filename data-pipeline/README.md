@@ -21,6 +21,11 @@ With `--fetch`, every response is parsed before it is cached, written atomically
 cache's `manifest.json` (URL, SHA-256, size, date). Behind a TLS-inspecting proxy or antivirus, pass a PEM
 bundle with `--ca-bundle` or `OCEANLENS_CA_BUNDLE`.
 
+`CACHE_MANIFEST.txt` lists every raw file behind the committed data file (name, SHA-256, bytes); refresh it
+with `--cache-manifest data-pipeline/CACHE_MANIFEST.txt`. The Argo mirror revises delayed-mode values over time,
+so the cache cannot be downloaded again identically: keep an archive of it (about 42 MB) and note its location
+and SHA-256 here.
+
 The same cache always gives a byte-identical file. The golden test in `test_build_snapshot.py` rebuilds
 the committed file and compares bytes whenever a cache is available.
 

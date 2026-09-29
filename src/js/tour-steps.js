@@ -10,8 +10,8 @@ const TOUR_STEP_DEFS = [
    title:{real:'Temperature', synth:'Temperature (synthetic)'},
    caption:{
      real:(f,fmt,t)=>`HYCOM analysis, ${fmt.dayMonth(f.analysis.times[t])}. The Bay of Bengal surface is mostly above ` +
-       `${fmt.int(Math.floor(f.bay.sstP25[t]))} °C; the sides of the block show it cooling to about ` +
-       `${fmt.int(f.bay.t1000Mean[t])} °C by 1000 m.`,
+       `${fmt.int(Math.floor(f.bay.sstP25[t]))} °C; below it the water cools to about ` +
+       `${fmt.int(f.bay.t1000Mean[t])} °C by 1000 m (a depth slice shows it).`,
      plain:'HYCOM analysis: warm surface water above a sharp thermocline. The sides of the block show the whole ' +
        'column down to 1000 m.',
      synth:'Synthetic demo data, not a real ocean state. Warm surface water cools through the thermocline towards ' +
@@ -78,8 +78,8 @@ const TOUR_STEP_DEFS = [
        `${fmt.int(fmt.round(f.section.track.d26After,5))} m: a cold wake.`,
      plain:'After landfall, on the genesis-to-landfall line: in HYCOM the surface along the path has cooled while D26 ' +
        'stays at a similar depth, a cold wake.',
-     synth:'A section along the sample track, from the surface to the sea floor. The solid white line is D26, the ' +
-       'dashed one D20. Drag across the sea, or press S, to cut your own.'}},
+     synth:'A section along the sample track, surface to sea floor. In the right panel, solid is D26 and dashed D20. ' +
+       'Drag across the sea, or press S, to cut your own.'}},
 
   {id:'argo', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:f=>f ? tourOverBay(f) : 5, openFloat:'worst',
    title:{real:'Argo against HYCOM', synth:'Floats against the model (synthetic)'},

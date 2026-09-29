@@ -40,8 +40,7 @@ function buildArrows(depth){
 }
 
 /* ---- current streaks: directional particles advected by the model's velocity field ----
-   In the current-speed view they carry the speed colours of the key; over other variables they are
-   neutral white, more opaque where the flow is faster. */
+   Current-speed view only (plan e), in the speed colours of the key. */
 const FLOW_N = 340;
 const FLOW_SPEED = 2.6; // visual speed multiplier, illustrative, not physically scaled
 const flowLat = new Float32Array(FLOW_N);
@@ -64,13 +63,13 @@ function currentFlowDepth(){
   return state.mode==='slice' ? DEPTHS[state.depthIdx] : 0;
 }
 function applyFlowVisibility(){
-  flowMesh.visible = state.showFlow && state.variable!=='tchp';
+  flowMesh.visible = state.showFlow && state.variable==='cur';
   if(flowMesh.visible) updateFlowParticles(0);
 }
 const _dir = new THREE.Vector3(), _perp = new THREE.Vector3(), _up = new THREE.Vector3(0,1,0);
 function updateFlowParticles(dt){
-  if(!state.showFlow || state.variable==='tchp') return;
-  const depth = currentFlowDepth(), keyed = state.variable==='cur';
+  if(!flowMesh.visible) return;
+  const depth = currentFlowDepth();
   const kFlow = FLOW_SPEED*0.36/VAR_META.cur.defMax;   // same on-screen pace whatever the source's current speeds
   const pos = flowGeo.getAttribute('position').array, col = flowGeo.getAttribute('color').array;
   for(let i=0;i<FLOW_N;i++){
@@ -97,8 +96,7 @@ function updateFlowParticles(dt){
     pos[p+3]=tailX+_perp.x*halfW; pos[p+4]=y; pos[p+5]=tailZ+_perp.z*halfW;
     pos[p+6]=tailX-_perp.x*halfW; pos[p+7]=y; pos[p+8]=tailZ-_perp.z*halfW;
 
-    const c = keyed ? Render.gpuColor(paletteColor(state.palette, speedN)) : [1,1,1];
-    const aNose = keyed ? 0.95 : 0.25 + 0.6*speedN, aTail = keyed ? 0.12 : 0.03;
+    const c = Render.gpuColor(paletteColor(state.palette, speedN)), aNose = 0.95, aTail = 0.12;
     const q = i*12;
     col[q]=c[0]; col[q+1]=c[1]; col[q+2]=c[2]; col[q+3]=aNose;
     for(const o of [4, 8]){ col[q+o]=c[0]; col[q+o+1]=c[1]; col[q+o+2]=c[2]; col[q+o+3]=aTail; }

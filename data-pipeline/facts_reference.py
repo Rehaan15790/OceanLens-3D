@@ -170,6 +170,9 @@ def facts(path):
                  'tempOnly': sum(1 for p in P if p.get('sq', 1) == 0)}
 
     T, ts = track(s)
+    if not T:
+        F.update(track=None, path=None, section=None)
+        return comparison_and_rest(s, F)
     sea = [p for p in T if not p.get('landfall')]
     lf = T[-1]
     peak = lambda key: max(T, key=lambda p: p[key] or 0)
@@ -267,6 +270,12 @@ def facts(path):
     F['section'] = {'track': {'columns': 200, 'sstBefore': round(sb_, 3), 'sstAfter': round(sa_, 3),
                               'cooling': round(sb_ - sa_, 3), 'd26Before': round(db_, 1), 'd26After': round(da_, 1)}}
 
+    return comparison_and_rest(s, F)
+
+
+def comparison_and_rest(s, F):
+    """The model-Argo comparison and the view constants (independent of the track)."""
+    D, P = s.depths, s.profiles
     # model-Argo comparison, temperature and salinity, by band
     bands = [(0, 100), (100, 300), (300, 1000)]
     comp = []
@@ -308,7 +317,8 @@ def facts(path):
         comp.append(row); worst.append(wt[1])
     deep = [r['temp'][2]['rmse'] for r in comp if r['temp'][2]]
     F['comparison'] = {'matchedInTime': matched, 'bands': comp, 'worst': worst,
-                       'deepRmse': {'median': round(float(np.median(deep)), 3), 'min': min(deep), 'max': max(deep)}}
+                       'deepRmse': {'median': round(float(np.median(deep)), 3), 'min': min(deep), 'max': max(deep)}
+                       if deep else None}
     F['view'] = {'exaggerationPerSlider': round(KM_PER_DEG * 1000 / SCALE_XZ * DEPTH_SCALE, 2),
                  'deepCompression': round(1 / DEEP_COMPRESSION, 2)}
     return F
@@ -345,11 +355,21 @@ if __name__ == '__main__':
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('data', nargs='?', default=os.path.join(HERE, '..', 'data', 'amphan-2020.json'))
     ap.add_argument('--expected', help='write the flat expected-values file for tests/test_facts.py here')
+    ap.add_argument('--check', action='store_true', help='with --expected, compare instead of writing')
     args = ap.parse_args()
     F = facts(args.data)
     if args.expected:
+        text = json.dumps(expected(F), indent=1, sort_keys=True)
+        if args.check:
+            try:
+                with open(args.expected, encoding='utf-8') as f:
+                    same = f.read() == text
+            except OSError:
+                same = False
+            print(f"check {'ok' if same else 'failed'}: {args.expected} {'matches' if same else 'differs from'} the data")
+            sys.exit(0 if same else 1)
         with open(args.expected, 'w', encoding='utf-8', newline='\n') as f:
-            json.dump(expected(F), f, indent=1, sort_keys=True)
+            f.write(text)
         print(f'wrote {len(expected(F))} expected facts to {args.expected}')
     else:
         print(json.dumps(F, indent=1))

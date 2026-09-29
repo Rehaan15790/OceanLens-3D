@@ -34,7 +34,8 @@ The site folder is `dist/site/`:
 | `robots.txt` | `User-agent: *` / `Disallow:` (or `Disallow: /` while the site is not meant to be public) |
 | `_headers` | Security and caching headers (read by Cloudflare Pages and Netlify) |
 
-The favicon is inlined in `index.html` as an SVG data URI, so the single file stays single.
+The favicon is an inline SVG data URI in `index.html`; the build refuses external URLs, so the single file stays
+single.
 
 `_headers` (the build fills in the CSP hashes, because they change with every build):
 
@@ -85,7 +86,7 @@ repositories:
 
 ## 4. What never goes into the repository
 
-- The raw pipeline cache (`data-pipeline/cache/`, tens of MB). It is gitignored. Its SHA-256 manifest can be
+- The raw pipeline cache (`data-pipeline/cache/`, where a rebuild looks by default; tens of MB). It is gitignored. Its SHA-256 manifest can be
   committed; the archive itself stays with the owner.
 - Personal absolute paths, CA bundles and certificates, tokens and keys. Docs use placeholders such as
   `<path-to-raw-cache>` and `<your-ca-bundle.pem>`. `tools/check.py` fails on absolute home-folder paths in

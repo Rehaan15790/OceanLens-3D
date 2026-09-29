@@ -27,29 +27,17 @@ const Render = (() => {
   function gpuHex(hex){ return new THREE.Color(hex).convertSRGBToLinear(); }
 
   /* ---- palettes ---- */
-  // old names stay valid until every caller uses the plain keys
-  const ALIAS = {thermal:'temperature', haline:'salinity'};
-  const OLD = {temperature:'thermal', salinity:'haline'};
   const lutCache = {};
-  function paletteKey(name){ return ALIAS[name] || name; }
-  // PALETTES entries are {label, lut:'<256 sRGB hex entries>'}; a [[t,[r,g,b]],…] stop list is
-  // still accepted while palettes.js moves to the generated format
+  const paletteKey = name => name;
+  // PALETTES entries are {label, lut:'<256 sRGB hex entries>'} (palettes.js, generated)
   function lut(name){
-    const key = paletteKey(name);
-    if(!lutCache[key]){
-      const p = PALETTES[key] || PALETTES[OLD[key]], a = new Uint8Array(RAMP_N*3);
-      if(p && typeof p.lut === 'string' && p.lut.length === RAMP_N*6){
-        for(let i=0; i<a.length; i++) a[i] = parseInt(p.lut.substr(i*2, 2), 16);
-      } else if(Array.isArray(p)){
-        for(let i=0; i<RAMP_N; i++){
-          const t = i/(RAMP_N - 1), k = Math.max(0, p.findIndex((s, n) => n < p.length-1 && t <= p[n+1][0]));
-          const [t0, c0] = p[k], [t1, c1] = p[Math.min(k+1, p.length-1)], f = t1 > t0 ? (t - t0)/(t1 - t0) : 0;
-          for(let c=0; c<3; c++) a[i*3+c] = Math.round(c0[c] + (c1[c] - c0[c])*f);
-        }
-      } else throw new Error(`palette "${name}" is missing or malformed`);
-      lutCache[key] = a;
+    if(!lutCache[name]){
+      const p = PALETTES[name], a = new Uint8Array(RAMP_N*3);
+      if(!p || typeof p.lut !== 'string' || p.lut.length !== RAMP_N*6) throw new Error(`palette "${name}" is missing or malformed`);
+      for(let i=0; i<a.length; i++) a[i] = parseInt(p.lut.substr(i*2, 2), 16);
+      lutCache[name] = a;
     }
-    return lutCache[key];
+    return lutCache[name];
   }
   // colour at t in [0,1], sRGB 0–1, linear between entries in sRGB: the texture filter does the same
   function paletteColor(name, t){
@@ -328,12 +316,11 @@ const Render = (() => {
     if(opts && opts.hide) opts.hide.forEach(name => hide(groups.get(name)));
     try {
       renderNow();
-      const pr = r.getPixelRatio(), w = cv.width, h = cv.height, buf = new Uint8Array(w*h*4);
-      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      const pr = r.getPixelRatio(), h = cv.height, px = new Uint8Array(4);
       out.forEach(o => {
         if(!o.inView) return;
-        const k = ((h - 1 - Math.floor(o.y*pr))*w + Math.floor(o.x*pr))*4;
-        o.rgb = [buf[k], buf[k+1], buf[k+2]];
+        gl.readPixels(Math.floor(o.x*pr), h - 1 - Math.floor(o.y*pr), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        o.rgb = [px[0], px[1], px[2]];
       });
     } finally { hidden.forEach(obj => { obj.visible = true; }); }
     return out;

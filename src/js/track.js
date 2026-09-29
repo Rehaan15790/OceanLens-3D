@@ -6,13 +6,9 @@ const TRACK_Y = 0.13;                    // above the coastal relief, so the lan
 const trackGroup = new THREE.Group();
 let trackFixes = [];                     // [{pos:Vector3, index}] for picking and hover
 // mode-dependent strings come from the data source (some are functions of the fix or the wind)
-function trackText(key, real, ...args){
-  const ds = typeof dataSource === 'function' ? dataSource() : null;
-  const v = ds && ds.track ? ds.track[key] : undefined;
-  if(typeof v === 'function') return v(...args);
-  if(typeof v === 'string') return v;
-  return {mapLabel: real ? 'Cyclone Amphan · IBTrACS' : 'Sample cyclone track', landfallLabel:'Landfall',
-    nowLabel:`Amphan · ${args[0]} kt`}[key];
+function trackText(key, ...args){
+  const v = dataSource().track[key];
+  return typeof v === 'function' ? v(...args) : v || '';
 }
 const trackLabel = makeLabel('', 'current', new THREE.Vector3(), {visibleIf:()=>trackGroup.visible && trackFixes.length>0});
 const landfallLabel = makeLabel('', 'current', new THREE.Vector3(), {visibleIf:()=>trackGroup.visible && trackFixes.length>0});
@@ -33,15 +29,15 @@ function buildTrack(){
   trackGroup.add(stormNow);
   trackFixes = [];
   const T = currentTrack(), real = dataMode==='real';
-  if(!T.length)return;
+  if(!T.length){ trackLabel.el.textContent = landfallLabel.el.textContent = ''; return; }
   const pts = T.map(p=>{ const [x,z]=toXZ(p.lat,p.lon); return new THREE.Vector3(x,TRACK_Y,z); });
   const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), Render.line(0xffffff, {opacity:0.9, dash:[0.14,0.08]}));
   line.computeLineDistances();
   line.renderOrder = Render.ORDER.surfaceLines;
   trackGroup.add(line);
   T.forEach((p,k)=>{
-    // real fixes grow with the storm's wind, so the rapid intensification is visible on the map
-    const r = real ? 0.045 + Math.min(1, (p.usa||p.nd||20)/145)*0.075 : 0.075;
+    // real fixes grow with IMD's wind (the basin's RSMC), so the rapid intensification is visible on the map
+    const r = real ? 0.045 + Math.min(1, (p.nd ?? 20)/130)*0.075 : 0.075;
     const m = new THREE.Mesh(fixGeo, fixMat);
     m.scale.setScalar(r);
     m.position.copy(pts[k]);
@@ -52,8 +48,8 @@ function buildTrack(){
   ring.rotation.x = -Math.PI/2;
   ring.position.copy(pts[pts.length-1]);
   trackGroup.add(ring);
-  trackLabel.el.textContent = trackText('mapLabel', real);
-  landfallLabel.el.textContent = trackText('landfallLabel', real, T[T.length-1]);
+  trackLabel.el.textContent = trackText('mapLabel');
+  landfallLabel.el.textContent = trackText('landfallLabel', T[T.length-1]);
   const [x0,z0] = toXZ(T[0].lat-0.8, T[0].lon+0.4);
   trackLabel.pos.set(x0, TRACK_Y+0.03, z0);
   const last = T[T.length-1], [x1,z1] = toXZ(last.lat+0.5, last.lon-0.6);
@@ -67,11 +63,11 @@ function updateStormNow(){
   if(k<=0)return;             // before the first fix, or after it left the map
   const a = REAL_TRACK[k-1], b = REAL_TRACK[k], f = (now-Date.parse(a.t))/(Date.parse(b.t)-Date.parse(a.t));
   const lat = lerp(a.lat, b.lat, f), lon = lerp(a.lon, b.lon, f);
-  const jtwc = a.usa!=null && b.usa!=null, wind = Math.round(jtwc ? lerp(a.usa, b.usa, f) : lerp(a.nd||0, b.nd||0, f));
+  const imd = a.nd!=null && b.nd!=null, wind = Math.round(imd ? lerp(a.nd, b.nd, f) : lerp(a.usa||0, b.usa||0, f));
   const [x,z] = toXZ(lat, lon);
   stormNow.position.set(x, TRACK_Y+0.01, z);
   stormNow.visible = true;
-  stormLabel.el.textContent = trackText('nowLabel', true, wind, jtwc ? 'JTWC' : 'IMD');
+  stormLabel.el.textContent = trackText('nowLabel', wind, imd ? 'IMD' : 'JTWC');
   stormLabel.pos.set(x, TRACK_Y+0.03, z + 0.45);
 }
 // the "Cyclone track" overlay: every variable, whenever it is switched on

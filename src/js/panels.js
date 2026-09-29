@@ -96,7 +96,8 @@ function renderDerived(){
   const below = d > inst.maxDepth;
   const at = arr => below ? null : obsInterp(p, arr)(d);
   const oT = at(p.T), oS = at(p.S), oC = inst.bgc ? at(p.C) : null;
-  const mT = modelAt('temp',lat,lon,d,t), mS = modelAt('sal',lat,lon,d,t), mC = modelAt('chl',lat,lon,d,t);
+  const mT = modelAtObs(inst,'temp',d), mS = modelAtObs(inst,'sal',d), mC = modelAtObs(inst,'chl',d);
+  const mOK = mT!==null && mS!==null;
   const why = below ? 'below the profile' : 'gap in the profile';
   const f = (v,dp) => v===null ? null : v.toFixed(dp);
   const card = (label, obs, model, unit, note) => `
@@ -105,11 +106,13 @@ function renderDerived(){
       <div class="md">${obs===null && note ? note+' · ' : ''}model ${model===null?'—':model}</div></div>`;
   const oOK = oT!==null && oS!==null;
   const seabed = bathyDepth(lat, lon);
-  const oH = obsTchp(inst, p, seabed), mH = modelTchp(lat, lon, t, seabed);
+  const oH = obsTchp(inst, p, seabed);
+  const mH = inst.model ? tchpColumn(z=>modelAtObs(inst,'temp',z), z=>modelAtObs(inst,'sal',z), Math.min(seabed, DEPTHS[DEPTHS.length-1]))
+                        : modelTchp(lat, lon, t, seabed);
   // D26 is a depth, or a reason there is none: surface already below 26 °C, or warm to the sea floor
   const d26 = r => r.q===null || r.q===0 || r.d26===null ? null : r.d26.toFixed(0);
   const d26Note = r => r.q===null ? 'gap at D26' : r.q===0 ? 'surface below 26 °C' : r.d26===null ? 'warm to the sea floor' : '';
-  const d26Model = r => r.q===0 ? 'none' : r.d26===null ? 'floor' : r.d26.toFixed(0);
+  const d26Model = r => r.q===null ? null : r.q===0 ? 'none' : r.d26===null ? 'floor' : r.d26.toFixed(0);
   const salNote = inst.salOk===false ? 'failed delayed-mode QC' : why;
   ui.profDepthVal.textContent = fmt.depthLabel(d);
   ui.derivGrid.innerHTML =
@@ -119,11 +122,11 @@ function renderDerived(){
     card('Cyclone heat potential', f(oH.q,0), f(mH.q,0), 'kJ/cm²', 'gap at D26');
   const more = document.getElementById('derivMore');
   if(more) more.innerHTML =
-    card('Density σ<sub>t</sub>', oOK ? sigmaT(oS,oT).toFixed(2) : null, sigmaT(mS,mT).toFixed(2), 'kg/m³', salNote) +
-    card('Sound speed', oOK ? soundSpeed(oT,oS,d).toFixed(0) : null, soundSpeed(mT,mS,d).toFixed(0), 'm/s', salNote) +
+    card('Density σ<sub>t</sub>', oOK ? sigmaT(oS,oT).toFixed(2) : null, mOK ? sigmaT(mS,mT).toFixed(2) : null, 'kg/m³', salNote) +
+    card('Sound speed', oOK ? soundSpeed(oT,oS,d).toFixed(0) : null, mOK ? soundSpeed(mT,mS,d).toFixed(0) : null, 'm/s', salNote) +
     card('Chlorophyll', f(oC,2), f(mC,2), 'mg/m³', inst.bgc ? why : 'no sensor') +
     `<div class="deriv"><div class="lb">Pressure</div>
-      <div class="vl">${pressureDbar(d).toFixed(0)}<small>dbar</small></div><div class="md">from depth</div></div>`;
+      <div class="vl">${pressureDbar(d, lat).toFixed(0)}<small>dbar</small></div><div class="md">from depth</div></div>`;
 
   // QC summary for this profile
   const flagged = p.z.filter((z,k)=>p.flag[k]);
@@ -154,7 +157,7 @@ function openProfile(userData){
   ui.profKind.className = 'kind ' + (userData.type==='argo' ? 'kind-argo' : 'kind-glider');
   if(userData.type==='argo'){
     ui.profMeta.innerHTML = where + (inst.real
-      ? `Cycle ${fmt.esc(inst.cycle)} · ${fmt.floatTime(inst.time)} · ${fmt.esc(analysisGap(inst))}<br>`+
+      ? `Cycle ${fmt.esc(inst.cycle)} · ${fmt.floatTime(inst.time)} · ${fmt.esc(modelGap(inst))}<br>`+
         `${fmt.esc(MODE[inst.mode]||inst.mode)} · ${sampling}${salNote}`
       : `Cycle ${fmt.esc(userData.data.cycle)}<br>${sampling}`);
   } else {
@@ -163,6 +166,12 @@ function openProfile(userData){
   ui.profDepth.value = profileState.depthIdx;
   renderDerived();
   drawProfileChart();
+}
+// how far the model used for the comparison is from the profile: the matched output (P3), or the analysis
+function modelGap(inst){
+  const h = modelGapHours(inst);
+  if(h===null) return analysisGap(inst);
+  return `model matched at ${fmt.floatTime(inst.model.time)}, ${fmt.dp(Math.abs(h), 1)} h ${h >= 0 ? 'before' : 'after'} the profile`;
 }
 function setSelected(b, on){
   b.classList.toggle('active', on);
@@ -188,6 +197,8 @@ function followProfile(){
     `<button type="button" class="btn btn-small" id="profBack">Back to comparison</button>`;
   document.getElementById('profBack').addEventListener('click', closePanels);
   ui.qcBadge.textContent = ''; ui.derivGrid.textContent = '';
+  const more = document.getElementById('derivMore');
+  if(more) more.textContent = '';
   ['profStats', 'obsLegend'].forEach(id=>{ const el = document.getElementById(id); if(el) el.textContent = ''; });
   const c = document.getElementById('profChart');
   if(c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
@@ -224,26 +235,21 @@ function renderTrack(){
     return;
   }
   const heat = t => T.map(p=>modelTchp(p.lat, p.lon, t, bathyDepth(p.lat, p.lon)));
-  const tm = VAR_META.tchp, heatCol = q=>{ const c = paletteColor('heat', (q-tm.defMin)/(tm.defMax-tm.defMin)); return `rgb(${c[0]*255},${c[1]*255},${c[2]*255})`; };
+  const [hMin, hMax] = state.variable==='tchp' ? [state.cbMin, state.cbMax] : facts()[dataMode].ranges.tchp.column;
+  const heatCol = q=>{ const c = paletteColor('heat', (q-hMin)/(hMax-hMin)); return `rgb(${c[0]*255},${c[1]*255},${c[2]*255})`; };
   const {ctx, w, h} = hidpiCanvas(ui.trackChart, 190);
   const pad = {l:32, r:real ? 30 : 10, t:22, b:22}, pw = w-pad.l-pad.r, ph = h-pad.t-pad.b;
-  // the heat under the path is the mean over the fixes at sea; the interpolated landfall point
-  // sits on a few metres of coastal water and is left out
-  const atSea = (arr)=>arr.filter((r,k)=>!T[k].landfall);
-  const mean = a=>a.reduce((x,r)=>x+r.q, 0)/a.length;
   let series, vMax;
   if(real){
     // ocean heat under the path before the storm and after it: the difference is its cold wake
-    const times = META.times.map(Date.parse), t0 = Date.parse(T[0].t), t1 = Date.parse(T[T.length-1].t);
-    const before = Math.max(0, times.filter(x=>x <= t0-12*3.6e6).length-1);
-    const after = Math.max(before+1, times.findIndex(x=>x >= t1+12*3.6e6));
-    const qb = heat(before), qa = heat(after);
-    const peakBy = key=>T.reduce((a,b)=>(b[key]||0)>(a[key]||0)?b:a);
-    const pj = peakBy('usa'), pi = peakBy('nd'), last = T[T.length-1];
+    // facts: the analyses before and after the storm, heat under the path (landfall point excluded), peaks
     const F = facts().real, ri = (r, who)=>r ? `${fmt.esc(r.from)}→${fmt.esc(r.to)} kt (${who})` : '';
-    const heatB = F.path ? F.path.heatBefore : mean(atSea(qb)), heatA = F.path ? F.path.heatAfter : mean(atSea(qa));
+    const before = F.path.beforeIndex, after = F.path.afterIndex, heatB = F.path.heatBefore, heatA = F.path.heatAfter;
+    const qb = heat(before), qa = heat(after);
+    const pj = {usa:F.track.peakJtwc.kt, t:F.track.peakJtwc.time}, pi = {nd:F.track.peakImd.kt, t:F.track.peakImd.time};
+    const last = F.track.landfall;
     ui.trackMeta.innerHTML =
-      `First fix ${fmt.fixTime(T[0].t)}; landfall ${fmt.fixTime(last.t)} near ${fmt.latLon1(last.lat, last.lon)}<br>`+
+      `First fix ${fmt.fixTime(F.track.firstFix)}; landfall ${fmt.fixTime(last.time)} near ${fmt.latLon1(last.lat, last.lon)}<br>`+
       `Peak ${pi.nd!=null ? `${fmt.esc(pi.nd)} kt (IMD, ${fmt.fixTime(pi.t)}) · ` : ''}${fmt.esc(pj.usa)} kt (JTWC, ${fmt.fixTime(pj.t)})<br>`+
       (F.track && F.track.ri24Jtwc ? `Fastest 24-hour intensification: ${[ri(F.track.ri24Imd,'IMD'), ri(F.track.ri24Jtwc,'JTWC')].filter(Boolean).join(', ')}<br>` : '')+
       `<span class="accent">Heat under the path, landfall excluded: ${fmt.int(heatB)} kJ/cm² on ${fmt.dayMonth(META.times[before])}, `+

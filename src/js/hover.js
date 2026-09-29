@@ -5,11 +5,8 @@ const hoverPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
 const hoverRay = new THREE.Raycaster();
 const hoverPt = new THREE.Vector3();
 const hoverTip = document.getElementById('hoverTip');
-const fmtDeg = (lat, lon) => `${Math.abs(lat).toFixed(2)}° ${lat>=0?'N':'S'}, ${lon.toFixed(2)}° E`;
-const fmtVal = (key, v) => {
-  const m = VAR_META[key], dp = key==='temp' ? 1 : key==='tchp' ? 0 : 2;
-  return `${v.toFixed(dp)} ${m.unit}`;
-};
+const fmtDeg = fmt.latLon2;
+const fmtVal = (key, v) => fmt.value(key, v, VAR_META[key].unit);
 function worldLatLon(p){ return {lat: -p.z/SCALE_XZ + (LAT0+LAT1)/2, lon: p.x/SCALE_XZ + (LON0+LON1)/2}; }
 function hoverText(e){
   const rect = renderer.domElement.getBoundingClientRect();
@@ -17,14 +14,14 @@ function hoverText(e){
   const pick = pickAt(e.clientX, e.clientY);
   renderer.domElement.style.cursor = pick ? 'pointer' : '';
   if(pick && pick.kind==='track'){
-    const f = currentTrack()[pick.index], t = f.t ? f.t.replace('T',' ').replace(':00Z',' UTC') : `+${f.h} h`;
+    const f = currentTrack()[pick.index], t = f.t ? fmt.fixTime(f.t) : `+${f.h} h`;
     const wind = [f.nd!=null ? `${f.nd} kt (IMD)` : '', f.usa!=null ? `${f.usa} kt (JTWC)` : ''].filter(Boolean).join(' · ');
     return `${fmtDeg(f.lat, f.lon)}<br>${t}${wind ? ' · '+wind : ''}`;
   }
   if(pick){
     const inst = pick.kind==='argo' ? pick.userData.data.inst : pick.userData.wp.inst;
-    const when = inst.real ? inst.time.replace('T',' ').replace('Z',' UTC') : '';
-    return `${fmtDeg(inst.lat, inst.lon)}<br>${inst.id}${when ? ' · '+when : ''} (click to compare)`;
+    const when = inst.real ? fmt.floatTime(inst.time) : '';
+    return `${fmtDeg(inst.lat, inst.lon)}<br>${fmt.esc(inst.id)}${when ? ' · '+when : ''} (click to compare)`;
   }
   // the section curtain, when the pointer is on it
   const curtain = section && sectionGroup.children[0];
@@ -55,7 +52,7 @@ function hoverText(e){
   if(tchp){
     const r = modelTchp(lat, lon, state.time, seabed);
     const d26 = r.q===0 ? 'D26: surface below 26 °C' : r.d26===null ? 'D26: warm to the sea floor' : `D26 ${r.d26.toFixed(0)} m`;
-    return `${where}<br>TCHP ${r.q.toFixed(0)} kJ/cm² · ${d26} · seabed ${Math.round(seabed)} m`;
+    return `${where}<br>TCHP ${fmt.value('tchp', r.q, 'kJ/cm²')} · ${d26} · seabed ${Math.round(seabed)} m`;
   }
   if(state.mode==='iso') return `${where}<br>No crossing above the sea floor (seabed ${Math.round(seabed)} m)`;
   if(depth > seabed) return `${where}<br>Below the sea floor (seabed ${Math.round(seabed)} m)`;

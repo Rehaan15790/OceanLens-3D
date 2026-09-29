@@ -14,7 +14,7 @@ let section = null;                  // {a:[lat,lon], b:[lat,lon], name}
 const sectionState = {open:false};
 const sectionGroup = new THREE.Group();
 scene.add(Render.register('section', sectionGroup));
-const tourRunning = ()=> typeof isTourRunning === 'function' ? isTourRunning() : !!tourTimer;
+const tourRunning = ()=>isTourRunning();
 // curtain rows: 10 m steps through the upper ocean, 25 m below 200 m
 const SECTION_Z = [];
 for(let z=0; z<200; z+=10) SECTION_Z.push(z);
@@ -24,7 +24,7 @@ for(let z=200; z<=1000; z+=25) SECTION_Z.push(z);
 // temperature, whose 26 °C line is the bottom of the heat the map measures
 function sectionSpec(){
   if(state.variable==='tchp'){
-    return {v:'temp', palette:'thermal', min:VAR_META.temp.defMin, max:VAR_META.temp.defMax, unit:'°C', label:'Temperature'};
+    return {v:'temp', palette:'temperature', min:VAR_META.temp.defMin, max:VAR_META.temp.defMax, unit:'°C', label:'Temperature'};
   }
   const m = VAR_META[state.variable];
   return {v:state.variable, palette:state.palette, min:state.cbMin, max:state.cbMax, unit:m.unit, label:m.label};
@@ -175,10 +175,7 @@ renderer.domElement.addEventListener('pointerup', ()=>{
 function trackSectionPreset(){
   const T = currentTrack(), last = T[T.length-1];
   if(!T.length) return null;
-  const ds = typeof dataSource === 'function' ? dataSource() : null;
-  const name = ds && ds.section && ds.section.trackName ? ds.section.trackName
-    : dataMode==='real' ? 'Along Amphan\'s track' : 'Along the sample cyclone track';
-  return {name, a:[T[0].lat, T[0].lon], b:[last.lat, last.lon]};
+  return {name:dataSource().section.trackName, a:[T[0].lat, T[0].lon], b:[last.lat, last.lon]};
 }
 function showSectionPreset(key){
   const p = key==='track' ? trackSectionPreset() : SECTION_PRESETS[key];

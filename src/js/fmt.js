@@ -21,7 +21,7 @@ const fmt = (()=>{
     // a value of a variable at its readout precision, with the unit: "28.4 °C"
     value: (key, v, unit) => `${dp(v, DP[key] ?? 2)}${unit ? ' ' + unit : ''}`,
     decimals: key => DP[key] ?? 2,
-    signed: (v, n) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(n),
+    signed: (v, n) => { const s = dp(v, n); return s.startsWith('−') ? s : '+' + s; },
     sig2: v => { if(!v) return '0'; const p = Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1); return int(Math.round(v/p)*p); },
     countWord: n => (Number.isInteger(n) && n >= 0 && n <= 10) ? WORDS[n] : String(n),
     round: (v, step) => Math.round(v/step)*step,

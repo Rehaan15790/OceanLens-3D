@@ -310,12 +310,7 @@ function drawProfileChart(){
 /* ---- the colour key, legend, context line and timeline labels in the viewport ----
    Everything here is drawn from state and colorbarSpec(); nothing decides a range or a colour. */
 // the 256 sRGB entries of a palette: graphics' ramp texture data when it exists, else sampled from the palette
-function keyLUT(palette){
-  if(typeof Render!=='undefined' && Render.rampLUT) return Render.rampLUT(palette);
-  const lut = new Uint8Array(768);
-  for(let i=0;i<256;i++){ const c = paletteColor(palette, i/255); lut[i*3] = c[0]*255; lut[i*3+1] = c[1]*255; lut[i*3+2] = c[2]*255; }
-  return lut;
-}
+function keyLUT(palette){ return Render.rampLUT(palette); }
 function exaggerationRatio(e){
   const k = typeof facts==='function' ? facts().real.view.exaggerationPerSlider : 404.4;
   const r = k*e, p = Math.pow(10, Math.floor(Math.log10(r))-1);
@@ -333,7 +328,7 @@ function keySpec(){
   let title;
   if(state.variable==='tchp'){
     title = 'Cyclone heat potential (kJ/cm²)';
-    if(50 >= c.min && 50 <= c.max) marks.push({v:50, text:'50'});
+    if(TCHP_THRESHOLD >= c.min && TCHP_THRESHOLD <= c.max) marks.push({v:TCHP_THRESHOLD, text:String(TCHP_THRESHOLD)});
     legend.push({sw:'contour', text:'50 kJ/cm² contour'});
   } else if(state.mode==='iso'){
     title = `Depth of the ${isoLabel().replace(/ depth$/, '')} surface (m)`;
@@ -354,9 +349,9 @@ function keySpec(){
     } else legend.push({sw:'float', text: dataMode==='real' ? 'Argo float' : 'Synthetic float'});
   }
   if(state.showGlider && dataMode==='synth') legend.push({sw:'glider', text:'Synthetic glider waypoint'});
-  if(typeof trackGroup!=='undefined' && trackGroup.visible){
-    legend.push({sw:'track', text: dataMode==='real' ? 'Amphan track (IBTrACS)' : 'Sample track (illustrative)'});
-    if(typeof stormNow!=='undefined' && stormNow.visible) legend.push({sw:'storm', text:'Amphan at this analysis'});
+  if(trackGroup.visible){
+    legend.push({sw:'track', text:dataSource().legend.track});
+    if(stormNow.visible && dataSource().legend.now) legend.push({sw:'storm', text:dataSource().legend.now});
   }
   notes.push(`Vertical exaggeration ≈ ${exaggerationRatio(state.exagg)} : 1; below 1000 m the sea floor is compressed a further 12×.`);
   const ticks = niceTicks(c.min, c.max), step = ticks.length > 1 ? ticks[1]-ticks[0] : 1;

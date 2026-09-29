@@ -27,7 +27,7 @@ const SOURCES = {
             empty:'No IBTrACS fixes for Amphan fall inside the map.'},
     section: {trackPreset:"Along Amphan's track", trackName:'Amphan: genesis to landfall',
               none:'No Argo profiles within 40 km of this line.'},
-    legend: {track:'Amphan track (IBTrACS)'},
+    legend: {track:'Amphan track (IBTrACS)', now:'Amphan at this analysis'},
     val: {heading:'Model–Argo comparison',
           sub: (t, nArgo)=>`${fmt.analysisTime(META.times[t])} · ${nArgo} Argo profiles`,
           get foot(){ const F = facts().real;
@@ -58,7 +58,7 @@ const SOURCES = {
             empty:'The sample track has no positions.'},
     section: {trackPreset:'Along the sample track', trackName:'Sample track: start to landfall',
               none:'No floats or gliders within 40 km of this line.'},
-    legend: {track:'Sample track (illustrative)'},
+    legend: {track:'Sample track (illustrative)', now:null},
     val: {heading:'Model–observation comparison',
           sub: (t, nArgo, nGlider)=>`Day ${fmt.demoDay(t)} · ${nArgo} synthetic floats and ${nGlider} glider profiles`,
           foot:'Synthetic observations compared with the synthetic model in the same way. They are not real data.'},

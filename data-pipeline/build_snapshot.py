@@ -147,7 +147,8 @@ class Fetcher:
             try:
                 out = parse(data)
             except Exception as e:
-                raise ValueError(f'cached file {name} does not parse ({e}); delete it and rerun with --fetch') from e
+                raise ValueError(f'cached file {name} does not parse ({type(e).__name__}: {e}); move it aside and '
+                                 f'rerun with --fetch') from e
         else:
             if not self.fetch:
                 raise CacheMiss(name)
@@ -185,7 +186,7 @@ class Fetcher:
 
     def store(self, name, data, url):
         write_atomic(self.path(name), data)
-        with self._lock:
+        with self._lock:          # guards threads in this run only: run one --fetch at a time per cache
             mpath = os.path.join(self.cache, 'manifest.json')
             man = read_json(mpath, {})
             man[name] = {'url': url, 'sha256': sha256(data), 'bytes': len(data),
@@ -870,6 +871,8 @@ def main(argv=None):
     ap.add_argument('--allow-host', action='append', metavar='HOST',
                     help='with --fetch, download only from these hosts (repeatable)')
     ap.add_argument('--check', action='store_true', help='rebuild and compare with --out instead of writing it')
+    ap.add_argument('--cache-manifest', metavar='FILE',
+                    help='also write the name, sha256 and size of every raw file the build read (e.g. CACHE_MANIFEST.txt)')
     ap.add_argument('--temperature-only', action='store_true',
                     help='keep Argo profiles whose salinity failed QC (temperature comparisons only)')
     ap.add_argument('--model-at-obs', action='store_true',
@@ -896,8 +899,21 @@ def main(argv=None):
     except (InvariantError, FetchError, ValueError) as e:
         print(f'error: {e}', file=sys.stderr)
         return 1
+    except (KeyError, IndexError) as e:
+        print(f'error: malformed input: {type(e).__name__}: {e}', file=sys.stderr)
+        return 1
+    except OSError as e:
+        print(f'error: {e}', file=sys.stderr)
+        return 1
     data = serialise(payload)
     out = os.path.normpath(args.out)
+    if args.cache_manifest:
+        lines = [f'{n} {F.used[n]} {os.path.getsize(F.path(n))}' for n in sorted(F.used)]
+        try:
+            write_atomic(args.cache_manifest, ('\n'.join(lines) + '\n').encode('ascii'))
+        except OSError as e:
+            print(f'error: {e}', file=sys.stderr)
+            return 1
     if args.check:
         if not os.path.exists(out):
             print(f'check failed: {out} does not exist', file=sys.stderr)
@@ -914,7 +930,11 @@ def main(argv=None):
             diff = ['(not JSON)']
         print(f'check failed: {out} differs from a rebuild in {diff}', file=sys.stderr)
         return 1
-    write_atomic(out, data)
+    try:
+        write_atomic(out, data)
+    except OSError as e:
+        print(f'error: {e}', file=sys.stderr)
+        return 1
     print(f'wrote {len(data) / 1e6:.2f} MB to {out}; downloaded {F.downloaded / 1e6:.1f} MB this run')
     return 0
 

@@ -124,7 +124,6 @@ function resize(){
   Render.applySize(renderer, camera, w, h);
   if(camAtHome && !camTween){ camR = fitDistance(); updateCamera(); }
   Render.invalidate();
-  if(typeof drawColorbarCanvas === 'function') drawColorbarCanvas();
 }
 window.addEventListener('resize', resize);
 if(window.ResizeObserver) new ResizeObserver(resize).observe(viewport);
@@ -132,7 +131,7 @@ if(window.ResizeObserver) new ResizeObserver(resize).observe(viewport);
 (function watchDpr(){
   if(!window.matchMedia) return;
   const mq = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-  const onChange = ()=>{ resize(); watchDpr(); };
+  const onChange = ()=>{ if(!mq.addEventListener) mq.removeListener(onChange); resize(); watchDpr(); };
   if(mq.addEventListener) mq.addEventListener('change', onChange, {once:true}); else mq.addListener(onChange);
 })();
 

@@ -2,30 +2,18 @@
    Title and context (real or synthetic, analysis time), the same colour key and legend as the screen, map
    labels with halos, a north arrow, the exaggeration ratio and the data caveat. Graphics owns the render and
    read step (Render.renderForExport, labelsForExport, northAngle); this file only composes. */
-function exportScene(){
-  if(typeof Render!=='undefined' && Render.renderForExport) return Render.renderForExport();
-  renderer.render(scene, camera);                     // make sure the buffer is current before reading it
-  return renderer.domElement;
-}
+function exportScene(){ return Render.renderForExport(); }
 // label styles in the image mirror viewport.css (.geoLabel and its classes)
 const EXPORT_LABEL_FONT = {sea:'italic 400 13px', land:'600 13px', small:'600 12px', tick:'400 12px', current:'italic 400 12px', secEnd:'600 12px'};
 function exportLabels(){
   const family = CHART_FONT.split('px ')[1];
-  if(typeof labelsForExport==='function') return labelsForExport().map(L=>{
+  return labelsForExport().map(L=>{
     const cls = (L.cls||'').split(' '), key = cls.includes('small') ? 'small' : cls.find(c=>EXPORT_LABEL_FONT[c]) || 'tick';
     return {text:L.text, x:L.x, y:L.y, font:`${EXPORT_LABEL_FONT[key]} ${family}`,
       color: key==='tick' ? theme().text2 : theme().text, alpha: L.occluded ? 0.35 : 1};
   });
-  return labelEls.filter(L=>L.el.style.display!=='none').map(L=>{
-    const cs = getComputedStyle(L.el);
-    return {text:L.el.textContent, x:parseFloat(L.el.style.left), y:parseFloat(L.el.style.top),
-      font:`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`, color:cs.color, alpha:parseFloat(cs.opacity)};
-  });
 }
-function exportNorth(){
-  if(typeof northAngle==='function') return northAngle();
-  return camAz*180/Math.PI;
-}
+function exportNorth(){ return northAngle(); }
 
 function paintKey(g, spec, x, yBottom, w){
   const th = theme(), lut = keyLUT(spec.palette);
@@ -139,17 +127,20 @@ function exportPNG(){
   paintKey(g, spec, 12, cssH-40, 280);
 
   // caveat along the bottom
-  const cav = real ? 'Data: HYCOM GOFS 3.1 · Argo GDAC · IBTrACS v04r01 · ETOPO1. Not for operational use.'
-                   : 'Synthetic demo data, not a real ocean state. Not for operational use.';
+  const cav = dataSource().export.caveat;
   g.font = CHART_FONT; const cw = g.measureText(cav).width;
   g.fillStyle = '#12181e'; g.fillRect(12, cssH-32, cw+20, 22);
   g.fillStyle = th.text2; g.fillText(cav, 22, cssH-17);
 
   const view = state.variable==='tchp' ? 'map' : state.mode==='slice' ? DEPTHS[state.depthIdx]+'m' : state.mode;
-  const when = real ? analysisTimes()[state.time].slice(0,10) : 'day'+demoDay(state.time);
   const link = document.createElement('a');
-  link.download = `oceanlens3d_${real ? 'real' : 'synthetic'}_${when}_${state.variable}_${view}.png`;
+  link.download = dataSource().export.file(state.time, state.variable, view);
   link.href = out.toDataURL('image/png');
   link.click();
 }
 document.getElementById('snapBtn').addEventListener('click', exportPNG);
+// no export while the WebGL context is lost: the canvas is blank until it is restored
+document.addEventListener('webglcontextlost', ()=>{ const b = document.getElementById('snapBtn');
+  b.disabled = true; b.title = 'The 3D view is restoring; try again in a moment.'; }, true);
+document.addEventListener('webglcontextrestored', ()=>{ const b = document.getElementById('snapBtn');
+  b.disabled = false; b.title = ''; }, true);

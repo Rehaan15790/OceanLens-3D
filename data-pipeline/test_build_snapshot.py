@@ -416,6 +416,44 @@ class ModelAtObservations(unittest.TestCase):
         self.assertIn('water_temp.water_temp[', url); self.assertIn('salinity.salinity[', url)
 
 
+class GeneratedFiles(unittest.TestCase):
+    """The committed palettes.js and tests/facts_expected.json must be what their generators produce now."""
+
+    def test_palettes_match_the_generator(self):
+        import make_palettes
+        out = os.path.join(HERE, '..', 'src', 'js', 'palettes.js')
+        if not os.path.exists(out):
+            self.skipTest('src/js/palettes.js does not exist')
+        with mock.patch('builtins.print'):
+            self.assertEqual(make_palettes.main(['--out', out, '--check']), 0)
+
+    def test_expected_facts_match_the_data(self):
+        import facts_reference as R
+        data = os.path.join(HERE, '..', 'data', 'amphan-2020.json')
+        exp = os.path.join(HERE, '..', 'tests', 'facts_expected.json')
+        if not (os.path.exists(data) and os.path.exists(exp)):
+            self.skipTest('data file or tests/facts_expected.json missing')
+        with open(exp, encoding='utf-8') as f:
+            self.assertEqual(f.read(), json.dumps(R.expected(R.facts(data)), indent=1, sort_keys=True),
+                             'regenerate with: python data-pipeline/facts_reference.py --expected tests/facts_expected.json')
+
+    def test_empty_track_gives_no_track_facts(self):
+        import facts_reference as R
+        data = os.path.join(HERE, '..', 'data', 'amphan-2020.json')
+        if not os.path.exists(data):
+            self.skipTest('data file missing')
+        with open(data, encoding='utf-8') as f:
+            d = json.load(f)
+        d['track']['fixes'] = [[f'2020-05-1{k}T00:00Z', 30.0, 50.0, 30, 20, 'D'] for k in range(5)]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'x.json')
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(d, f)
+            F = R.facts(path)
+        self.assertIsNone(F['track']); self.assertIsNone(F['path']); self.assertIsNone(F['section'])
+        self.assertTrue(F['comparison']['matchedInTime'])
+
+
 def cache_dir():
     c = os.environ.get('OCEANLENS_CACHE') or os.path.join(HERE, 'cache')
     return c if os.path.isdir(c) and os.path.exists(os.path.join(c, 'argo.csv')) else None
