@@ -1,17 +1,54 @@
-  :root{
-    --logo:url('../assets/logo.png');
-    --bg:#060d16;
-    --bg-2:#081221;
-    --panel:#0c1826;
-    --panel-2:#101f30;
-    --border:#1b3247;
-    --border-soft:#142838;
-    --text:#dcebf1;
-    --text-dim:#6e8ba0;
-    --text-dimmer:#4b6577;
-    --accent:#2fe0c4;
-    --accent-dim:#1a8f7d;
-    --coral:#ff8058;
-    --glider:#6fa8ff;
-    --warn:#ffcf5c;
-  }
+/* Design tokens. Every text colour clears 4.5:1 on every surface it is used on
+   (checked with TEAM/work/ux/colour_audit.py; worst case --text-3 on --panel-2, 5.3:1).
+   Data colours are not here: they come only from the palette ramps (palettes.js). */
+:root{
+  --logo:url('../assets/logo.png');
+
+  /* surfaces */
+  --bg:#0e1318;          /* app background */
+  --panel:#151b21;       /* side panels, header, footer */
+  --panel-2:#1c242c;     /* cards, controls, table stripes */
+  --chip:#12181e;        /* opaque boxes over the 3D view (key, context line, tools) */
+  --border:#2c3640;      /* dividers and card edges (decorative) */
+  --border-strong:#6b7680; /* edges that identify a control's state (3.7:1 on --panel) */
+
+  /* text */
+  --text:#e8ecef;        /* primary, 14.6:1 on --panel */
+  --text-2:#aeb8c1;      /* secondary, group labels, 8.6:1 */
+  --text-3:#8c97a1;      /* units, axis ticks, footnotes, 5.3:1 worst case */
+
+  /* state: the accent marks focus, selection and "on"; it never colours data, headings or links */
+  --accent:#5aa9e6;
+  --accent-bg:rgba(90,169,230,.16);
+  --focus:0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+
+  /* meaning */
+  --synth:#e3a82b;       /* the synthetic-data badge only */
+  --synth-ink:#1a1300;   /* text on --synth, 8.7:1 */
+  --flag:#f28b82;        /* QC flags and error text, 7.3:1 on --panel */
+
+  /* 2D chart colours (read once into THEME by architect's code; GPU colours never use these) */
+  --chart-obs:#e8ecef;   /* observed profile, solid */
+  --chart-model:#aeb8c1; /* model column, dashed */
+  --chart-grid:#2c3640;
+  --chart-tick:#8c97a1;
+  --chart-mark:#e8ecef;  /* D20/D26 isolines, 50 kJ/cm² line */
+
+  /* type: one family, five sizes, 12 px floor */
+  --font:system-ui,"Segoe UI",Roboto,"Noto Sans","Helvetica Neue",Arial,sans-serif;
+  --fs-1:12px;  /* labels, table cells, units, footnotes */
+  --fs-2:13px;  /* body text and controls */
+  --fs-3:15px;  /* panel titles */
+  --fs-4:18px;  /* dialog titles */
+  --fs-5:24px;  /* splash title */
+  --lh-tight:1.3;
+  --lh:1.5;
+
+  /* space and shape */
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:24px;
+  --radius:4px;
+  --header-h:48px;
+  --footer-h:56px;
+  --left-w:248px;
+  --right-w:304px;
+}

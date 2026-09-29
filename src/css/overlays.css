@@ -1,49 +1,39 @@
-  /* ---------- FOOTER (timeline) ---------- */
-  #footer{border-top:1px solid var(--border);background:var(--bg-2);display:flex;align-items:center;
-    padding:0 18px;gap:16px;}
-  #playBtn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:var(--panel);
-    color:var(--accent);cursor:pointer;flex-shrink:0;font-size:13px;display:flex;align-items:center;
-    justify-content:center;}
-  #playBtn:hover{border-color:var(--accent-dim);}
-  #timelineWrap{flex:1;}
-  #timeline{width:100%;}
-  #timeLabels{display:flex;justify-content:space-between;font-size:9.5px;color:var(--text-dimmer);
-    font-family:'JetBrains Mono',Consolas,'Courier New',monospace;margin-top:2px;}
-  #timeNow{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:12px;color:var(--text);width:170px;
-    text-align:right;flex-shrink:0;white-space:nowrap;}
+/* Dialogs, the small-screen notice and the splash. */
+.overlay{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;background:rgba(8,11,14,.78);padding:var(--s-4);}
+.overlay.show,#smallScreen:not([hidden]){display:flex;}
+.dialog{width:480px;max-width:100%;max-height:calc(100vh - 32px);overflow-y:auto;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;padding:var(--s-4) var(--s-5) var(--s-5);}
+.dialog-wide{width:640px;}
+.dialog-head{display:flex;justify-content:space-between;align-items:center;margin:0 0 var(--s-3);}
+.dialog h2{font-size:var(--fs-4);font-weight:600;}
+.dialog h3{font-size:var(--fs-2);font-weight:600;margin:var(--s-4) 0 var(--s-2);}
+.dialog p,.dialog li,.dialog dd{font-size:var(--fs-2);line-height:var(--lh);color:var(--text-2);}
+.dialog-lede{color:var(--text) !important;}
+.dialog-actions{display:flex;justify-content:flex-end;margin-top:var(--s-4);}
+.about-list{display:grid;grid-template-columns:auto 1fr;gap:var(--s-2) var(--s-3);margin:0;}
+.about-list dt{font-weight:600;color:var(--text);font-size:var(--fs-2);}
+.about-list dd{margin:0;}
+.about-bullets{padding-left:18px;margin:0;display:grid;gap:var(--s-1);}
+.keys{width:100%;border-collapse:collapse;}
+.keys th{text-align:left;font-weight:400;white-space:nowrap;padding:6px var(--s-3) 6px 0;vertical-align:top;width:1%;}
+.keys td{padding:6px 0;color:var(--text-2);border-bottom:1px solid var(--border);font-size:var(--fs-2);}
+.keys th{border-bottom:1px solid var(--border);}
 
-  #aboutOverlay{position:fixed;inset:0;background:rgba(3,8,14,.72);z-index:50;display:none;
-    align-items:center;justify-content:center;}
-  #aboutOverlay.show{display:flex;}
-  #aboutCard{width:540px;max-width:88vw;max-height:80vh;overflow-y:auto;background:var(--panel);
-    border:1px solid var(--border);border-radius:8px;padding:26px 28px;}
-  #aboutCard h2{margin:0 0 4px;font-size:17px;}
-  #aboutCard .tag{color:var(--text-dim);font-size:11.5px;margin-bottom:18px;}
-  #aboutCard p, #aboutCard li{font-size:12.5px;line-height:1.7;color:var(--text-dim);}
-  #aboutCard h3{font-size:11px;letter-spacing:.4px;color:var(--accent);margin:18px 0 6px;}
-  #aboutCard a{color:var(--accent);}
-  #aboutClose{float:right;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
-    padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11.5px;}
-
-  /* splash */
-  #splash{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 40%, #0c1e30 0%, #04090f 75%);
-    z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;
-    transition:opacity .6s ease;}
-  #splash.hide{opacity:0;pointer-events:none;}
-  #splashLogo{width:270px;max-width:60vw;height:44px;background:var(--logo) center/contain no-repeat;
-    margin-bottom:26px;opacity:.96;}
-  #headerLogo{width:104px;height:17px;background:var(--logo) left center/contain no-repeat;
-    opacity:.85;margin-left:2px;}
-  #splashTeam{color:var(--text-dimmer);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:10.5px;
-    letter-spacing:1.2px;margin-top:4px;}
-  #splash .eyebrow{color:var(--accent);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:11.5px;
-    letter-spacing:1px;margin-bottom:14px;}
-  #splash h1{font-size:40px;margin:0 0 10px;font-weight:600;letter-spacing:-.5px;}
-  #splash h1 span{color:var(--accent);}
-  #splash p{color:var(--text-dim);font-size:13.5px;max-width:440px;text-align:center;
-    line-height:1.7;margin-bottom:26px;}
-  #splash button{background:var(--accent);border:none;color:#04211c;font-weight:600;
-    font-size:13px;padding:11px 24px;border-radius:5px;cursor:pointer;letter-spacing:.2px;}
-  #splash button:hover{background:#4ff0d6;}
-  #splash .rule{width:46px;height:2px;background:var(--accent-dim);margin:22px 0;opacity:.6;}
-
+#splash{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:var(--s-4);}
+#splash.hide{display:none;}
+.splash-inner{max-width:520px;text-align:left;}
+.splash-eyebrow{font-size:var(--fs-1);color:var(--text-2);margin:0 0 var(--s-2);}
+#splash h1{font-size:var(--fs-5);font-weight:600;margin:0 0 var(--s-3);}
+.splash-lede{font-size:var(--fs-3);line-height:var(--lh);color:var(--text-2);margin:0 0 var(--s-5);}
+.splash-actions{display:flex;gap:var(--s-2);flex-wrap:wrap;}
+.splash-actions .btn{min-height:40px;padding:0 var(--s-4);}
+.splash-msg{margin:var(--s-4) 0 0;padding:var(--s-2) var(--s-3);border:1px solid var(--flag);border-radius:var(--radius);color:var(--text);
+  font-size:var(--fs-2);}
+#splashLogo{width:150px;height:14px;margin:48px 0 var(--s-2);background:var(--logo) left center/contain no-repeat;opacity:.9;}
+.splash-foot{font-size:var(--fs-1);color:var(--text-3);}
+.about-bullets li:empty{display:none;}
+.toast{position:fixed;left:50%;bottom:72px;transform:translateX(-50%);z-index:90;display:flex;align-items:center;gap:var(--s-3);
+  max-width:min(640px,calc(100vw - 32px));padding:var(--s-2) var(--s-2) var(--s-2) var(--s-3);font-size:var(--fs-2);color:var(--text);
+  border-color:var(--flag);}
+.toast-dismiss{min-height:28px;padding:0 var(--s-2);border:1px solid var(--border-strong);border-radius:var(--radius);
+  background:var(--panel-2);font-size:var(--fs-1);color:var(--text);flex-shrink:0;}

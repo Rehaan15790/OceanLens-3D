@@ -1,32 +1,31 @@
-/* ---- layer meshes (one flat plane per depth level) ---- */
-const layerMeshes = [];
-function buildLayers(){
-  DEPTHS.forEach((depth)=>{
-    const geo = new THREE.BufferGeometry();
-    const positions = [];
-    gridPts.forEach(p=>{
-      const [x,z] = toXZ(p.lat, p.lon);
-      positions.push(x, 0, z);
-    });
-    const indices = [];
-    for(let i=0;i<LAT_N-1;i++){
-      for(let j=0;j<LON_N-1;j++){
-        const a=i*LON_N+j, b=a+1, c=a+LON_N, e=c+1;
-        indices.push(a,c,b, b,c,e);
-      }
+/* ---- layer meshes: one plane per model level, coloured by value through a palette ramp ---- */
+function gridIndices(){
+  const indices = [];
+  for(let i=0;i<LAT_N-1;i++){
+    for(let j=0;j<LON_N-1;j++){
+      const a=i*LON_N+j, b=a+1, c=a+LON_N, e=c+1;
+      indices.push(a,c,b, b,c,e);
     }
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-    geo.setIndex(indices);
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(new Array(LAT_N*LON_N*4).fill(0.5),4));
-    geo.computeVertexNormals();
-    const mat = new THREE.MeshBasicMaterial({vertexColors:true, transparent:true, opacity:0.5, side:THREE.DoubleSide, toneMapped:false});
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.userData.depth = depth;
-    scene.add(mesh);
-    layerMeshes.push(mesh);
-  });
+  }
+  return indices;
 }
-buildLayers();
+function gridGeometry(y){
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(gridPts.flatMap(p=>{ const [x,z]=toXZ(p.lat,p.lon); return [x,y,z]; }), 3));
+  geo.setIndex(gridIndices());
+  return geo;
+}
+const layerMeshes = [];
+const layerGroup = new THREE.Group();
+DEPTHS.forEach((depth, k)=>{
+  const mesh = new THREE.Mesh(gridGeometry(0),
+    Render.dataSurface({palette:state.palette, min:state.cbMin, max:state.cbMax, masked:true, opaque:false, opacity:state.opacity}));
+  mesh.renderOrder = Render.layerOrder(k, DEPTHS.length);   // deepest first; the camera is always above the sea
+  mesh.userData.depth = depth;
+  layerGroup.add(mesh);
+  layerMeshes.push(mesh);
+});
+scene.add(Render.register('layers', layerGroup));
 
 /* ---- isosurface: the depth where each water column first crosses the threshold ----
    One surface point per column (a 2.5-D isosurface, which is exactly what isotherm
@@ -48,7 +47,8 @@ function firstCrossing(at, seabed, target){
 function isoCrossDepth(varKey, lat, lon, seabed, target, t){
   return firstCrossing(z=>getVal(varKey, lat, lon, z, t), seabed, target);
 }
-function buildIsoMesh(varKey, target, colourByDepth){
+// asNeutral: the D26 surface under the TCHP map, drawn in one translucent colour so the key stays about heat
+function buildIsoMesh(varKey, target, asNeutral){
   const cross = gridPts.map((p,idx)=> gridLand[idx] ? null
     : isoCrossDepth(varKey, p.lat, p.lon, gridSeabed[idx], target, state.time));
   const valid = cross.filter(z=>z!==null);
@@ -60,13 +60,11 @@ function buildIsoMesh(varKey, target, colourByDepth){
     info.lo = Math.floor(info.min/10)*10;
     info.hi = Math.max(info.lo+10, Math.ceil(info.max/10)*10);
   }
-  const positions = [], colors = [];
-  gridPts.forEach((p,idx)=>{
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(gridPts.flatMap((p,idx)=>{
     const [x,z] = toXZ(p.lat, p.lon);
-    const d = cross[idx]===null ? 0 : cross[idx];
-    positions.push(x, -d*DEPTH_SCALE*state.exagg, z);
-    colors.push(...paletteColor('depth', (d-info.lo)/(info.hi-info.lo)));
-  });
+    return [x, -(cross[idx]===null ? 0 : cross[idx])*DEPTH_SCALE*state.exagg, z];
+  }), 3));
   const indices = [];
   for(let i=0;i<LAT_N-1;i++){
     for(let j=0;j<LON_N-1;j++){
@@ -76,45 +74,36 @@ function buildIsoMesh(varKey, target, colourByDepth){
       indices.push(a,c,b, b,c,e);
     }
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
   geo.setIndex(indices);
-  geo.computeVertexNormals();
-  const mat = colourByDepth
-    ? new THREE.MeshStandardMaterial({vertexColors:true, side:THREE.DoubleSide, transparent:true, opacity:0.9, metalness:0.1, roughness:0.6, toneMapped:false})
-    : new THREE.MeshStandardMaterial({color:0x78bed7, side:THREE.DoubleSide, transparent:true, opacity:0.4, metalness:0.1, roughness:0.7, depthWrite:false});
-  return {mesh:new THREE.Mesh(geo, mat), info};
+  let mesh;
+  if(asNeutral){
+    mesh = new THREE.Mesh(geo, Render.flat(0x78bed7, {opacity:0.4, side:THREE.DoubleSide}));
+    mesh.renderOrder = Render.ORDER.translucent;
+  } else {
+    Render.setValues(geo, cross.map(z=>z===null ? 0 : z));
+    mesh = new THREE.Mesh(geo, Render.dataSurface({palette:'depth', min:info.lo, max:info.hi}));
+  }
+  return {mesh, info};
 }
-function disposeMesh(m){ if(!m) return; scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+function disposeMesh(m){
+  if(!m) return;
+  scene.remove(m); m.geometry.dispose();
+  if(m.material.map) m.material.map.dispose();
+  m.material.dispose();
+}
 let isoMesh = null, isoInfo = null;
 function buildIsoGeometry(){
   disposeMesh(isoMesh);
-  const built = buildIsoMesh(state.variable, state.isoVal, true);
+  const built = buildIsoMesh(state.variable, state.isoVal, false);
   isoMesh = built.mesh; isoInfo = built.info;
-  scene.add(isoMesh);
+  scene.add(Render.register('iso', isoMesh));
 }
 
 /* ---- cyclone heat potential: TCHP map at the surface, D26 surface beneath ---- */
-function gridIndices(){
-  const indices = [];
-  for(let i=0;i<LAT_N-1;i++){
-    for(let j=0;j<LON_N-1;j++){
-      const a=i*LON_N+j, b=a+1, c=a+LON_N, e=c+1;
-      indices.push(a,c,b, b,c,e);
-    }
-  }
-  return indices;
-}
-const tchpGeo = new THREE.BufferGeometry();
-tchpGeo.setAttribute('position', new THREE.Float32BufferAttribute(
-  gridPts.flatMap(p=>{ const [x,z]=toXZ(p.lat,p.lon); return [x,0.04,z]; }), 3));
-tchpGeo.setAttribute('color', new THREE.Float32BufferAttribute(new Array(gridPts.length*4).fill(0), 4));
-tchpGeo.setIndex(gridIndices());
-const tchpMesh = new THREE.Mesh(tchpGeo, new THREE.MeshBasicMaterial({vertexColors:true, transparent:true,
-  opacity:0.92, side:THREE.DoubleSide, toneMapped:false, depthWrite:false}));
+const tchpMesh = new THREE.Mesh(gridGeometry(0.04),
+  Render.dataSurface({palette:VAR_META.tchp.palette, min:VAR_META.tchp.defMin, max:VAR_META.tchp.defMax, masked:true}));
 tchpMesh.visible = false;
-scene.add(tchpMesh);
+scene.add(Render.register('tchp', tchpMesh));
 let d26Mesh = null, tchpContour = null;
 
 // marching squares on the model grid: line segments where `vals` crosses `level`
@@ -139,53 +128,93 @@ function contourSegments(vals, level){
 }
 function updateTchpView(){
   const g = tchpGrid(state.time);
-  const col = tchpGeo.getAttribute('color');
-  g.forEach((c,idx)=>{
-    const rgb = paletteColor(state.palette, ((c?c.q:0)-state.cbMin)/(state.cbMax-state.cbMin));
-    col.setXYZW(idx, rgb[0], rgb[1], rgb[2], c ? 1 : 0);
-  });
-  col.needsUpdate = true;
+  const mask = g.map(c=>c && c.q!==null ? 1 : 0);
+  Render.setValues(tchpGeo(), Render.fillMasked(g.map(c=>c ? c.q : NaN), mask, LON_N, LAT_N), mask);
+  Render.setPalette(tchpMesh.material, state.palette);
+  Render.setRange(tchpMesh.material, state.cbMin, state.cbMax);
   // D26 underneath, drawn neutral so the colour bar stays about heat
   disposeMesh(d26Mesh);
-  d26Mesh = buildIsoMesh('temp', 26, false).mesh;
-  scene.add(d26Mesh);
+  d26Mesh = buildIsoMesh('temp', 26, true).mesh;
+  scene.add(Render.register('d26', d26Mesh));
   disposeMesh(tchpContour);
-  const segs = contourSegments(g.map(c=>c?c.q:null), TCHP_THRESHOLD);
-  const cgeo = new THREE.BufferGeometry().setFromPoints(segs.map(([x,z])=>new THREE.Vector3(x,0.07,z)));
-  tchpContour = new THREE.LineSegments(cgeo, new THREE.LineBasicMaterial({color:0xffffff, transparent:true, opacity:0.95, toneMapped:false}));
-  scene.add(tchpContour);
+  const segs = contourSegments(g.map(c=>c && c.q!==null ? c.q : null), TCHP_THRESHOLD);
+  tchpContour = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(segs.map(([x,z])=>new THREE.Vector3(x,0.07,z))),
+    Render.line(0xffffff, {opacity:0.95}));
+  tchpContour.renderOrder = Render.ORDER.surfaceLines;
+  scene.add(Render.register('tchpContour', tchpContour));
 }
+function tchpGeo(){ return tchpMesh.geometry; }
 
 /* ============================================================
-   FIELD -> COLOR UPDATE
+   FIELD VALUES -> LAYERS
    ============================================================ */
+// masks: land, and anywhere below the seabed (node masks from geo.js)
+function layerMask(depth){ return gridPts.map((p,idx)=> gridLand[idx] || depth > gridSeabed[idx] ? 0 : 1); }
 function updateLayerColors(){
   if(state.variable==='tchp') return;   // 2D field, drawn by updateTchpView()
   layerMeshes.forEach(mesh=>{
-    const depth = mesh.userData.depth;
-    const colAttr = mesh.geometry.getAttribute('color');
-    gridPts.forEach((p,idx)=>{
-      const v = getVal(state.variable, p.lat, p.lon, depth, state.time);
-      const norm = (v - state.cbMin)/(state.cbMax - state.cbMin);
-      const c = paletteColor(state.palette, norm);
-      // hide the field over land and anywhere below the seabed
-      const a = (gridLand[idx] || depth > gridSeabed[idx]) ? 0 : 1;
-      colAttr.setXYZW(idx, c[0], c[1], c[2], a);
-    });
-    colAttr.needsUpdate = true;
-    mesh.position.y = -depth * DEPTH_SCALE * state.exagg;
+    const depth = mesh.userData.depth, mask = layerMask(depth);
+    const vals = gridPts.map(p=>getVal(state.variable, p.lat, p.lon, depth, state.time));
+    Render.setValues(mesh.geometry, Render.fillMasked(vals, mask, LON_N, LAT_N), mask);
+    Render.setPalette(mesh.material, state.palette);
+    Render.setRange(mesh.material, state.cbMin, state.cbMax);
   });
 }
 
-function updateSurfaceRipple(elapsed){
-  const surfMesh = layerMeshes[0]; // DEPTHS[0] === 0, the sea-surface layer
-  if(!surfMesh || !surfMesh.visible) return;
-  const posAttr = surfMesh.geometry.getAttribute('position');
-  for(let idx=0; idx<gridPts.length; idx++){
-    const x = posAttr.getX(idx), z = posAttr.getZ(idx);
-    const wave = Math.sin(x*1.8 + elapsed*1.1)*0.012 + Math.cos(z*1.4 - elapsed*0.9)*0.012;
-    posAttr.setY(idx, wave);
+/* ---- what the view shows (decision f) ----
+   surface: the 0 m layer opaque, the lower layers faint (opacity slider); layers: every level
+   translucent; slice: one level, opaque; iso: the isosurface, opaque. TCHP: the map, opaque.
+   While a section is open everything in front of the curtain turns translucent. */
+function applyVolumeView(){
+  if(typeof viewDescription === 'function') renderer.domElement.setAttribute('aria-label', viewDescription());
+  const tchp = state.variable==='tchp', mode = state.mode, sec = !!section;
+  layerMeshes.forEach(m=>{ m.visible = false; });
+  arrowGroup.visible = false;
+  if(isoMesh) isoMesh.visible = false;
+  tchpMesh.visible = tchp;
+  if(d26Mesh) d26Mesh.visible = tchp;
+  if(tchpContour) tchpContour.visible = tchp;
+  applyTrackVisibility();
+  applyFlowVisibility();
+  if(tchp){
+    updateTchpView();
+    Render.setSurfaceRole(tchpMesh.material, !sec, 0.5);
+  } else if(mode==='surface' || mode==='layers'){
+    layerMeshes.forEach((m, k)=>{
+      m.visible = true;
+      const opaqueTop = mode==='surface' && k===0 && !sec;
+      Render.setSurfaceRole(m.material, opaqueTop, sec ? Math.min(state.opacity, 0.15) : state.opacity);
+    });
+  } else if(mode==='slice'){
+    const depth = DEPTHS[state.depthIdx];
+    layerMeshes.forEach(m=>{
+      if(m.userData.depth !== depth) return;
+      m.visible = true;
+      Render.setSurfaceRole(m.material, !sec, 0.5);
+    });
+    if(state.variable==='cur'){
+      arrowGroup.visible = true;
+      buildArrows(depth);
+    }
+  } else if(mode==='iso'){
+    buildIsoGeometry();
+    isoMesh.visible = true;
+    Render.setSurfaceRole(isoMesh.material, !sec, 0.5);
   }
-  posAttr.needsUpdate = true;
-  // surface layer uses an unlit vertex-color material, so normals aren't needed here
 }
+// the opacity slider: the faint layers only (fast path, no recolouring)
+function setLayerOpacity(v){
+  layerMeshes.forEach(m=>{ if(m.material.transparent) m.material.opacity = section ? Math.min(v, 0.15) : v; });
+}
+
+/* ---- depth geometry: follows the vertical exaggeration slider (fast path) ---- */
+let depthGeometryExagg = null;
+function updateDepthGeometry(){
+  if(state.exagg === depthGeometryExagg) return;
+  depthGeometryExagg = state.exagg;
+  layerMeshes.forEach(m=>{ m.position.y = -m.userData.depth*DEPTH_SCALE*state.exagg; });
+  positionFloor();
+  positionBox();
+  updateDepthLabelPositions();
+}
+

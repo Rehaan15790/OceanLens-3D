@@ -1,360 +1,439 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-IN">
 <head>
 <meta charset="UTF-8">
-<title>OceanLens 3D — INCOIS Prototype</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<!-- web fonts load without blocking the first paint; offline, the system fallbacks below are used -->
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<script src="js/boot-guard.js"></script>
-<!-- Three.js r128 (MIT licence) is inlined so the file runs offline: no CDN, no server -->
-<script src="../vendor/three.r128.min.js"></script>
+<title>OceanLens 3D · ocean model and Argo viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Interactive 3D view of HYCOM ocean analyses and Argo float profiles for Cyclone Amphan, May 2020. A student prototype for Smart India Hackathon 2026, problem statement 26067.">
+<meta name="color-scheme" content="dark">
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/header.css">
-<link rel="stylesheet" href="css/viewport.css">
 <link rel="stylesheet" href="css/controls.css">
+<link rel="stylesheet" href="css/viewport.css">
+<link rel="stylesheet" href="css/tour.css">
 <link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/overlays.css">
-<link rel="stylesheet" href="css/tour.css">
+<script src="js/boot-guard.js"></script>
+<!-- Three.js r128 (MIT licence) is inlined so the file runs offline: no CDN, no server -->
+<script src="../vendor/three.r128.min.js"></script>
 </head>
 <body>
-<div id="splash">
-  <div id="splashLogo"></div>
-  <div class="eyebrow">SIH 26067 · INCOIS · MINISTRY OF EARTH SCIENCES</div>
-  <h1>Ocean<span>Lens</span> 3D</h1>
-  <p>A single 3D console for ocean model fields and Argo/glider observations —
-  built so forecasters stop switching between five desktop tools to answer one question.</p>
-  <button id="enterBtn">ENTER CONSOLE</button>
-  <div class="rule"></div>
-  <div id="splashTeam">TEAM BYTEFORGE</div>
-  <p style="font-size:11.5px;">Tip: use <b style="color:var(--text)">Present Mode</b> (top right)
-  for a guided walkthrough of every feature.</p>
+
+<!-- ============ splash ============ -->
+<div id="splash" role="dialog" aria-modal="true" aria-labelledby="splashTitle" aria-describedby="splashLede">
+  <div class="splash-inner">
+    <p class="splash-eyebrow">Smart India Hackathon 2026 · Problem statement 26067</p>
+    <h1 id="splashTitle">OceanLens 3D</h1>
+    <p id="splashLede" class="splash-lede">HYCOM ocean analyses and Argo float profiles for Cyclone Amphan (May 2020)
+      in one 3D view, with the model checked against the floats.</p>
+    <div class="splash-actions">
+      <!-- boot-guard (platform) will disable both with "Loading data…" until the app is ready -->
+      <button id="enterBtn" class="btn btn-primary" disabled>Loading data…</button>
+      <button id="enterTourBtn" class="btn" disabled>Start the guided tour</button>
+    </div>
+    <p id="splashMsg" class="splash-msg" role="alert" hidden></p>
+    <div id="splashLogo" role="img" aria-label="Team ByteForge"></div>
+    <p class="splash-foot">Student prototype by Team ByteForge. Not affiliated with or endorsed by INCOIS or the
+      Ministry of Earth Sciences.</p>
+  </div>
 </div>
+
+<!-- ============ small-screen notice (shown below 900 CSS px until dismissed) ============ -->
+<div id="smallScreen" class="overlay" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="smallScreenTitle">
+    <h2 id="smallScreenTitle">Built for laptop and desktop screens</h2>
+    <p>OceanLens 3D needs a window at least 900 pixels wide. On this screen the 3D view and the panels will be
+      cramped.</p>
+    <div class="dialog-actions"><button id="smallScreenContinue" class="btn btn-primary">Continue anyway</button></div>
+  </div>
+</div>
+
 <div id="app">
 
-  <div id="header">
+  <!-- ============ header ============ -->
+  <header id="header">
+    <button id="leftToggle" data-needs-shell hidden class="icon-btn" aria-controls="left" aria-expanded="true" aria-label="Hide controls" title="Hide controls">
+      <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M6 3v10"/></svg>
+    </button>
     <div id="brand">
-      <div class="dot"></div>
-      <div class="title">OceanLens 3D</div>
-      <div id="headerLogo" title="Team ByteForge"></div>
-      <div class="sub mono">Arabian Sea &amp; Bay of Bengal · SIH 26067 prototype</div>
+      <span class="brand-title">OceanLens 3D</span>
+      <span class="brand-sub">Arabian Sea and Bay of Bengal</span>
     </div>
-    <div id="readout" class="mono">
-      <div class="seg"><span>VARIABLE</span><b id="roVar">Temperature</b></div>
-      <div class="seg"><span>RANGE</span><b id="roRange">–</b></div>
-      <div class="seg"><span>MEAN</span><b id="roMean">–</b></div>
-    </div>
+    <p id="readout" class="readout" aria-live="polite">
+      <span id="roVar">Temperature at 0 m</span>
+      <span id="roRange" class="readout-item"></span>
+      <span id="roMean" class="readout-item"></span>
+    </p>
     <div id="headRight">
-      <div id="dataToggle" title="Data source">
-        <button data-mode="real">REAL · AMPHAN 2020</button>
-        <button data-mode="synth">SYNTHETIC</button>
+      <div id="dataToggle" class="segmented" role="group" aria-label="Data">
+        <button type="button" data-mode="real" aria-pressed="true">Real data: Amphan 2020</button>
+        <button type="button" data-mode="synth" aria-pressed="false">Synthetic demo</button>
       </div>
-      <button id="presentBtn">▶ PRESENT MODE</button>
-      <button id="aboutBtn">DATA &amp; SOURCES ⓘ</button>
+      <button id="presentBtn" class="btn" aria-pressed="false">Guided tour</button>
+      <button id="aboutBtn" class="btn" aria-haspopup="dialog">About the data</button>
+      <button id="rightToggle" data-needs-shell hidden class="icon-btn" aria-controls="right" aria-expanded="true" aria-label="Hide analysis panel" title="Hide analysis panel">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M10 3v10"/></svg>
+      </button>
     </div>
-  </div>
+  </header>
 
   <div id="body">
-    <div id="left">
-      <div class="grp">
-        <div class="grp-label">VARIABLE</div>
-        <div class="pillrow" id="varPills">
-          <button class="pill active" data-v="temp">Temperature <span class="k">°C</span></button>
-          <button class="pill" data-v="sal">Salinity <span class="k">PSU</span></button>
-          <button class="pill" data-v="cur">Current speed <span class="k">m/s</span></button>
-          <button class="pill" data-v="tchp">Cyclone heat (TCHP) <span class="k">kJ/cm²</span></button>
+
+    <!-- ============ left: controls ============ -->
+    <aside id="left" aria-label="Controls">
+
+      <section class="grp" aria-labelledby="grpVar">
+        <h2 id="grpVar" class="grp-label">Variable</h2>
+        <div class="pillrow" id="varPills" role="group" aria-labelledby="grpVar">
+          <button type="button" class="pill active" data-v="temp" aria-pressed="true">Temperature <span class="unit">°C</span></button>
+          <button type="button" class="pill" data-v="sal" aria-pressed="false">Salinity <span class="unit">PSU</span></button>
+          <button type="button" class="pill" data-v="cur" aria-pressed="false">Current speed <span class="unit">m/s</span></button>
+          <button type="button" class="pill" data-v="tchp" aria-pressed="false">Cyclone heat potential <span class="unit">kJ/cm²</span></button>
         </div>
-      </div>
+      </section>
 
-      <div class="grp" id="modeGrp">
-        <div class="grp-label">DISPLAY MODE</div>
-        <div class="pillrow" id="modePills">
-          <button class="pill active" data-m="layers">Volumetric layers</button>
-          <button class="pill" data-m="slice">Depth slice</button>
-          <button class="pill" data-m="iso">Isosurface (threshold)</button>
+      <section class="grp" id="modeGrp" aria-labelledby="grpView">
+        <h2 id="grpView" class="grp-label">View</h2>
+        <div class="pillrow" id="modePills" role="group" aria-labelledby="grpView">
+          <!-- "surface" is decision (f): opaque 0 m surface, faint lower layers. Mode key to be confirmed with architect/graphics. -->
+          <button type="button" class="pill active" data-m="surface" aria-pressed="true">Surface</button>
+          <button type="button" class="pill" data-m="layers" aria-pressed="false">All depth levels</button>
+          <button type="button" class="pill" data-m="slice" aria-pressed="false">Depth slice</button>
+          <button type="button" class="pill" data-m="iso" aria-pressed="false">Depth of a value</button>
         </div>
-      </div>
+      </section>
 
-      <div class="grp" id="tchpNote" style="display:none;">
-        <div class="grp-label">WHAT YOU ARE SEEING</div>
-        <div class="note">Heat stored in water warmer than <b>26 °C</b>, from the surface down to the
-        26 °C isotherm (D26). The white contour marks <b>50 kJ/cm²</b>; above it the ocean is
-        commonly associated with cyclone intensification. Click the cyclone track for heat along its path.</div>
-      </div>
+      <section class="grp" id="tchpNote" style="display:none;" aria-labelledby="grpTchp">
+        <h2 id="grpTchp" class="grp-label">What the map shows</h2>
+        <p class="note">Heat stored in water warmer than 26 °C, from the surface down to the 26 °C isotherm (D26),
+          computed from the model's temperature and salinity. The white contour marks 50 kJ/cm², a common threshold
+          for cyclone intensification.</p>
+        <button type="button" id="trackDetailsBtn" data-needs-shell hidden class="btn btn-block">Show Amphan's track details</button>
+      </section>
 
-      <div class="grp" id="depthGrp" style="display:none;">
+      <section class="grp" id="depthGrp" style="display:none;">
         <div class="field">
-          <label>Depth slice <b id="depthVal">100 m</b></label>
+          <label for="depthSlider">Depth <output id="depthVal" for="depthSlider">100 m</output></label>
           <input type="range" id="depthSlider" min="0" max="10" step="1" value="4">
         </div>
-      </div>
+      </section>
 
-      <div class="grp" id="isoGrp" style="display:none;">
+      <section class="grp" id="isoGrp" style="display:none;">
         <div class="field">
-          <label>Threshold <b id="isoVal">26.0 °C</b></label>
+          <label for="isoSlider">Value <output id="isoVal" for="isoSlider">26.0 °C</output></label>
           <input type="range" id="isoSlider" min="5" max="32" step="0.1" value="26">
         </div>
-        <div class="presetrow" id="isoPresets">
-          <button class="preset" data-iso="20"><b>D20</b>thermocline</button>
-          <button class="preset" data-iso="26"><b>D26</b>cyclone heat</button>
+        <div class="presetrow" id="isoPresets" role="group" aria-label="Common isotherms">
+          <button type="button" class="preset" data-iso="20" aria-pressed="false"><b>D20</b> thermocline</button>
+          <button type="button" class="preset" data-iso="26" aria-pressed="false"><b>D26</b> cyclone heat</button>
         </div>
-      </div>
+      </section>
 
-      <div class="grp" id="sectionGrp">
-        <div class="grp-label">VERTICAL SECTION <span class="mono">S</span></div>
-        <button class="pill" id="sectionDrawBtn" style="width:100%">✎ Draw a section <span class="k">drag</span></button>
-        <div class="presetgrid" id="sectionPresets">
-          <button class="preset" data-sec="as15"><b>15°N</b>Arabian Sea</button>
-          <button class="preset" data-sec="bob15"><b>15°N</b>Bay of Bengal</button>
-          <button class="preset" data-sec="track"><b>Track</b>sample cyclone</button>
-          <button class="preset" data-sec="n8"><b>8°N</b>both basins</button>
-        </div>
-      </div>
+      <section class="grp" aria-labelledby="grpOverlays">
+        <h2 id="grpOverlays" class="grp-label">Overlays</h2>
+        <ul class="switch-list">
+          <li><span id="lblArgo">Argo floats</span>
+            <button type="button" class="switch on" id="swArgo" role="switch" aria-checked="true" aria-labelledby="lblArgo"><span class="knob"></span></button></li>
+          <li><span id="lblMisfit">Colour floats by misfit</span>
+            <button type="button" class="switch" id="swMisfit" role="switch" aria-checked="false" aria-labelledby="lblMisfit" aria-describedby="hintMisfit"><span class="knob"></span></button>
+            <span id="hintMisfit" class="sr-only">Shade each float by the temperature RMSE between its profile and the model</span></li>
+          <li id="rowGlider"><span id="lblGlider">Glider tracks</span>
+            <button type="button" class="switch on" id="swGlider" role="switch" aria-checked="true" aria-labelledby="lblGlider"><span class="knob"></span></button></li>
+          <li id="rowTrack"><span id="lblTrack">Cyclone track</span>
+            <button type="button" class="switch on" id="swTrack" role="switch" aria-checked="true" aria-labelledby="lblTrack"><span class="knob"></span></button></li>
+          <li><span id="lblFlow">Current streaks</span>
+            <button type="button" class="switch on" id="swFlow" role="switch" aria-checked="true" aria-labelledby="lblFlow"><span class="knob"></span></button></li>
+          <li><span id="lblGrid">Grid</span>
+            <button type="button" class="switch on" id="swGrid" role="switch" aria-checked="true" aria-labelledby="lblGrid"><span class="knob"></span></button></li>
+        </ul>
+      </section>
 
-      <div class="grp">
-        <div class="grp-label">RENDER</div>
+      <details class="grp" id="viewSettings">
+        <summary class="grp-label">View settings</summary>
         <div class="field">
-          <label>Layer opacity <b id="opVal">55%</b></label>
-          <input type="range" id="opSlider" min="10" max="95" step="1" value="55">
+          <label for="opSlider">Lower layers <output id="opVal" for="opSlider">25%</output></label>
+          <input type="range" id="opSlider" min="0" max="95" step="1" value="25">
         </div>
         <div class="field">
-          <label>Vertical exaggeration <b id="exVal">3.0×</b></label>
-          <input type="range" id="exSlider" min="10" max="80" step="1" value="30">
+          <label for="exSlider">Depth stretch <output id="exVal" for="exSlider">3.0</output></label>
+          <input type="range" id="exSlider" min="10" max="80" step="1" value="30" aria-describedby="exRatio">
+          <p id="exRatio" class="field-note">Vertical exaggeration ≈ <span class="num" id="exRatioVal"></span> : 1</p>
         </div>
-      </div>
-
-      <div class="grp">
-        <div class="grp-label">OVERLAYS</div>
-        <div class="toggle-row">Argo floats
-          <div class="switch on" id="swArgo"><div class="knob"></div></div>
-        </div>
-        <div class="toggle-row" title="Colour each float by how far its temperature profile is from the model (RMSE)">Colour floats by misfit
-          <div class="switch" id="swMisfit"><div class="knob"></div></div>
-        </div>
-        <div class="toggle-row">Glider tracks
-          <div class="switch on" id="swGlider"><div class="knob"></div></div>
-        </div>
-        <div class="toggle-row">Live current particles
-          <div class="switch on" id="swFlow"><div class="knob"></div></div>
-        </div>
-        <div class="toggle-row">Grid / graticule
-          <div class="switch on" id="swGrid"><div class="knob"></div></div>
-        </div>
-      </div>
-
-      <div class="grp">
-        <div class="grp-label">COLORBAR <span id="paletteName" class="mono" style="color:var(--text-dimmer)">thermal</span></div>
-        <div class="field" style="margin-bottom:8px;">
+        <fieldset class="field" id="colourScale">
+          <legend>Colour scale</legend>
+          <label for="paletteSel">Ramp</label>
           <select id="paletteSel">
-            <option value="thermal">Thermal</option>
-            <option value="haline">Haline</option>
-            <option value="speed">Speed (turbo)</option>
-            <option value="heat">Heat (TCHP)</option>
+            <option value="temperature">Temperature</option>
+            <option value="salinity">Salinity</option>
+            <option value="speed">Speed</option>
+            <option value="heat">Heat</option>
             <option value="depth" hidden>Depth</option>
           </select>
-        </div>
-        <div class="minmax">
-          <input type="number" id="cbMin" step="0.1">
-          <input type="number" id="cbMax" step="0.1">
-        </div>
-        <div id="colorbarWrap">
-          <canvas id="colorbarCanvas" height="14"></canvas>
-          <div class="cb-labels"><span id="cbMinLbl"></span><span id="cbMaxLbl"></span></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="viewport">
-      <div id="labelLayer"></div>
-      <div id="compass"><svg viewBox="0 0 24 24"><polygon points="12,2 16,13 12,10 8,13" fill="#ff8058"/><polygon points="12,22 16,13 12,16 8,13" fill="#3a5468"/></svg></div>
-      <div id="scaleNote">SYNTHETIC DEMO DATA · STYLIZED COASTLINE · NOT FOR NAVIGATION</div>
-      <div id="legend">
-        <div class="row"><span class="sw argo"></span> Argo float</div>
-        <div class="row"><span class="sw gld"></span> Glider waypoint</div>
-        <div class="row"><span class="sw shelf"></span> shelf → abyssal</div>
-      </div>
-      <div id="orientHint">ARABIAN SEA <b>◀ W</b><br>BAY OF BENGAL <b>E ▶</b></div>
-      <div id="vignette"></div>
-      <div id="hoverTip"></div>
-      <div id="viewTools">
-        <button id="resetViewBtn" title="Reset camera">⟲ RESET VIEW</button>
-        <button id="snapBtn" title="Save PNG">⬇ PNG</button>
-        <button id="helpBtn" title="Keyboard shortcuts">? KEYS</button>
-      </div>
-      <div id="drawHint">Drag across the sea surface to cut a section · <b>Esc</b> to cancel</div>
-      <div id="tourCaption"></div>
-      <div id="tourDots"></div>
-    </div>
-
-    <div id="right">
-      <div id="rightEmpty">
-        <div class="h">Model vs observations</div>
-        <p>Click any Argo float (◆ coral) to compare its observed profile with the model column at the
-        same spot (synthetic mode adds glider waypoints, ● blue). Press <b style="color:var(--text)">S</b> and drag across the sea
-        to cut a vertical section. Drag to orbit · scroll to zoom.</p>
-        <div id="valPanel"></div>
-      </div>
-      <div id="profile">
-        <div id="profHeader">
-          <div>
-            <div class="name" id="profName">—</div>
-            <span class="kind" id="profKind">—</span>
+          <div class="minmax">
+            <label for="cbMin">Min</label><input type="number" id="cbMin" step="0.1" inputmode="decimal">
+            <label for="cbMax">Max</label><input type="number" id="cbMax" step="0.1" inputmode="decimal">
           </div>
-          <button id="closeProf">✕</button>
+          <button type="button" id="cbReset" class="btn btn-small">Reset range</button>
+        </fieldset>
+      </details>
+    </aside>
+
+    <!-- ============ viewport ============ -->
+    <main id="viewport" aria-label="3D view">
+      <div id="labelLayer" aria-hidden="true"></div>
+
+      <div id="viewTop">
+        <!-- tour strip: architect's tour.js fills #tourStep/#tourText and wires the buttons -->
+        <div id="tourStrip" class="chip" role="region" aria-label="Guided tour" hidden>
+          <p class="tour-head"><span id="tourStep" class="tour-step"></span></p>
+          <p id="tourText" class="tour-text" aria-live="polite"></p>
+          <div class="tour-nav">
+            <button type="button" id="tourBack" class="icon-btn" aria-label="Previous step">
+              <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button>
+            <button type="button" id="tourNext" class="btn btn-primary btn-small">Next</button>
+            <button type="button" id="tourAuto" class="btn btn-small" aria-pressed="false">Autoplay</button>
+            <button type="button" id="tourStop" class="btn btn-small">End tour</button>
+            <span id="tourPaused" class="tour-paused" hidden>Paused</span>
+          </div>
         </div>
-        <div id="profMeta"></div>
+        <div id="contextRow">
+          <p id="contextLine" class="chip">
+            <span id="ctxBadge" class="badge">Real data</span>
+            <span id="ctxText"></span>
+          </p>
+          <div id="compass" role="img" aria-label="North arrow">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path class="compass-n" d="M12 2 16 13 12 10 8 13Z"/><path class="compass-s" d="M12 22 16 13 12 16 8 13Z"/><text x="12" y="-1" text-anchor="middle">N</text></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- colour key + legend: rendered by charts.js renderKey(spec) -->
+      <figure id="key" class="chip key" aria-labelledby="keyTitle" data-test="colour-key">
+        <figcaption id="keyTitle" class="key-title"></figcaption>
+        <div class="key-bar-wrap">
+          <canvas id="keyBar" class="key-bar" aria-hidden="true"></canvas>
+          <div id="keyTicks" class="key-ticks" aria-hidden="true"></div>
+        </div>
+        <p id="keyRange" class="sr-only"></p>
+        <ul id="keyLegend" class="key-legend"></ul>
+        <p id="keyNote" class="key-note"></p>
+      </figure>
+
+      <div id="hoverTip" role="status" aria-live="off"></div>
+
+      <div id="viewTools">
+        <details id="sectionMenu" class="menu">
+          <summary class="btn"><svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12.5 13 3.5"/><circle cx="3" cy="12.5" r="1.3"/><circle cx="13" cy="3.5" r="1.3"/></svg>Section</summary>
+          <div class="menu-body" id="sectionPresets" role="group" aria-label="Vertical sections">
+            <button type="button" id="sectionDrawBtn" class="menu-item" aria-pressed="false">Draw your own <kbd>S</kbd></button>
+            <button type="button" class="preset menu-item" data-sec="track" id="secTrackBtn">Along Amphan's track</button>
+            <button type="button" class="preset menu-item" data-sec="as15">15°N across the Arabian Sea</button>
+            <button type="button" class="preset menu-item" data-sec="bob15">15°N across the Bay of Bengal</button>
+            <button type="button" class="preset menu-item" data-sec="n8">8°N across both basins</button>
+          </div>
+        </details>
+        <button type="button" id="resetViewBtn" class="btn">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 6.5A5 5 0 1 1 3 9"/><path d="M3 3v3.5h3.5"/></svg>Reset view</button>
+        <button type="button" id="snapBtn" class="btn">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Save PNG</button>
+        <button type="button" id="helpBtn" class="btn" aria-haspopup="dialog">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M4 7h1M7 7h1M10 7h1M4.5 9.5h7"/></svg>Shortcuts</button>
+      </div>
+
+      <p id="drawHint" class="chip" role="status">Drag across the sea to cut a section. <kbd>Esc</kbd> cancels.</p>
+    </main>
+
+    <!-- ============ right: analysis ============ -->
+    <aside id="right" aria-label="Analysis">
+
+      <section id="rightEmpty" aria-labelledby="startTitle">
+        <h2 id="startTitle" class="panel-title">Start here</h2>
+        <div class="start-actions">
+          <button type="button" id="startTourBtn" data-needs-shell hidden class="btn btn-block btn-primary">Start the guided tour</button>
+          <button type="button" id="openTrackBtn" data-needs-shell hidden class="btn btn-block">Show Amphan's track</button>
+          <button type="button" id="worstFloatBtn" data-needs-shell hidden class="btn btn-block">Compare the worst-fitting float</button>
+        </div>
+        <p class="hint">Click a float on the map to compare it with the model. Drag to orbit, scroll to zoom.</p>
+        <div id="valPanel"></div>
+      </section>
+
+      <section id="profile" aria-labelledby="profName">
+        <div class="panel-head" id="profHeader">
+          <div>
+            <h2 class="panel-title" id="profName"></h2>
+            <span class="badge" id="profKind"></span>
+          </div>
+          <button type="button" id="closeProf" class="icon-btn" aria-label="Close float profile">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <p id="profMeta" class="meta"></p>
         <div id="qcBadge"></div>
-        <div id="depthPick">
-          <label>At depth <b id="profDepthVal">100 m</b></label>
+        <div class="tabbtns" role="tablist" aria-label="Profile variable">
+          <button type="button" class="tabbtn active" role="tab" aria-selected="true" data-p="temp">Temperature</button>
+          <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="sal">Salinity</button>
+          <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="dens">Density</button>
+          <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="chl">Chlorophyll</button>
+        </div>
+        <div id="obsLegend" class="chart-legend"></div>
+        <canvas id="profChart" role="img" aria-label="Observed profile and model column"></canvas>
+        <div id="profStats" class="stats"></div>
+        <div class="field" id="depthPick">
+          <label for="profDepth">Values at <output id="profDepthVal" for="profDepth">100 m</output></label>
           <input type="range" id="profDepth" min="0" max="10" step="1" value="4">
         </div>
-        <div id="derivGrid"></div>
-        <div class="tabbtns">
-          <button class="tabbtn active" data-p="temp">Temp</button>
-          <button class="tabbtn" data-p="sal">Sal</button>
-          <button class="tabbtn" data-p="dens">Density</button>
-          <button class="tabbtn" data-p="chl">Chl-a</button>
-        </div>
-        <div id="obsLegend"></div>
-        <canvas id="profChart" width="258" height="300"></canvas>
-        <div id="profStats"></div>
-      </div>
-      <div id="sectionPanel">
-        <div id="sectionHeader">
+        <div id="derivGrid" class="cards"></div>
+        <details id="derivMoreWrap">
+          <summary>More quantities</summary>
+          <div id="derivMore" class="cards"></div>
+        </details>
+      </section>
+
+      <section id="sectionPanel" aria-labelledby="sectionName">
+        <div class="panel-head" id="sectionHeader">
           <div>
-            <div class="name" id="sectionName">Vertical section</div>
-            <span class="kind kind-section" id="sectionKind">A → B</span>
+            <h2 class="panel-title" id="sectionName">Vertical section</h2>
+            <span class="badge" id="sectionKind"></span>
           </div>
-          <button id="closeSection" title="Remove the section">✕</button>
+          <button type="button" id="closeSection" class="icon-btn" aria-label="Remove the section">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
         </div>
-        <div id="sectionMeta"></div>
-        <canvas id="sectionChart"></canvas>
-        <div id="sectionReadout">hover the section for values</div>
-        <div class="val-foot" id="sectionFoot"></div>
-      </div>
-      <div id="trackPanel">
-        <div id="trackHeader">
+        <p id="sectionMeta" class="meta"></p>
+        <canvas id="sectionChart" role="img" aria-label="Distance–depth section"></canvas>
+        <p id="sectionReadout" class="readout-line" aria-live="polite">Hover over the section to read values.</p>
+        <div id="sectionFoot" class="foot"></div>
+      </section>
+
+      <section id="trackPanel" aria-labelledby="trackName">
+        <div class="panel-head" id="trackHeader">
           <div>
-            <div class="name" id="trackName">Sample cyclone track</div>
-            <span class="kind kind-track" id="trackKind">ILLUSTRATIVE · NOT A REAL STORM</span>
+            <h2 class="panel-title" id="trackName"></h2>
+            <span class="badge" id="trackKind"></span>
           </div>
-          <button id="closeTrack">✕</button>
+          <button type="button" id="closeTrack" class="icon-btn" aria-label="Close track details">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
         </div>
-        <div id="trackMeta" style="font-size:11px;color:var(--text-dim);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;margin:4px 0 12px;line-height:1.6;"></div>
-        <canvas id="trackChart"></canvas>
+        <p id="trackMeta" class="meta"></p>
+        <canvas id="trackChart" role="img" aria-label="Ocean heat and wind along the track"></canvas>
         <table class="val-table" id="trackTable"></table>
-      </div>
-    </div>
+      </section>
+    </aside>
   </div>
 
-  <div id="footer">
-    <button id="playBtn">▶</button>
+  <!-- ============ footer: time ============ -->
+  <footer id="footer">
+    <button type="button" id="playBtn" class="icon-btn icon-btn-round" aria-pressed="false" aria-label="Play through the analyses">
+      <svg class="icon icon-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5Z"/></svg>
+      <svg class="icon icon-pause" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"/></svg>
+    </button>
     <div id="timelineWrap">
+      <label for="timeline" class="sr-only">Analysis time</label>
       <input type="range" id="timeline" min="0" max="7" step="1" value="0">
-      <div id="timeLabels">
-        <span>T+0d</span><span>T+21d</span>
-      </div>
+      <div id="timeLabels" aria-hidden="true"></div>
     </div>
-    <div id="timeNow" class="mono">Day 1 · 01 Sep 2026</div>
-  </div>
+    <output id="timeNow" for="timeline"></output>
+  </footer>
 </div>
 
-<div id="helpOverlay">
-  <div id="helpCard">
-    <button id="helpClose">CLOSE</button>
-    <h2>Keyboard shortcuts</h2>
-    <table>
-      <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></td><td>Temperature / Salinity / Currents / Cyclone heat</td></tr>
-      <tr><td><kbd>L</kbd> <kbd>D</kbd> <kbd>I</kbd></td><td>Layers / Depth slice / Isosurface</td></tr>
-      <tr><td><kbd>Space</kbd></td><td>Play or pause the time animation</td></tr>
-      <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>Move depth slice up / down</td></tr>
-      <tr><td><kbd>S</kbd></td><td>Draw a vertical section (drag across the sea)</td></tr>
-      <tr><td><kbd>P</kbd></td><td>Start or stop Present Mode</td></tr>
-      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Previous / next tour step</td></tr>
-      <tr><td><kbd>R</kbd></td><td>Reset the camera view</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>Close panels / stop the tour</td></tr>
+<!-- ============ dialogs (JS toggles .show; shell.js moves focus in and back) ============ -->
+<div id="helpOverlay" class="overlay">
+  <div id="helpCard" class="dialog" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="dialog-head">
+      <h2 id="helpTitle">Shortcuts</h2>
+      <button type="button" id="helpClose" class="icon-btn" aria-label="Close shortcuts">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <table class="keys">
+      <tr><th scope="row"><kbd>1</kbd>–<kbd>4</kbd></th><td>Temperature, salinity, current speed, cyclone heat potential</td></tr>
+      <tr><th scope="row"><kbd>U</kbd> <kbd>L</kbd> <kbd>D</kbd> <kbd>I</kbd></th><td>Surface, all depth levels, depth slice, depth of a value</td></tr>
+      <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Depth slice up or down</td></tr>
+      <tr><th scope="row"><kbd>Space</kbd></th><td>Play or pause the analyses</td></tr>
+      <tr><th scope="row"><kbd>S</kbd></th><td>Draw a vertical section (drag across the sea)</td></tr>
+      <tr><th scope="row"><kbd>P</kbd></th><td>Start or end the guided tour</td></tr>
+      <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous or next tour step</td></tr>
+      <tr><th scope="row"><kbd>R</kbd></th><td>Reset the camera</td></tr>
+      <tr><th scope="row"><kbd>?</kbd></th><td>Show these shortcuts</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Close a dialog, cancel drawing, close a panel, then clear the section</td></tr>
+    </table>
+    <h3 class="dialog-sub">Mouse and keyboard in the 3D view</h3>
+    <table class="keys">
+      <tr><th scope="row">Drag</th><td>Orbit (or the arrow keys when the view has focus)</td></tr>
+      <tr><th scope="row">Scroll</th><td>Zoom (or <kbd>+</kbd> and <kbd>−</kbd>)</td></tr>
+      <tr><th scope="row">Click a float</th><td>Compare its profile with the model</td></tr>
+      <tr><th scope="row">Click the track</th><td>Show heat and wind along it</td></tr>
     </table>
   </div>
 </div>
 
-<div id="aboutOverlay">
-  <div id="aboutCard">
-    <button id="aboutClose">CLOSE</button>
-    <h2>What this prototype is</h2>
-    <div class="tag">SIH 26067 — INCOIS Ocean Valley</div>
-    <p>Two data sources, switched in the header. The coastline and sea floor are real in both.</p>
-    <h3>REAL MODE · CYCLONE AMPHAN, MAY 2020</h3>
-    <ul>
-      <li><b style="color:var(--text)">Model:</b> HYCOM GOFS 3.1 global analysis (US Navy, 1/12°), eight
-      analyses at 12 UTC, three days apart, 4–25 May 2020. Averaged into the app's 0.5° cells and 11 levels
-      (75 m and 750 m interpolated between model levels). Temperature, salinity and currents.</li>
-      <li><b style="color:var(--text)">Argo:</b> real profiles from the Argo GDAC, with delayed-mode or adjusted
-      values where they exist and only QC flags 1, 2, 5 and 8 kept; for each snapshot, each float's profile
-      closest in time (within 1.5 days). The same density-inversion check runs on them.</li>
-      <li><b style="color:var(--text)">Cyclone:</b> Amphan's six-hourly positions and winds from IBTrACS v04r01
-      (JTWC and IMD). The yellow ring marks where the storm was at the snapshot shown.</li>
-      <li><b style="color:var(--text)">Coast and sea floor:</b> ETOPO1, sampled every 0.1°.</li>
-      <li><b style="color:var(--text)">Read with care:</b> HYCOM assimilates Argo, so the model–Argo comparison
-      is a consistency check, not independent validation. HYCOM has no chlorophyll, and there is no public
-      glider data in this window.</li>
+<div id="aboutOverlay" class="overlay">
+  <div id="aboutCard" class="dialog dialog-wide" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <div class="dialog-head">
+      <h2 id="aboutTitle">About the data</h2>
+      <button type="button" id="aboutClose" class="icon-btn" aria-label="Close">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <p class="dialog-lede">Student prototype by Team ByteForge for Smart India Hackathon 2026, problem statement 26067
+      (problem owner: INCOIS). Not affiliated with or endorsed by INCOIS or the Ministry of Earth Sciences. Not for
+      operational use.</p>
+
+    <h3>Real data: Cyclone Amphan, May 2020</h3>
+    <dl class="about-list">
+      <dt>Model</dt>
+      <dd>HYCOM + NCODA global analysis (GOFS 3.1), <span data-fact="analysis.count" data-fmt="int"></span> analyses
+        at 12:00 UTC, three days apart, from <span data-fact="analysis.times.0" data-fmt="dayMonth"></span> to
+        <span data-fact="analysis.times.last" data-fmt="dayMonthYear"></span>. Sampled every 0.24° and averaged into
+        0.5° cells on 11 levels from 0 to 1000 m (75 m and 750 m interpolated between model levels). Temperature,
+        salinity (PSS-78) and currents.</dd>
+      <dt>Argo</dt>
+      <dd><span data-fact="argo.profiles" data-fmt="int"></span> profiles from
+        <span data-fact="argo.floats" data-fmt="int"></span> floats, from the Argo GDAC via Ifremer ERDDAP. Delayed-mode
+        or adjusted values where they exist; only QC flags 1, 2, 5 and 8 kept. <span data-copy="about.argoMatch"></span></dd>
+      <dt>Cyclone</dt>
+      <dd>Six-hourly positions and winds from IBTrACS v04r01: IMD (RSMC New Delhi, 3-minute winds) and JTWC (1-minute
+        winds), shown side by side.</dd>
+      <dt>Coast and sea floor</dt>
+      <dd>ETOPO1, sampled every 0.1° (now superseded by ETOPO 2022).</dd>
+    </dl>
+
+    <h3>Read with care</h3>
+    <ul class="about-bullets">
+      <li>HYCOM assimilates Argo, so the model–Argo comparison is a consistency check, not independent validation.</li>
+      <li>The model is shown on 11 levels and 0.5° cells; features smaller than that are smoothed out.</li>
+      <li>Heat potential uses EOS-80 density and c<sub>p</sub> = 4000 J kg⁻¹ K⁻¹; some operational products use
+        4178, about 4.5 % higher.</li>
+      <li>Depth is stretched about <span data-fact="view.exaggerationPerSlider" data-fmt="exagDefault"></span> times
+        relative to distance, and the sea floor below 1000 m is compressed a further
+        <span data-fact="view.deepCompression" data-fmt="int"></span> times.</li>
+      <li>Current labels mark where these currents usually flow; they are not drawn from this data.</li>
+      <li>Current streaks move at an illustrative speed, not a physical one.</li>
+      <li>HYCOM has no chlorophyll, and no glider data is included for this period.</li>
     </ul>
-    <p>The snapshot is built by <span class="src-link">data-pipeline/build_snapshot.py</span> (Python, numpy
-    only) and embedded in this file, so real mode also works offline.</p>
-    <h3>SYNTHETIC MODE</h3>
-    <p>The 3D field, Argo floats, and glider tracks are <b>procedurally generated</b>, shaped to match real
-    Arabian Sea / Bay of Bengal oceanography (surface warming, a shoaling thermocline, Bay-of-Bengal
-    freshening from river runoff, monsoon-driven gyres).</p>
-    <p>The <b>observed profiles are synthetic too</b>: each instrument samples a "true" ocean that
-    differs from the model the way real ones do — a displaced thermocline, a warmer or cooler mixed
-    layer, a fresher river-plume layer in the Bay that models under-resolve, sensor noise, and
-    missing levels. The model is interpolated to each observation's position and depth, and the
-    misfit is reported as bias and RMSE in the spirit of GODAE OceanView Class 4 verification.
-    Profiles are checked for density inversions (&gt; 0.03 kg/m³); flagged levels are left out of the
-    statistics and drawn as red rings. One float carries a deliberate bad salinity sample to show this.</p>
-    <p>The drifting current streaks move at a visually tuned speed, not a physically scaled
-    one — they're there to make circulation direction and structure legible at a glance. Named-current
-    labels mark the general region where each real current is known to occur.</p>
-    <p>The whole app, including Three.js r128 and the real snapshot, is inside this one HTML file, so it
-    runs with no network connection. Only the web fonts are fetched online; offline it falls back to
-    system fonts.</p>
-    <h3>SOURCES</h3>
-    <ul>
-      <li>HYCOM GOFS 3.1 analysis — <span class="src-link">tds.hycom.org/thredds/dodsC/GLBy0.08/expt_93.0</span></li>
-      <li>Argo GDAC via Ifremer ERDDAP — <span class="src-link">erddap.ifremer.fr/erddap/tabledap/ArgoFloats</span></li>
-      <li>ETOPO1 via NOAA ERDDAP — <span class="src-link">upwell.pfeg.noaa.gov/erddap/griddap/etopo180</span></li>
-      <li>IBTrACS v04r01 — <span class="src-link">ncei.noaa.gov/products/international-best-track-archive</span></li>
-      <li>Next to add: INCOIS Live Access Server (<span class="src-link">las.incois.gov.in</span>) and Copernicus
-      Marine (<span class="src-link">data.marine.copernicus.eu</span>, needs a free account)</li>
+
+    <h3>Synthetic demo</h3>
+    <p>Analytic fields, floats and gliders generated in the browser to show the tools on data with known behaviour,
+      including a float with a deliberate bad salinity sample that the density-inversion check flags. It is not a
+      real ocean state; instruments are labelled SYN-F01 onwards and SYN-G1 onwards, and times are demo days, not
+      dates.</p>
+
+    <h3>Citations and acknowledgements</h3>
+    <!-- wording supplied by science; platform mirrors it in THIRD_PARTY_NOTICES.md -->
+    <ul class="about-bullets" id="aboutCitations">
+      <li data-cite="argo"></li>
+      <li data-cite="hycom"></li>
+      <li data-cite="ibtracs"></li>
+      <li data-cite="etopo1"></li>
+      <li>Methods: UNESCO EOS-80 equation of state; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test.</li>
+      <li>three.js r128, MIT licence (full text in THIRD_PARTY_NOTICES.md).</li>
     </ul>
-    <h3>WHAT PRODUCTION WIRING NEEDS</h3>
-    <ul>
-      <li>A backend service (xarray / PyNIO) parsing NetCDF over OPeNDAP, exposing a
-      REST/WMS-WCS layer so the frontend never touches raw files.</li>
-      <li>Argo/glider ingestion normalizing IFREMER NetCDF profiles into the same
-      lat/lon/depth/time/variable schema used here, on a scheduled pull.</li>
-      <li>CF-Conventions-compliant metadata so new variables (chlorophyll, ADCP currents,
-      HF-radar, moorings) register as new layers with no frontend re-engineering.</li>
-    </ul>
-    <h3>OPERATIONAL VALUE (WHY THIS MATTERS TO INCOIS)</h3>
-    <ul>
-      <li><b style="color:var(--text)">Cyclone intensity forecasting</b> — tropical cyclone heat
-      potential (TCHP) is the heat stored above the 26 °C isotherm (D26). This view computes it
-      live from the temperature and salinity columns and maps it, with the D26 surface underneath.
-      The 20 °C isotherm (D20) is the usual proxy for thermocline depth.</li>
-      <li><b style="color:var(--text)">Search &amp; rescue</b> — surface current vectors let
-      forecasters estimate drift trajectories instead of reading them off static charts.</li>
-      <li><b style="color:var(--text)">Fishery advisories</b> — chlorophyll profiles from
-      Argo/BGC floats mark productive zones without a dedicated desktop tool.</li>
-      <li><b style="color:var(--text)">Public science communication</b> — the same 3D view
-      that helps a forecaster also makes ocean dynamics legible to students and policymakers.</li>
-    </ul>
+
+    <h3>This build</h3>
+    <p class="meta" id="aboutBuild"><!-- platform: version; science: data input hashes --></p>
   </div>
 </div>
 
+
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
-<!-- Script manifest: build.py inlines each file below, in this order, as its own <script>. -->
+<!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element. -->
 <script src="js/config.js"></script>
 <script src="js/palettes.js"></script>
 <script src="js/fmt.js"></script>
@@ -380,6 +459,7 @@
 <script src="js/tour-steps.js"></script>
 <script src="js/tour.js"></script>
 <script src="js/panels.js"></script>
+<script src="js/shell.js"></script>
 <script src="js/hover.js"></script>
 <script src="js/export.js"></script>
 <script src="js/hotkeys.js"></script>

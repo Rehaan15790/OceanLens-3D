@@ -1,81 +1,85 @@
-  /* ---------- BODY ---------- */
-  #body{display:grid;grid-template-columns:236px minmax(0,1fr) 290px;min-height:0;}
-  #left{border-right:1px solid var(--border);background:var(--bg-2);overflow-y:auto;padding:14px 14px 20px;}
-  #right{border-left:1px solid var(--border);background:var(--bg-2);overflow-y:auto;padding:14px;}
-  /* min-size 0 + an absolutely placed canvas: the grid sizes the viewport, never the
-     canvas, so the 3D view shrinks again when the window gets smaller */
-  #viewport{position:relative;min-width:0;min-height:0;overflow:hidden;
-    background:radial-gradient(ellipse at 50% 30%, #0a1a2c 0%, #060d16 70%);}
-  canvas{display:block;}
-  #viewport > canvas{position:absolute;top:0;left:0;z-index:0;}
-  #labelLayer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;}
-  .geoLabel{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;
-    font-size:11px;color:var(--text-dim);}
-  .geoLabel.sea{font-style:italic;color:#4fb3c4;letter-spacing:.4px;font-size:12.5px;}
-  .geoLabel.land{color:#cdbd8e;font-weight:600;font-size:13px;letter-spacing:.3px;
-    text-shadow:0 1px 3px rgba(0,0,0,.6);}
-  .geoLabel.land.small{font-size:10.5px;font-weight:500;}
-  .geoLabel.tick{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:9px;color:var(--text-dimmer);}
-  .geoLabel.current{color:var(--accent);font-style:italic;font-size:11px;letter-spacing:.2px;
-    text-shadow:0 1px 4px rgba(0,0,0,.7);}
-  .geoLabel.occluded{opacity:.16;}
-  .geoLabel.secEnd{color:#fff;font-weight:600;font-size:11px;font-family:'JetBrains Mono',monospace;
-    background:rgba(6,13,22,.85);border:1px solid var(--accent-dim);border-radius:3px;padding:1px 6px;}
-  #viewport.drawing canvas{cursor:crosshair;}
-  #drawHint{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:4;display:none;
-    background:rgba(9,18,30,.92);border:1px solid var(--accent-dim);border-radius:5px;padding:7px 14px;
-    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:nowrap;}
-  #drawHint.show{display:block;}
-  #drawHint b{color:var(--accent);font-weight:500;}
-  .geoLabel{transition:opacity .18s ease;}
-  #vignette{position:absolute;inset:0;pointer-events:none;z-index:2;
-    background:radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 45%, rgba(0,0,0,.45) 100%);}
-  #orientHint{position:absolute;top:14px;right:14px;font-family:'JetBrains Mono',Consolas,'Courier New',monospace;
-    font-size:9.5px;color:var(--text-dimmer);background:rgba(9,18,30,.55);padding:5px 9px;
-    border-radius:3px;border:1px solid var(--border-soft);z-index:3;line-height:1.5;text-align:right;}
-  #orientHint b{color:var(--accent);font-weight:500;}
-  #hoverTip{position:absolute;pointer-events:none;z-index:6;display:none;
-    background:rgba(6,14,24,.94);border:1px solid var(--accent-dim);border-radius:4px;
-    padding:7px 10px;font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:10.5px;color:var(--text);
-    line-height:1.6;white-space:nowrap;transform:translate(12px,-50%);}
-  #hoverTip .v{color:var(--accent);}
-  #viewTools{position:absolute;bottom:14px;right:14px;display:flex;gap:6px;z-index:3;}
-  #viewTools button{background:rgba(9,18,30,.75);border:1px solid var(--border);
-    color:var(--text-dim);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:10px;
-    padding:6px 9px;border-radius:3px;cursor:pointer;}
-  #viewTools button:hover{border-color:var(--accent-dim);color:var(--text);}
-  #helpOverlay{position:fixed;inset:0;background:rgba(3,8,14,.72);z-index:60;display:none;
-    align-items:center;justify-content:center;}
-  #helpOverlay.show{display:flex;}
-  #helpCard{width:440px;max-width:88vw;background:var(--panel);border:1px solid var(--border);
-    border-radius:8px;padding:24px 26px;}
-  #helpCard h2{margin:0 0 16px;font-size:16px;}
-  #helpCard table{width:100%;border-collapse:collapse;}
-  #helpCard td{padding:6px 0;font-size:12.5px;color:var(--text-dim);
-    border-bottom:1px solid var(--border-soft);}
-  #helpCard td:first-child{width:96px;}
-  #helpCard kbd{background:var(--panel-2);border:1px solid var(--border);border-radius:3px;
-    padding:2px 7px;font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:10.5px;color:var(--accent);}
-  #helpClose{float:right;background:var(--panel-2);border:1px solid var(--border);color:var(--text);
-    padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11.5px;}
-  #compass{position:absolute;top:14px;left:14px;width:38px;height:38px;border-radius:50%;
-    border:1px solid var(--border);background:rgba(9,18,30,.6);display:flex;align-items:center;
-    justify-content:center;z-index:3;}
-  #compass svg{width:20px;height:20px;transition:transform .05s linear;}
-  #scaleNote{position:absolute;bottom:14px;left:14px;font-size:9.5px;color:var(--text-dimmer);
-    font-family:'JetBrains Mono',Consolas,'Courier New',monospace;background:rgba(9,18,30,.55);padding:4px 8px;
-    border-radius:3px;border:1px solid var(--border-soft);z-index:3;}
-  #legend{position:absolute;bottom:42px;left:14px;background:rgba(9,18,30,.62);
-    border:1px solid var(--border-soft);border-radius:3px;padding:7px 10px;z-index:3;
-    font-size:10px;color:var(--text-dim);font-family:'JetBrains Mono',Consolas,'Courier New',monospace;line-height:1.9;}
-  #legend .row{display:flex;align-items:center;gap:7px;}
-  #legend .sw{width:9px;height:9px;flex-shrink:0;}
-  #legend .argo{background:#ff8058;transform:rotate(45deg);}
-  #legend .gld{background:#6fa8ff;border-radius:50%;}
-  #legend .shelf{background:linear-gradient(90deg,#4c4c33,#0e131b);width:20px;height:7px;}
-  #legend .thr{background:#ffffff;width:16px;height:2px;}
-  #legend .d26{background:rgba(120,190,215,.55);width:16px;height:7px;}
-  #legend .trk{background:#fff;border-radius:50%;box-shadow:0 0 0 2px rgba(255,255,255,.25);}
-  #legend .argo.m0{background:#4fd18b;} #legend .argo.m1{background:#ffc043;}
-  #legend .argo.m2{background:#ff4d4d;} #legend .argo.mx{background:#7d8a96;}
+/* Everything drawn over the 3D view: context line, compass, colour key, tools, hints, map labels. */
+#viewport{position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--bg);}
+#viewport>canvas{position:absolute;inset:0;z-index:0;}
+#labelLayer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:1;}
+.chip{background:var(--chip);border:1px solid var(--border);border-radius:var(--radius);}
+#viewTop{position:absolute;top:var(--s-3);left:var(--s-3);right:var(--s-3);z-index:3;display:flex;flex-direction:column;
+  gap:var(--s-2);pointer-events:none;}
+#viewTop>*{pointer-events:auto;}
+#contextRow{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--s-2);pointer-events:none;}
+#contextRow>*{pointer-events:auto;}
+#contextLine{display:flex;align-items:center;gap:var(--s-2);padding:var(--s-1) var(--s-2) var(--s-1) var(--s-1);font-size:var(--fs-1);
+  color:var(--text);max-width:100%;}
+.badge{display:inline-block;padding:1px var(--s-2);border-radius:3px;font-size:var(--fs-1);font-weight:600;
+  background:var(--panel-2);color:var(--text);border:1px solid var(--border-strong);white-space:nowrap;}
+.badge-synth,#contextLine.synth .badge{background:var(--synth);border-color:var(--synth);color:var(--synth-ink);}
+#compass{width:40px;height:40px;border-radius:50%;background:var(--chip);border:1px solid var(--border);display:flex;
+  align-items:center;justify-content:center;flex-shrink:0;}
+#compass svg{width:24px;height:24px;overflow:visible;}
+#compass .compass-n{fill:var(--text);} #compass .compass-s{fill:var(--border-strong);}
+#compass text{display:none;}
 
+
+/* colour key and legend */
+.key{position:absolute;left:var(--s-3);bottom:var(--s-3);z-index:3;width:260px;padding:var(--s-2) var(--s-3) var(--s-2);}
+.key-title{font-size:var(--fs-1);font-weight:600;color:var(--text);margin:0 0 6px;}
+.key-bar-wrap{position:relative;padding-bottom:18px;}
+.key-bar{display:block;width:100%;height:12px;border-radius:2px;}
+.key-ticks{position:absolute;left:0;right:0;top:0;height:30px;}
+.key-tick{position:absolute;top:12px;transform:translateX(-50%);font-size:var(--fs-1);color:var(--text-2);
+  font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:4px;}
+.key-tick::before{content:"";position:absolute;left:50%;top:0;width:1px;height:4px;background:var(--text-3);}
+.key-tick.first{transform:none;}
+.key-tick.first::before{left:0;}
+.key-tick.last{transform:translateX(-100%);}
+.key-tick.last::before{left:auto;right:0;}
+.key-mark{position:absolute;top:-3px;width:2px;height:22px;transform:translateX(-50%);background:var(--text);
+  box-shadow:0 0 0 1px var(--bg);}
+.key-tick.mark{color:var(--text);font-weight:600;}
+.key-legend{list-style:none;margin:var(--s-2) 0 0;padding:var(--s-2) 0 0;border-top:1px solid var(--border);font-size:var(--fs-1);
+  color:var(--text-2);display:grid;gap:3px;}
+.key-legend:empty{display:none;}
+.key-legend li{display:flex;align-items:center;gap:var(--s-2);}
+.sw{width:12px;height:12px;flex-shrink:0;display:inline-block;}
+/* legend swatches mirror the 3D markers (graphics): achromatic fills, dark outline */
+.sw-float{width:9px;height:9px;margin:0 2px;background:#f4f4f4;transform:rotate(45deg);box-shadow:0 0 0 1.5px #0b0f13;}
+.sw-float.fair{background:#9aa3ab;}
+.sw-float.poor{background:#15191d;box-shadow:0 0 0 1.5px #f4f4f4;}
+.sw-float.none{background:#5f6b76;}
+.sw-glider{width:10px;height:10px;margin:0 1px;background:#f4f4f4;border-radius:50%;box-shadow:0 0 0 1.5px #0b0f13;}
+.sw-track{width:16px;height:0;border-top:2px dashed var(--text);}
+.sw-storm{width:11px;height:11px;border-radius:50%;border:2px solid var(--text);margin:0 1px;}
+.sw-contour{width:16px;height:2px;background:var(--chart-mark);}
+.key-note{font-size:var(--fs-1);color:var(--text-3);margin:var(--s-2) 0 0;}
+.key-note:empty{display:none;}
+
+/* tools and hints */
+#viewTools{position:absolute;right:var(--s-3);bottom:var(--s-3);z-index:3;display:flex;gap:var(--s-2);align-items:flex-end;}
+#viewTools .btn{background:var(--chip);}
+.menu{position:relative;}
+.menu>summary{list-style:none;}
+.menu>summary::-webkit-details-marker{display:none;}
+.menu-body{position:absolute;right:0;bottom:calc(100% + 4px);min-width:250px;background:var(--chip);border:1px solid var(--border);
+  border-radius:var(--radius);padding:var(--s-1);display:grid;}
+.menu-item{display:flex;justify-content:space-between;align-items:center;gap:var(--s-2);min-height:32px;padding:0 var(--s-2);
+  border:0;border-radius:3px;background:transparent;color:var(--text);font-size:var(--fs-2);text-align:left;}
+.menu-item:hover,.menu-item.active,.menu-item[aria-pressed="true"]{background:var(--accent-bg);}
+#drawHint{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:4;display:none;padding:var(--s-2) var(--s-3);
+  font-size:var(--fs-2);}
+#drawHint.show{display:block;}
+#hoverTip{position:absolute;pointer-events:none;z-index:6;display:none;padding:6px var(--s-2);background:var(--chip);
+  border:1px solid var(--border-strong);border-radius:var(--radius);font-size:var(--fs-1);line-height:1.45;white-space:nowrap;
+  transform:translate(14px,-50%);font-variant-numeric:tabular-nums;}
+#hoverTip .v{color:var(--text);font-weight:600;}
+#viewport.drawing canvas{cursor:crosshair;}
+
+/* map labels (elements created by labels.js; classes unchanged): light text, dark halo */
+.geoLabel{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;font-size:var(--fs-1);color:var(--text);
+  text-shadow:0 0 2px #0b0f13,0 0 2px #0b0f13,0 0 3px #0b0f13,1px 1px 1px #0b0f13,-1px -1px 1px #0b0f13;}
+.geoLabel.sea{font-style:italic;font-size:var(--fs-2);}
+.geoLabel.land{font-weight:600;font-size:var(--fs-2);}
+.geoLabel.land.small{font-weight:600;font-size:var(--fs-1);}
+.geoLabel.tick{color:var(--text-2);}
+.geoLabel.current{font-style:italic;}
+.geoLabel.occluded{opacity:.35;}
+.geoLabel.secEnd{font-weight:600;background:var(--chip);border:1px solid var(--border-strong);border-radius:3px;padding:0 6px;text-shadow:none;}

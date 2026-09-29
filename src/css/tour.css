@@ -1,37 +1,8 @@
-  /* tour caption */
-  #tourCaption{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);max-width:78%;
-    background:rgba(9,18,30,.9);border:1px solid var(--border-soft);border-radius:7px;
-    padding:14px 22px;font-size:13.5px;color:var(--text);display:none;text-align:center;
-    z-index:4;line-height:1.65;opacity:0;transition:opacity .35s ease;}
-  #tourCaption.show{display:block;}
-  #tourCaption.visible{opacity:1;}
-  #tourCaption b{color:var(--accent);}
-  #tourCaption .step{font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:9.5px;color:var(--text-dimmer);
-    letter-spacing:.5px;margin-bottom:6px;display:block;}
-  #tourCaption .body{display:block;}
-  #tourCaption .navhint{display:block;margin-top:9px;font-size:10px;color:var(--text-dimmer);
-    font-family:'JetBrains Mono',Consolas,'Courier New',monospace;}
-  #tourDots{position:absolute;left:50%;bottom:0;transform:translateX(-50%);display:none;
-    gap:6px;padding-bottom:0;z-index:4;}
-  #tourDots.show{display:flex;}
-  #tourDots .d{width:6px;height:6px;border-radius:50%;background:var(--border-soft);
-    border:1px solid var(--border);cursor:pointer;}
-  #tourDots .d.active{background:var(--accent);border-color:var(--accent);}
-
-  #presentBtn{background:transparent;border:1px solid var(--accent-dim);color:var(--accent);
-    font-family:'JetBrains Mono',Consolas,'Courier New',monospace;font-size:10.5px;padding:6px 10px;border-radius:3px;
-    cursor:pointer;letter-spacing:.3px;margin-right:8px;}
-  #presentBtn:hover{background:rgba(47,224,196,.1);}
-  #headRight{display:flex;align-items:center;}
-  #dataToggle{display:flex;margin-right:8px;border:1px solid var(--border);border-radius:3px;overflow:hidden;}
-  #dataToggle button{background:transparent;border:none;color:var(--text-dim);font-family:'JetBrains Mono',Consolas,monospace;
-    font-size:10.5px;padding:6px 9px;cursor:pointer;letter-spacing:.3px;}
-  #dataToggle button + button{border-left:1px solid var(--border);}
-  #dataToggle button.active{background:rgba(47,224,196,.14);color:var(--accent);}
-  #dataToggle button:disabled{opacity:.4;cursor:default;}
-  @media (max-width:1380px){ #brand .sub{display:none;} }
-  #presentBtn.active{background:rgba(47,224,196,.18);}
-
-  ::-webkit-scrollbar{width:8px;}
-  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
-  ::-webkit-scrollbar-track{background:transparent;}
+/* Guided tour strip, docked at the top of the viewport. */
+#tourStrip{padding:var(--s-2) var(--s-3);max-width:880px;}
+#tourStrip[hidden]{display:none;}
+.tour-head{font-size:var(--fs-1);color:var(--text-2);margin:0 0 2px;}
+.tour-step{font-weight:600;color:var(--text-2);}
+.tour-text{font-size:var(--fs-2);line-height:var(--lh);color:var(--text);margin:0 0 var(--s-2);}
+.tour-nav{display:flex;align-items:center;gap:var(--s-2);}
+.tour-paused{font-size:var(--fs-1);color:var(--text-2);}

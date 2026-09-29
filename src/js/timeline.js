@@ -1,30 +1,31 @@
-/* ---- timeline ---- */
-const SYNTH_DATE0 = new Date('2026-09-01');
-function timeLabel(t){
-  // time steps are 3 days apart, so label them as offsets that match the T+0d … T+21d axis
-  const d0 = dataMode==='real' ? new Date(REAL.meta.times[0]) : SYNTH_DATE0;
-  const d = new Date(d0.getTime() + t*3*86400000);
-  return `T+${t*3}d · ${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}`;
+/* ---- timeline: the analyses (real) or demo days (synthetic), and playback ---- */
+function timeLabel(t){ return dataSource().time.now(t); }
+
+function syncTimeline(){
+  ui.timeline.max = NT-1;
+  ui.timeline.value = state.time;
+  ui.timeNow.textContent = timeLabel(state.time);
+  ui.playBtn.setAttribute('aria-pressed', state.playing ? 'true' : 'false');
+  ui.playBtn.setAttribute('aria-label', state.playing ? 'Pause' : 'Play through the analyses');
+  ui.playBtn.classList.toggle('playing', state.playing);
 }
+
+/* ---- actions ---- */
 function setTime(t){
-  state.time = t;
-  document.getElementById('timeline').value = t;
-  document.getElementById('timeNow').textContent = timeLabel(t);
+  if(!Number.isFinite(t)) return;
+  state.time = Math.max(0, Math.min(NT-1, Math.round(t)));
+  requestUpdate('full');
 }
-document.getElementById('timeline').addEventListener('input', e=>{
-  setTime(parseInt(e.target.value));
-  fullUpdate();
-});
+const PLAY_STEP_MS = 1100;
 let playTimer = null;
-document.getElementById('playBtn').addEventListener('click', ()=>{
-  state.playing = !state.playing;
-  document.getElementById('playBtn').textContent = state.playing ? '❚❚' : '▶';
-  if(state.playing){
-    playTimer = setInterval(()=>{
-      state.time = (state.time+1) % NT;
-      document.getElementById('timeline').value = state.time;
-      document.getElementById('timeNow').textContent = timeLabel(state.time);
-      fullUpdate();
-    }, 1100);
-  } else clearInterval(playTimer);
-});
+function setPlaying(on){
+  on = !!on;
+  if(on===state.playing) return;
+  state.playing = on;
+  clearInterval(playTimer);
+  playTimer = on ? setInterval(()=>setTime((state.time+1) % NT), PLAY_STEP_MS) : null;
+  syncTimeline();
+}
+
+ui.timeline.addEventListener('input', e=>setTime(parseInt(e.target.value, 10)));
+ui.playBtn.addEventListener('click', ()=>setPlaying(!state.playing));

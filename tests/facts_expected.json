@@ -1,0 +1,1442 @@
+{
+ "real.arabian.nodes": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 689
+ },
+ "real.arabian.salMedian[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 35.991
+ },
+ "real.arabian.salMedian[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 36.0
+ },
+ "real.arabian.salMedian[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 36.014
+ },
+ "real.arabian.salMedian[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 36.064
+ },
+ "real.arabian.salMedian[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 36.111
+ },
+ "real.arabian.salMedian[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 36.121
+ },
+ "real.arabian.salMedian[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 36.135
+ },
+ "real.arabian.salMedian[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 36.15
+ },
+ "real.argo.floats": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 70
+ },
+ "real.argo.perAnalysis[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 29
+ },
+ "real.argo.perAnalysis[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 28
+ },
+ "real.argo.perAnalysis[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 19
+ },
+ "real.argo.perAnalysis[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 29
+ },
+ "real.argo.perAnalysis[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 23
+ },
+ "real.argo.perAnalysis[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 26
+ },
+ "real.argo.perAnalysis[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 24
+ },
+ "real.argo.perAnalysis[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 28
+ },
+ "real.argo.profiles": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 206
+ },
+ "real.argo.tempOnly": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 35
+ },
+ "real.bay.d26P10[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 57.3
+ },
+ "real.bay.d26P10[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 61.1
+ },
+ "real.bay.d26P10[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 58.6
+ },
+ "real.bay.d26P10[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 59.0
+ },
+ "real.bay.d26P10[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 60.7
+ },
+ "real.bay.d26P10[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 56.1
+ },
+ "real.bay.d26P10[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 59.7
+ },
+ "real.bay.d26P10[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 57.4
+ },
+ "real.bay.d26P90[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 86.5
+ },
+ "real.bay.d26P90[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 90.1
+ },
+ "real.bay.d26P90[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 87.3
+ },
+ "real.bay.d26P90[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 87.8
+ },
+ "real.bay.d26P90[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 88.2
+ },
+ "real.bay.d26P90[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 99.1
+ },
+ "real.bay.d26P90[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 94.8
+ },
+ "real.bay.d26P90[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 85.9
+ },
+ "real.bay.nodes": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 512
+ },
+ "real.bay.salMedian[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.266
+ },
+ "real.bay.salMedian[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.278
+ },
+ "real.bay.salMedian[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.259
+ },
+ "real.bay.salMedian[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.192
+ },
+ "real.bay.salMedian[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.16
+ },
+ "real.bay.salMedian[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.514
+ },
+ "real.bay.salMedian[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.389
+ },
+ "real.bay.salMedian[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 33.406
+ },
+ "real.bay.sstP25[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 30.044
+ },
+ "real.bay.sstP25[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 30.399
+ },
+ "real.bay.sstP25[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 30.82
+ },
+ "real.bay.sstP25[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 30.842
+ },
+ "real.bay.sstP25[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 30.216
+ },
+ "real.bay.sstP25[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 28.787
+ },
+ "real.bay.sstP25[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 29.047
+ },
+ "real.bay.sstP25[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 29.318
+ },
+ "real.bay.t1000Mean[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.55
+ },
+ "real.bay.t1000Mean[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.567
+ },
+ "real.bay.t1000Mean[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.564
+ },
+ "real.bay.t1000Mean[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.573
+ },
+ "real.bay.t1000Mean[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.599
+ },
+ "real.bay.t1000Mean[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.562
+ },
+ "real.bay.t1000Mean[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.563
+ },
+ "real.bay.t1000Mean[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 6.555
+ },
+ "real.comparison.bands[0].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.119
+ },
+ "real.comparison.bands[0].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 478
+ },
+ "real.comparison.bands[0].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.333
+ },
+ "real.comparison.bands[0].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.067
+ },
+ "real.comparison.bands[0].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 482
+ },
+ "real.comparison.bands[0].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.123
+ },
+ "real.comparison.bands[0].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.034
+ },
+ "real.comparison.bands[0].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 697
+ },
+ "real.comparison.bands[0].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.067
+ },
+ "real.comparison.bands[0].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.126
+ },
+ "real.comparison.bands[0].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 558
+ },
+ "real.comparison.bands[0].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.143
+ },
+ "real.comparison.bands[0].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.146
+ },
+ "real.comparison.bands[0].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 562
+ },
+ "real.comparison.bands[0].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.756
+ },
+ "real.comparison.bands[0].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.173
+ },
+ "real.comparison.bands[0].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 808
+ },
+ "real.comparison.bands[0].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.268
+ },
+ "real.comparison.bands[1].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.012
+ },
+ "real.comparison.bands[1].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 463
+ },
+ "real.comparison.bands[1].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.275
+ },
+ "real.comparison.bands[1].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.074
+ },
+ "real.comparison.bands[1].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 480
+ },
+ "real.comparison.bands[1].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.126
+ },
+ "real.comparison.bands[1].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.032
+ },
+ "real.comparison.bands[1].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 672
+ },
+ "real.comparison.bands[1].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.064
+ },
+ "real.comparison.bands[1].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.186
+ },
+ "real.comparison.bands[1].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 543
+ },
+ "real.comparison.bands[1].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.024
+ },
+ "real.comparison.bands[1].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.17
+ },
+ "real.comparison.bands[1].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 560
+ },
+ "real.comparison.bands[1].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.811
+ },
+ "real.comparison.bands[1].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.142
+ },
+ "real.comparison.bands[1].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 784
+ },
+ "real.comparison.bands[1].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.289
+ },
+ "real.comparison.bands[2].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.044
+ },
+ "real.comparison.bands[2].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 290
+ },
+ "real.comparison.bands[2].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.273
+ },
+ "real.comparison.bands[2].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.043
+ },
+ "real.comparison.bands[2].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 289
+ },
+ "real.comparison.bands[2].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.088
+ },
+ "real.comparison.bands[2].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.012
+ },
+ "real.comparison.bands[2].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 419
+ },
+ "real.comparison.bands[2].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.038
+ },
+ "real.comparison.bands[2].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.11
+ },
+ "real.comparison.bands[2].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 359
+ },
+ "real.comparison.bands[2].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.221
+ },
+ "real.comparison.bands[2].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.341
+ },
+ "real.comparison.bands[2].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 369
+ },
+ "real.comparison.bands[2].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.947
+ },
+ "real.comparison.bands[2].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.215
+ },
+ "real.comparison.bands[2].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 531
+ },
+ "real.comparison.bands[2].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.374
+ },
+ "real.comparison.bands[3].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.042
+ },
+ "real.comparison.bands[3].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 523
+ },
+ "real.comparison.bands[3].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.248
+ },
+ "real.comparison.bands[3].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.073
+ },
+ "real.comparison.bands[3].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 520
+ },
+ "real.comparison.bands[3].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.126
+ },
+ "real.comparison.bands[3].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.028
+ },
+ "real.comparison.bands[3].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 748
+ },
+ "real.comparison.bands[3].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.068
+ },
+ "real.comparison.bands[3].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.013
+ },
+ "real.comparison.bands[3].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 563
+ },
+ "real.comparison.bands[3].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.991
+ },
+ "real.comparison.bands[3].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.292
+ },
+ "real.comparison.bands[3].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 560
+ },
+ "real.comparison.bands[3].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.827
+ },
+ "real.comparison.bands[3].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.122
+ },
+ "real.comparison.bands[3].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 803
+ },
+ "real.comparison.bands[3].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.259
+ },
+ "real.comparison.bands[4].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.116
+ },
+ "real.comparison.bands[4].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 328
+ },
+ "real.comparison.bands[4].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.272
+ },
+ "real.comparison.bands[4].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.055
+ },
+ "real.comparison.bands[4].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 360
+ },
+ "real.comparison.bands[4].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.1
+ },
+ "real.comparison.bands[4].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.028
+ },
+ "real.comparison.bands[4].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 504
+ },
+ "real.comparison.bands[4].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.062
+ },
+ "real.comparison.bands[4].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.209
+ },
+ "real.comparison.bands[4].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 428
+ },
+ "real.comparison.bands[4].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.11
+ },
+ "real.comparison.bands[4].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.305
+ },
+ "real.comparison.bands[4].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 460
+ },
+ "real.comparison.bands[4].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.826
+ },
+ "real.comparison.bands[4].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.15
+ },
+ "real.comparison.bands[4].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 644
+ },
+ "real.comparison.bands[4].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.306
+ },
+ "real.comparison.bands[5].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.058
+ },
+ "real.comparison.bands[5].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 394
+ },
+ "real.comparison.bands[5].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.319
+ },
+ "real.comparison.bands[5].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.066
+ },
+ "real.comparison.bands[5].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 400
+ },
+ "real.comparison.bands[5].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.123
+ },
+ "real.comparison.bands[5].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.026
+ },
+ "real.comparison.bands[5].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 560
+ },
+ "real.comparison.bands[5].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.043
+ },
+ "real.comparison.bands[5].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.149
+ },
+ "real.comparison.bands[5].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 500
+ },
+ "real.comparison.bands[5].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.155
+ },
+ "real.comparison.bands[5].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.209
+ },
+ "real.comparison.bands[5].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 520
+ },
+ "real.comparison.bands[5].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.93
+ },
+ "real.comparison.bands[5].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.212
+ },
+ "real.comparison.bands[5].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 728
+ },
+ "real.comparison.bands[5].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.323
+ },
+ "real.comparison.bands[6].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.041
+ },
+ "real.comparison.bands[6].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 420
+ },
+ "real.comparison.bands[6].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.205
+ },
+ "real.comparison.bands[6].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.079
+ },
+ "real.comparison.bands[6].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 420
+ },
+ "real.comparison.bands[6].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.145
+ },
+ "real.comparison.bands[6].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.043
+ },
+ "real.comparison.bands[6].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 588
+ },
+ "real.comparison.bands[6].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.07
+ },
+ "real.comparison.bands[6].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.121
+ },
+ "real.comparison.bands[6].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 480
+ },
+ "real.comparison.bands[6].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.099
+ },
+ "real.comparison.bands[6].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.007
+ },
+ "real.comparison.bands[6].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 480
+ },
+ "real.comparison.bands[6].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.802
+ },
+ "real.comparison.bands[6].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.178
+ },
+ "real.comparison.bands[6].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 671
+ },
+ "real.comparison.bands[6].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.276
+ },
+ "real.comparison.bands[7].sal[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.137
+ },
+ "real.comparison.bands[7].sal[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 378
+ },
+ "real.comparison.bands[7].sal[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.315
+ },
+ "real.comparison.bands[7].sal[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.062
+ },
+ "real.comparison.bands[7].sal[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 420
+ },
+ "real.comparison.bands[7].sal[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.123
+ },
+ "real.comparison.bands[7].sal[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.032
+ },
+ "real.comparison.bands[7].sal[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 588
+ },
+ "real.comparison.bands[7].sal[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.061
+ },
+ "real.comparison.bands[7].temp[0].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.091
+ },
+ "real.comparison.bands[7].temp[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 518
+ },
+ "real.comparison.bands[7].temp[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.848
+ },
+ "real.comparison.bands[7].temp[1].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": -0.096
+ },
+ "real.comparison.bands[7].temp[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 560
+ },
+ "real.comparison.bands[7].temp[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.696
+ },
+ "real.comparison.bands[7].temp[2].bias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.135
+ },
+ "real.comparison.bands[7].temp[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 784
+ },
+ "real.comparison.bands[7].temp[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.277
+ },
+ "real.comparison.deepRmse.max": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.374
+ },
+ "real.comparison.deepRmse.median": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.283
+ },
+ "real.comparison.deepRmse.min": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.259
+ },
+ "real.comparison.worst[0].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 22
+ },
+ "real.comparison.worst[0].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2902285"
+ },
+ "real.comparison.worst[0].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.78
+ },
+ "real.comparison.worst[1].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": -26
+ },
+ "real.comparison.worst[1].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2902285"
+ },
+ "real.comparison.worst[1].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.654
+ },
+ "real.comparison.worst[2].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": -2
+ },
+ "real.comparison.worst[2].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2902280"
+ },
+ "real.comparison.worst[2].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 2.151
+ },
+ "real.comparison.worst[3].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": -2
+ },
+ "real.comparison.worst[3].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2902285"
+ },
+ "real.comparison.worst[3].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.559
+ },
+ "real.comparison.worst[4].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 22
+ },
+ "real.comparison.worst[4].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2902280"
+ },
+ "real.comparison.worst[4].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 2.088
+ },
+ "real.comparison.worst[5].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 26
+ },
+ "real.comparison.worst[5].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2901894"
+ },
+ "real.comparison.worst[5].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.535
+ },
+ "real.comparison.worst[6].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": -22
+ },
+ "real.comparison.worst[6].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2901892"
+ },
+ "real.comparison.worst[6].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.406
+ },
+ "real.comparison.worst[7].gapHours": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 35
+ },
+ "real.comparison.worst[7].id": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "ARGO-2902236"
+ },
+ "real.comparison.worst[7].rmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 1.071
+ },
+ "real.currents.eiccMaxNorth[0].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 12.5
+ },
+ "real.currents.eiccMaxNorth[0].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.791
+ },
+ "real.currents.eiccMaxNorth[1].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 13.5
+ },
+ "real.currents.eiccMaxNorth[1].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.766
+ },
+ "real.currents.eiccMaxNorth[2].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 13.5
+ },
+ "real.currents.eiccMaxNorth[2].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.802
+ },
+ "real.currents.eiccMaxNorth[3].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 13.5
+ },
+ "real.currents.eiccMaxNorth[3].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.625
+ },
+ "real.currents.eiccMaxNorth[4].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 13.5
+ },
+ "real.currents.eiccMaxNorth[4].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.475
+ },
+ "real.currents.eiccMaxNorth[5].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 13.5
+ },
+ "real.currents.eiccMaxNorth[5].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.412
+ },
+ "real.currents.eiccMaxNorth[6].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 11.0
+ },
+ "real.currents.eiccMaxNorth[6].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.424
+ },
+ "real.currents.eiccMaxNorth[7].lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 12.5
+ },
+ "real.currents.eiccMaxNorth[7].v": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.005,
+  "value": 0.692
+ },
+ "real.path.afterIndex": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 6
+ },
+ "real.path.beforeIndex": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 3
+ },
+ "real.path.heatAfter": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.05,
+  "value": 51.93
+ },
+ "real.path.heatBefore": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.05,
+  "value": 85.07
+ },
+ "real.section.track.columns": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 200
+ },
+ "real.section.track.cooling": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 2.264
+ },
+ "real.section.track.d26After": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 75.8
+ },
+ "real.section.track.d26Before": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.2,
+  "value": 72.5
+ },
+ "real.section.track.sstAfter": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 28.877
+ },
+ "real.section.track.sstBefore": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 31.142
+ },
+ "real.track.firstFix": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-15T06:00Z"
+ },
+ "real.track.inMapFixes": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 21
+ },
+ "real.track.landfall.lat": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 21.675
+ },
+ "real.track.landfall.lon": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 88.287
+ },
+ "real.track.landfall.time": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-20T10:18Z"
+ },
+ "real.track.landfall.windImd": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 86
+ },
+ "real.track.landfall.windJtwc": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 95
+ },
+ "real.track.leadDays[0]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 10.75
+ },
+ "real.track.leadDays[1]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 7.75
+ },
+ "real.track.leadDays[2]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 4.75
+ },
+ "real.track.leadDays[3]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 1.75
+ },
+ "real.track.leadDays[4]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": -1.25
+ },
+ "real.track.leadDays[5]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": -4.25
+ },
+ "real.track.leadDays[6]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": -7.25
+ },
+ "real.track.leadDays[7]": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": -10.25
+ },
+ "real.track.peakImd.grade": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "SuCS"
+ },
+ "real.track.peakImd.kt": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 130
+ },
+ "real.track.peakImd.time": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-18T18:00Z"
+ },
+ "real.track.peakJtwc.kt": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 145
+ },
+ "real.track.peakJtwc.time": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-18T12:00Z"
+ },
+ "real.track.ri24Imd.end": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-18T06:00Z"
+ },
+ "real.track.ri24Imd.from": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 55
+ },
+ "real.track.ri24Imd.start": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-17T06:00Z"
+ },
+ "real.track.ri24Imd.to": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 120
+ },
+ "real.track.ri24Jtwc.end": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-18T06:00Z"
+ },
+ "real.track.ri24Jtwc.from": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 70
+ },
+ "real.track.ri24Jtwc.start": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "2020-05-17T06:00Z"
+ },
+ "real.track.ri24Jtwc.to": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 140
+ },
+ "real.view.deepCompression": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 11.76
+ },
+ "real.view.exaggerationPerSlider": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.1,
+  "value": 404.35
+ }
+}

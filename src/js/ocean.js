@@ -10,7 +10,11 @@ function seawaterDensity(S, T){
   return rw + A*S + B*Math.pow(S,1.5) + 4.8314e-4*S*S;
 }
 function sigmaT(S,T){ return seawaterDensity(S,T) - 1000; }
-function pressureDbar(z){ return 1.0052*z + 2.3e-6*z*z; }
+// pressure (dbar) at depth z (m): Saunders (1981), within 0.1 dbar of UNESCO 1983 to 1000 m
+function pressureDbar(z, lat=15){
+  const s = Math.sin(lat*Math.PI/180), c1 = (5.92 + 5.25*s*s)*1e-3;
+  return ((1-c1) - Math.sqrt((1-c1)*(1-c1) - 8.84e-6*z))/4.42e-6;
+}
 // sound speed, Mackenzie (1981) nine-term equation
 function soundSpeed(T,S,z){
   return 1448.96 + 4.591*T - 5.304e-2*T*T + 2.374e-4*Math.pow(T,3)
@@ -35,6 +39,51 @@ function modelAt(varKey, lat, lon, z, t){
     }
   }
   return null; // below the deepest model level
+}
+
+// Real profiles carry HYCOM at their own position and time (the pipeline's argo.model, native levels
+// interpolated to the Argo levels); synthetic ones, and real ones without it, read the gridded model.
+function modelAtObs(inst, varKey, z){
+  const M = inst.model;
+  if(!M) return modelAt(varKey, inst.lat, inst.lon, z, inst.real ? inst.snap : state.time);
+  if(varKey==='chl') return null;
+  if(varKey==='dens'){
+    const T = modelAtObs(inst,'temp',z), S = modelAtObs(inst,'sal',z);
+    return T===null || S===null ? null : sigmaT(S,T);
+  }
+  const v = varKey==='temp' ? M.T : varKey==='sal' ? M.S : null, L = inst.levels;
+  if(!v) return null;
+  if(z <= L[0]) return Number.isFinite(v[0]) ? v[0] : null;
+  for(let k=1;k<L.length;k++){
+    if(z <= L[k]){
+      const a = v[k-1], b = v[k];
+      return Number.isFinite(a) && Number.isFinite(b) ? lerp(a, b, (z-L[k-1])/(L[k]-L[k-1])) : null;
+    }
+  }
+  return null;
+}
+// the model column drawn beside a profile: {z, v}, on the Argo levels when matched in time
+function modelColumn(inst, varKey, t, maxDepth){
+  if(inst.model){
+    const z = inst.levels.filter(d=>d<=maxDepth);
+    return {z, v:z.map(d=>modelAtObs(inst, varKey, d)), matched:true};
+  }
+  const z = DEPTHS.filter(d=>d<maxDepth).concat([maxDepth]);
+  return {z, v:z.map(d=>modelAt(varKey, inst.lat, inst.lon, d, t)), matched:false};
+}
+
+// Density inversion, as in Argo real-time QC test 14: consecutive valid levels, both directions.
+// Top-down flags a level lighter than the one above by more than 0.03 kg/m³; bottom-up flags a level
+// denser than the one below. A dense spike is flagged itself, not the good levels under it.
+function inversionFlags(D){
+  const idx = [], flag = new Uint8Array(D.length);
+  D.forEach((d,k)=>{ if(Number.isFinite(d)) idx.push(k); });
+  for(let n=1;n<idx.length;n++){
+    const a = idx[n-1], b = idx[n];
+    if(D[b] < D[a]-0.03) flag[b] = 1;
+    if(D[a] > D[b]+0.03) flag[a] = 1;
+  }
+  return flag;
 }
 
 const obsCache = new Map();
@@ -64,16 +113,8 @@ function observeProfile(inst, t){
     const gone = missing[k]===1;
     T.push(gone?NaN:tv); S.push(gone?NaN:sv); C.push(gone?NaN:cv);
   });
-  // QC: density inversion test between successive good levels (Argo real-time QC uses 0.03 kg/m³)
   const D = T.map((tv,k)=>Number.isFinite(tv) ? sigmaT(S[k],tv) : NaN);
-  const flag = new Uint8Array(n);
-  let prev = -1;
-  for(let k=0;k<n;k++){
-    if(!Number.isFinite(D[k])) continue;
-    if(prev>=0 && D[k] < D[prev]-0.03){ flag[k] = 1; continue; } // keep comparing against the last good level
-    prev = k;
-  }
-  const p = {z:inst.levels, T, S, C, D, flag, missing};
+  const p = {z:inst.levels, T, S, C, D, flag:inversionFlags(D), missing};
   obsCache.set(key, p);
   return p;
 }
@@ -96,13 +137,13 @@ function obsInterp(p, arr){
 
 /* ---- model vs observation misfit (GODAE OceanView Class 4 style) ----
    obs − model at every good observed level, the model interpolated to the
-   observation's position and depth. */
+   observation's position and depth (and, for real profiles, time). */
 function misfit(inst, t, varKey){
-  if(inst.real) t = inst.snap;   // a real profile is compared with the model at its own snapshot
+  if(inst.real) t = inst.snap;   // a real profile belongs to one analysis
   const p = observeProfile(inst, t), arr = obsArray(p, varKey), out = [];
   p.z.forEach((z,k)=>{
     if(!Number.isFinite(arr[k]) || p.flag[k]) return;
-    const m = modelAt(varKey, inst.lat, inst.lon, z, t);
+    const m = inst.model ? modelAtObs(inst, varKey, z) : modelAt(varKey, inst.lat, inst.lon, z, t);
     if(m!==null) out.push({z, d:arr[k]-m});
   });
   return out;
@@ -154,8 +195,10 @@ function modelTchp(lat, lon, t, seabed){
   const Tv = DEPTHS.map(d=>fieldTemp(lat,lon,d,t)), Sv = DEPTHS.map(d=>fieldSal(lat,lon,d,t));
   return tchpColumn(columnInterp(Tv), columnInterp(Sv), Math.min(seabed, DEPTHS[DEPTHS.length-1]));
 }
+// a profile whose salinity failed QC uses the model's salinity for density (about 0.08 % per PSU)
 function obsTchp(inst, p, seabed){
-  const r = tchpColumn(obsInterp(p,p.T), obsInterp(p,p.S), inst.maxDepth);
+  const salAt = inst.salOk===false ? (z=>modelAtObs(inst, 'sal', z)) : obsInterp(p,p.S);
+  const r = tchpColumn(obsInterp(p,p.T), salAt, inst.maxDepth);
   // a profile that stops above the 26 °C crossing can't give the heat content
   if(r.d26===null && r.q!==null && inst.maxDepth < seabed-20) return {q:null, d26:null};
   return r;

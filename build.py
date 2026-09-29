@@ -5,6 +5,7 @@
     python build.py --out OceanLens3D.html    rebuild the shipped file at the project root
     python build.py --check                   check the sources and that the root file is up to date
     python build.py --watch                   rebuild dist/ whenever a source file changes
+    python build.py --site dist/site          a static site with security headers (docs/DEPLOY.md)
 
 src/index.html is the manifest. The build
   - puts every <link rel="stylesheet" href="css/..."> into one <style>, in order, with any
@@ -14,12 +15,13 @@ src/index.html is the manifest. The build
   - inlines <script type="application/json" id="..." src="....json"> as JSON, with every "<" written
     as \\u003c so nothing in the data can close the element;
   - stamps the VERSION file into <meta name="version">.
-It stops with an error if a src or href would still point outside the file, if a file under src/css
+It stops with an error if any src, href or url() would point outside the file, if a file under src/css
 or src/js is missing from the manifest or listed twice, if the data is not valid JSON, or if the result
 is over the size budget. The same sources always give the same bytes. Python standard library only.
 """
 import argparse
 import base64
+import hashlib
 import json
 import os
 import re
@@ -31,9 +33,19 @@ SRC = os.path.join(ROOT, 'src')
 SHIPPED = os.path.join(ROOT, 'OceanLens3D.html')
 DEFAULT_OUT = os.path.join(ROOT, 'dist', 'OceanLens3D.html')
 BUDGET = 3_500_000                  # bytes; the pitch promises "about 3 MB"
-# The only external reference allowed, until the web-font link is removed from src/index.html.
-TEMPORARY_EXTERNAL = ('https://fonts.googleapis.com',)
+# External references allowed in the built page: none. The file must work with no network.
+TEMPORARY_EXTERNAL = ()
 BANNER = '<!-- Built by build.py from src/. Edit the sources, not this file. -->\n'
+# the page's content security policy; script-src gets a hash for every inline script that runs
+CSP = ("default-src 'none'; script-src {scripts}; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; "
+       "connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'")
+SITE_HEADERS = ['Referrer-Policy: no-referrer', 'X-Content-Type-Options: nosniff',
+                'Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()', 'Cache-Control: no-cache']
+NOT_FOUND = ('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>Not found · OceanLens 3D</title>\n'
+             '<meta name="viewport" content="width=device-width, initial-scale=1">\n</head>\n'
+             '<body style="margin:0;padding:40px 24px;background:#0e1318;color:#e8ecef;font-family:system-ui,sans-serif">\n'
+             '<h1 style="font-size:20px;font-weight:600">Page not found</h1>\n'
+             '<p><a href="/" style="color:#e8ecef">Open OceanLens 3D</a></p>\n</body>\n</html>\n')
 
 CSS_LINK = re.compile(r'<link rel="stylesheet" href="(css/[\w.-]+\.css)">\n')
 JSON_TAG = re.compile(r'<script type="application/json" id="([\w-]+)" src="([\w./-]+\.json)"></script>')
@@ -47,8 +59,9 @@ class BuildError(Exception):
 
 
 def read_text(path):
+    # line endings are normalised the way the HTML parser does, so script hashes match what it sees
     with open(path, encoding='utf-8', newline='') as f:
-        return f.read()
+        return f.read().replace('\r\n', '\n')
 
 
 def rel(path):
@@ -56,8 +69,11 @@ def rel(path):
 
 
 def src_path(ref):
-    """A path written in src/index.html (relative to src/) as an absolute path."""
-    return os.path.normpath(os.path.join(SRC, ref))
+    """A path written in src/index.html (relative to src/) as an absolute path; it must exist."""
+    path = os.path.normpath(os.path.join(SRC, ref))
+    if not os.path.isfile(path):
+        raise BuildError(f'src/index.html refers to {ref}, which does not exist')
+    return path
 
 
 def inline_assets(css, css_file):
@@ -117,6 +133,14 @@ def build():
         if '</script' in code.lower():
             raise BuildError(f'{rel(path)} contains "</script", which would end the inlined element')
         key = 'vendor' if rel(path).startswith('vendor/') else 'js'
+        if key == 'vendor':
+            # MIT and similar licences require the notice in every copy: vendor/<name>.LICENSE goes on top
+            lic = os.path.join(os.path.dirname(path), os.path.basename(path).split('.')[0] + '.LICENSE')
+            if os.path.isfile(lic):
+                text = read_text(lic).strip()
+                if '*/' in text:
+                    raise BuildError(f'{rel(lic)} contains "*/" and cannot be put in a comment')
+                code = '/*\n' + text + '\n*/\n' + code
         sizes[key] = sizes.get(key, 0) + len(code.encode('utf-8'))
         return f'<script>\n{code}//# sourceURL={rel(path)}\n</script>'
     page = SCRIPT_TAG.sub(script_tag, page)
@@ -132,7 +156,7 @@ def build():
     # nothing may point outside the file (attributes are checked with script and style bodies left out)
     tags = re.sub(r'(<(script|style)\b[^>]*>).*?(</\2>)', r'\1\3', page, flags=re.S | re.I)
     left = [u for u in re.findall(r'\b(?:src|href)\s*=\s*["\']([^"\']+)["\']', tags)
-            if not u.startswith('#') and not u.startswith(TEMPORARY_EXTERNAL)]
+            if not u.startswith(('#', 'data:')) and not (TEMPORARY_EXTERNAL and u.startswith(TEMPORARY_EXTERNAL))]
     left += [u for u in re.findall(r'url\(\s*["\']?([^"\')]+)', css) if not u.startswith('data:')]
     if left:
         raise BuildError('references left unresolved: ' + ', '.join(sorted(set(left))))
@@ -149,10 +173,26 @@ def build():
         raise BuildError('src/index.html must start with <!DOCTYPE html>')
     page = page.replace('<!DOCTYPE html>\n', '<!DOCTYPE html>\n' + BANNER, 1)
 
+    # the policy blocks inline event handlers and javascript: URLs, so the build refuses them
+    handlers = sorted(set(re.findall(r'<[a-z][^>]*?\s(on[a-z]+)\s*=', tags, re.I)))
+    if handlers or re.search(r'javascript:', tags, re.I):
+        raise BuildError('inline event handlers or javascript: URLs in src/index.html: ' + ', '.join(handlers or ['javascript:']))
+    hashes = []
+    for m in re.finditer(r'<!--.*?-->|<script\b([^>]*)>(.*?)</script>', page, re.S | re.I):
+        if m.group(0).startswith('<!--'):
+            continue            # a comment can mention <script> without opening one
+        attrs, body = m.group(1), m.group(2)
+        if 'src=' in attrs or ('type=' in attrs and 'javascript' not in attrs and 'module' not in attrs):
+            continue
+        hashes.append("'sha256-" + base64.b64encode(hashlib.sha256(body.encode('utf-8')).digest()).decode('ascii') + "'")
+    csp = CSP.format(scripts=' '.join(hashes))
+    marker = f'<meta name="version" content="{version}">\n'
+    page = page.replace(marker, marker + f'<meta http-equiv="Content-Security-Policy" content="{csp}">\n', 1)
+
     data = page.encode('utf-8')
     if len(data) > BUDGET:
         raise BuildError(f'{len(data):,} bytes is over the {BUDGET:,} byte budget')
-    return data, sizes, version
+    return data, sizes, version, csp
 
 
 def write(data, out):
@@ -178,7 +218,7 @@ def material_warnings():
 def check():
     problems = []
     try:
-        data, _, _ = build()
+        data, _, _, _ = build()
     except BuildError as e:
         problems.append(str(e))
         data = None
@@ -200,10 +240,21 @@ def check():
 
 
 def build_once(out):
-    data, sizes, version = build()
+    data, sizes, version, _ = build()
     write(data, out)
     parts = ', '.join(f'{k} {v / 1e3:.0f} kB' for k, v in sizes.items())
     print(f'built {rel(out)} {version}: {len(data) / 1e6:.2f} MB ({parts})')
+
+
+def build_site(folder):
+    """A static site for a host that reads a _headers file (Cloudflare Pages, Netlify)."""
+    data, _, version, csp = build()
+    write(data, os.path.join(folder, 'index.html'))
+    write(NOT_FOUND.encode('utf-8'), os.path.join(folder, '404.html'))
+    write(b'User-agent: *\nDisallow:\n', os.path.join(folder, 'robots.txt'))
+    headers = ['/*', f"  Content-Security-Policy: {csp}; frame-ancestors 'none'"] + ['  ' + h for h in SITE_HEADERS]
+    write(('\n'.join(headers) + '\n').encode('utf-8'), os.path.join(folder, '_headers'))
+    print(f'built site {rel(folder)} {version}: index.html, 404.html, robots.txt, _headers')
 
 
 def watch(out):
@@ -234,9 +285,17 @@ def main():
     ap.add_argument('--out', default=DEFAULT_OUT, help='output file (default: dist/OceanLens3D.html)')
     ap.add_argument('--check', action='store_true', help='check the sources and the shipped file; write nothing')
     ap.add_argument('--watch', action='store_true', help='rebuild whenever a source changes')
+    ap.add_argument('--site', metavar='DIR', help='write a static site: index.html, 404.html, robots.txt, _headers')
     args = ap.parse_args()
     if args.check:
         return check()
+    if args.site:
+        try:
+            build_site(os.path.abspath(args.site))
+        except BuildError as e:
+            print('error: ' + str(e))
+            return 1
+        return 0
     out = os.path.abspath(args.out)
     if args.watch:
         watch(out)

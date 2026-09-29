@@ -5,28 +5,40 @@
    glider profiles. Deterministic procedural generation.
    ============================================================ */
 
-function synthTemp(lat, lon, depth, t){
+// Shape of the demo ocean at one place and time: surface values, mixed-layer depth, thermocline centre.
+// Ranges over the grid: SST 27.4–31.9 °C, mixed layer 10–42 m, D26 44–134 m, D20 92–174 m,
+// 10.9–11.1 °C at 300 m, 6.9 °C at 1000 m.
+function synthShape(lat, lon, t){
   const latN=(lat-LAT0)/(LAT1-LAT0), lonN=(lon-LON0)/(LON1-LON0);
-  // the Bay of Bengal belongs to the Indo-Pacific warm pool: warmer surface and a deeper warm
-  // layer (river freshwater forms a barrier layer), which is why its cyclones find so much heat
+  // the Bay of Bengal belongs to the Indo-Pacific warm pool: warmer, with a shallower mixed layer over
+  // river-freshened water (a barrier layer), which is why its cyclones find so much heat
   const bay = 1/(1+Math.exp(-(lon-81)/1.5));
-  let surf = 29.7 - 2.6*latN + 0.7*Math.sin(lonN*6.283 + t*0.32) + 1.2*bay;
-  surf += 1.3*Math.sin(lat*0.85 + t*0.4)*Math.cos(lon*0.65 - t*0.22);
-  const thermoDepth = 85 + 45*Math.sin(lat*0.5 + lon*0.28 + t*0.2) + 35*bay;
-  const deepT = 4.2 + 2*Math.exp(-depth/1800);
-  const k = 1/(1+Math.exp((depth-thermoDepth)/26));
-  return deepT + (surf-deepT)*k;
+  const sst = 30.2 - 1.8*latN + 0.4*Math.sin(lonN*6.283 + t*0.32) + 0.6*bay
+            + 0.7*Math.sin(lat*0.85 + t*0.4)*Math.cos(lon*0.65 - t*0.22);
+  const mld = 30 + 12*Math.sin(lat*0.7 + lon*0.4 + t*0.25) - 8*bay;
+  const zt = 110 + 35*Math.sin(lat*0.5 + lon*0.28 + t*0.2) + 15*bay;
+  // Arabian Sea is saltier; Bay of Bengal freshened by river runoff
+  const sss = 36.3 - 3.1*lonN + 0.35*Math.sin(lat*0.6+t*0.25) - (lonN>0.55 ? 0.6*Math.sin(t*0.3) : 0);
+  return {sst, mld, zt, sss, bay};
+}
+// 1 in the mixed layer, then a logistic step centred at zc, continuous at the mixed-layer base
+function belowMixedLayer(depth, mld, zc, w){
+  if(depth <= mld) return 1;
+  const L = x=>1/(1+Math.exp(x));
+  return L((depth-zc)/w)/L((mld-zc)/w);
+}
+function synthTemp(lat, lon, depth, t){
+  const s = synthShape(lat, lon, t);
+  const deepT = 5.8 + 10*Math.exp(-depth/450);          // background: about 11 °C at 300 m, 7 °C at 1000 m
+  return deepT + (s.sst-deepT)*belowMixedLayer(depth, s.mld, s.zt, 30);
 }
 function synthSal(lat, lon, depth, t){
-  const lonN=(lon-LON0)/(LON1-LON0);
-  // Arabian Sea is saltier; Bay of Bengal freshened by river runoff
-  const surf = 36.3 - 3.1*lonN + 0.35*Math.sin(lat*0.6+t*0.25) - (lonN>0.55? 0.6*Math.sin(t*0.3):0);
-  // deep salinity rises slightly with depth; the halocline sits above the
-  // thermocline so the resulting water column is statically stable everywhere
-  // (verified: zero density inversions across the full lat/lon/depth/time grid)
+  const s = synthShape(lat, lon, t);
   const deepS = 34.9 + Math.min(depth,1200)*0.0006;
-  const k = 1/(1+Math.exp((depth-70)/25));
-  return deepS + (surf-deepS)*k;
+  // the halocline sits with the thermocline in the Arabian Sea and above it in the Bay (barrier layer),
+  // so the column is statically stable (checked at 2 m steps over every node and time: no inversions)
+  const zs = Math.max(s.mld + 15, s.zt - 45*s.bay);
+  return deepS + (s.sss-deepS)*belowMixedLayer(depth, s.mld, zs, 30);
 }
 function synthCurrentUV(lat, lon, depth, t){
   const x=(lon-LON0), y=(lat-LAT0), e=0.01;
@@ -45,16 +57,15 @@ function synthChl(lat, lon, depth, t){
   return Math.max(0.02, base+bump);
 }
 
-// Argo floats — fixed positions, WMO-style ids
-const ARGO_IDS = [2902871,2902934,2902967,2903011,2903058,2903102,2903147,2903190,2903221,2903266,2903305,2903341,2903378,2903412];
-const argoFloats = ARGO_IDS.map((id,idx)=>{
+// Synthetic Argo floats: fixed positions, ids that cannot be mistaken for real WMO numbers
+const argoFloats = Array.from({length:14}, (_,idx)=>{
   const lat = lerp(LAT0+1, LAT1-1, (Math.sin(idx*12.9898)*0.5+0.5));
   const lon = lerp(LON0+1, LON1-1, (Math.sin(idx*78.233+4)*0.5+0.5));
-  return {id:'ARGO-'+id, kind:'argo', lat, lon,
-    cycle: 40+idx*3, lastSurfacing: `2026-08-${(28-idx%20).toString().padStart(2,'0')}`};
+  return {id:'SYN-F'+String(idx+1).padStart(2,'0'), kind:'argo', synthetic:true, lat, lon,
+    cycle: 40+idx*3, lastSurfacing: 'on the day shown'};
 });
 
-// Gliders — tracks of waypoints, id INCOIS-SG-0x
+// Synthetic gliders: tracks of waypoints, ids SYN-G1…G3
 const gliderTracks = [0,1,2].map(g=>{
   const baseLat = lerp(LAT0+2, LAT1-2, [0.25,0.55,0.8][g]);
   const baseLon = lerp(LON0+2, LON1-2, [0.2,0.5,0.75][g]);
@@ -67,7 +78,7 @@ const gliderTracks = [0,1,2].map(g=>{
       time: `Day ${w+1}`
     });
   }
-  return {id:'INCOIS-SG-0'+(g+1), kind:'glider', waypoints: wps};
+  return {id:'SYN-G'+(g+1), kind:'glider', synthetic:true, waypoints: wps};
 });
 
 argoFloats.forEach(f=>{

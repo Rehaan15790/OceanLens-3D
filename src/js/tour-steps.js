@@ -1,16 +1,125 @@
-/* ---- present mode: guided tour for live demos ---- */
-const tourSteps = [
-  {title:'Temperature field', caption:'Warm surface water above 28°C cools sharply through the thermocline, dropping toward 5°C by 1000m. This full-column view is what today\'s 2D plan-view tools can\'t show in one frame.', variable:'temp', mode:'layers', time:0,
-   real:{caption:'HYCOM\'s analysis for 4 May 2020: ahead of the monsoon the Bay of Bengal surface is above 30 °C, cooling through the thermocline to about 7 °C at 1000 m. This full-column view is what 2D plan-view tools can\'t show in one frame.'}},
-  {title:'Depth slice — 100 m', caption:'Isolating a single depth gives forecasters a clean horizontal cut through the model — the kind of view usually assembled by hand from separate NetCDF exports.', variable:'temp', mode:'slice', depthIdx:4},
-  {title:'D26 — the 26 °C isotherm', caption:'This surface sits where the water column cools through 26 °C. Everything above it is warm enough to feed a tropical cyclone, so a deeper D26 means more fuel. Columns that never reach 26 °C above the sea floor are left open rather than guessed.', variable:'temp', mode:'iso', isoVal:26},
-  {title:'Surface currents', caption:'Arrow glyphs show direction and speed at the surface, and each drifting streak points and stretches along the same live velocity field — longer, brighter streaks mean faster flow. Named currents for this region (West/East India Coastal Currents, the Summer Monsoon Current) are labeled directly on the map. Search-and-rescue teams use this kind of field to estimate where debris or a vessel will drift.', variable:'cur', mode:'slice', depthIdx:0},
-  {title:'Salinity field', caption:'The Bay of Bengal (east) runs noticeably fresher than the Arabian Sea (west) because of heavy river runoff from the Ganges-Brahmaputra system — a real, persistent oceanographic contrast this model reproduces.', variable:'sal', mode:'layers',
-   real:{caption:'The Bay of Bengal surface (about 33 PSU) is far fresher than the Arabian Sea (about 36 PSU), because the Ganges-Brahmaputra and other rivers pour fresh water into it. HYCOM shows the fresh layer sitting on top of saltier water below.'}},
-  {title:'Cyclone heat potential', caption:'The heat stored above D26, computed live from the temperature and salinity columns (EOS-80 density). Inside the white contour the ocean holds more than 50 kJ/cm², enough to support intensification. The panel on the right samples it along a made-up storm track, the way a cyclone cell would brief it before landfall.', variable:'tchp', mode:'layers', time:3, openTrack:true,
-   real:{title:'Cyclone heat before Amphan', caption:'Heat stored above 26 °C on 13 May 2020, two days before Amphan formed. Along its future path the Bay held mostly 80–95 kJ/cm², well above the 50 kJ/cm² line, and over this water its winds doubled from 70 to 140 kt in 24 hours (IBTrACS, JTWC). The panel on the right compares that with 22 May, after the storm: heat under the path fell from 85 to 52 kJ/cm².'}},
-  {title:'Vertical section', caption:'Drag across the sea surface (or press S) to cut a curtain through the model, from the surface to the sea floor. This one follows the sample cyclone track: the warm layer above D26 (solid white line) deepens from about 50 m to 100 m along the path, and at landfall the shelf is warm right down to the floor, too shallow to hold much heat. Presets cut across each basin.', variable:'temp', mode:'layers', time:3, section:'track',
-   real:{time:6, caption:'This section follows Amphan\'s path on 22 May, two days after landfall. The surface along the line is about 2.3 °C cooler than on 13 May (28.9 against 31.2 °C) while the 26 °C line (solid white) stays near 75 m, so the warm layer now holds much less heat: the storm\'s cold wake. Drag across the sea (or press S) to cut your own section.'}},
-  {title:'Model vs Argo, side by side', caption:'Each float\'s observed profile (solid) is drawn over the model column at the same spot (dashed), with bias and RMSE underneath. Profiles are checked for density inversions, and bad levels are ringed and left out. Floats are coloured by misfit (green good, amber fair, red poor), and with no float selected the right panel shows Class 4-style statistics for the whole region.', variable:'temp', mode:'layers', openFloat:true,
-   real:{time:5, title:'Real Argo against HYCOM', caption:'Real Argo profiles from 19 May, while Amphan was over the Bay (solid), against HYCOM at the same place and time (dashed). Floats are coloured green, amber or red by misfit. Below 300 m they agree to about 0.25 °C; in the top 100 m the misfit rises to about 1.9 °C during the storm, against roughly 1 °C before and after it, partly because a float that surfaced just ahead of Amphan is compared with an analysis made after it passed. HYCOM assimilates Argo, so this is a consistency check rather than independent validation.'}},
+/* ---- guided tour: the steps and their captions ----
+   Captions are built from the runtime facts (facts.js) and formatters (fmt.js), so no data-derived number is
+   typed here. Each is at most 35 words and keeps its qualifiers ("in HYCOM", "mostly", "consistency check");
+   detail lives in the panel the step opens. Literal numbers are definitions (26 °C, 50 kJ/cm², 300 m,
+   1000 m) or grid constants. Until facts exist, real-mode steps show a caption without numbers.
+   tour.js reads title, caption and time as plain values: they are getters for the current data mode. */
+const TOUR_DEFAULT_VIEW = 'surface';   // decision f: opaque surface, faint layers below
+const TOUR_STEP_DEFS = [
+  {id:'temperature', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:0,
+   title:{real:'Temperature', synth:'Temperature (synthetic)'},
+   caption:{
+     real:(f,fmt,t)=>`HYCOM analysis, ${fmt.dayMonth(f.analysis.times[t])}. The Bay of Bengal surface is mostly above ` +
+       `${fmt.int(Math.floor(f.bay.sstP25[t]))} °C; the sides of the block show it cooling to about ` +
+       `${fmt.int(f.bay.t1000Mean[t])} °C by 1000 m.`,
+     plain:'HYCOM analysis: warm surface water above a sharp thermocline. The sides of the block show the whole ' +
+       'column down to 1000 m.',
+     synth:'Synthetic demo data, not a real ocean state. Warm surface water cools through the thermocline towards ' +
+       'cold deep water; the sides of the block show the whole column.'}},
+
+  {id:'slice', variable:'temp', mode:'slice', depthIdx:4, time:0,
+   title:{real:'One depth at a time', synth:'One depth at a time'},
+   caption:{
+     plain:`One model level at a time, here ${DEPTHS[4]} m, with its own colour range. Use the depth slider or the ` +
+       `[ and ] keys to step through the ${DEPTHS.length} levels from 0 to 1000 m.`,
+     synth:`One level of the synthetic field at a time, here ${DEPTHS[4]} m. Use the depth slider or the [ and ] keys ` +
+       `to step through the ${DEPTHS.length} levels.`}},
+
+  {id:'d26', variable:'temp', mode:'iso', isoVal:26, time:0,
+   title:{real:'D26, the 26 °C isotherm', synth:'D26, the 26 °C isotherm'},
+   caption:{
+     real:(f,fmt,t)=>`D26, the 26 °C isotherm: water above it can feed a cyclone. In HYCOM it lies at ` +
+       `${fmt.int(fmt.roundDown(f.bay.d26P10[t],10))}–${fmt.int(fmt.roundUp(f.bay.d26P90[t],10))} m across most of ` +
+       `the Bay. Shelf columns warm to the sea floor stay open.`,
+     plain:'D26, the 26 °C isotherm: water above it can feed a cyclone. Shelf columns that are warm to the sea floor ' +
+       'stay open rather than being guessed.',
+     synth:'D26, the 26 °C isotherm, in the synthetic field: water above it can feed a cyclone. Columns that never ' +
+       'cool to 26 °C above the sea floor stay open.'}},
+
+  {id:'currents', variable:'cur', mode:'slice', depthIdx:0, time:0,
+   title:{real:'Surface currents', synth:'Surface currents (synthetic)'},
+   caption:{
+     real:(f,fmt,t)=>`Surface currents on ${fmt.dayMonth(f.analysis.times[t])}: arrows show direction, colour shows ` +
+       `speed. In HYCOM the East India Coastal Current runs north along the coast at up to about ` +
+       `${fmt.dp(f.currents.eiccMaxNorth[t].v,1)} m/s.`,
+     plain:'Surface currents in HYCOM: arrows show direction, colour shows speed. The labels mark where the named ' +
+       'currents usually flow.',
+     synth:'Synthetic currents: arrows show direction, colour shows speed, and the streaks move along the same field. ' +
+       'The labels mark where real currents usually flow; this field does not reproduce them.'}},
+
+  {id:'salinity', variable:'sal', mode:TOUR_DEFAULT_VIEW, time:0,
+   title:{real:'Salinity', synth:'Salinity (synthetic)'},
+   caption:{
+     real:(f,fmt,t)=>`In HYCOM the Bay of Bengal surface is far fresher than the Arabian Sea: about ` +
+       `${fmt.int(f.bay.salMedian[t])} against ${fmt.int(f.arabian.salMedian[t])} PSU, fed mainly by the ` +
+       `Ganges–Brahmaputra and other rivers. The fresh layer sits on saltier water.`,
+     plain:'In HYCOM the Bay of Bengal surface is far fresher than the Arabian Sea, fed mainly by the ' +
+       'Ganges–Brahmaputra and other rivers. The fresh layer sits on saltier water.',
+     synth:'The synthetic field makes the Bay of Bengal fresher than the Arabian Sea, as river runoff does in the ' +
+       'real ocean.'}},
+
+  {id:'heat', variable:'tchp', mode:TOUR_DEFAULT_VIEW, time:f=>f ? f.path.beforeIndex : 3, openTrack:true,
+   title:{real:'Heat before Amphan', synth:'Cyclone heat potential (synthetic)'},
+   caption:{
+     real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, ${fmt.countWord(Math.round(f.track.leadDays[t]))} days before ` +
+       `Amphan's first best-track position. In HYCOM, heat under its future path averaged ` +
+       `${fmt.int(f.path.heatBefore)} kJ/cm², well above the 50 kJ/cm² mark. Right panel: before and after.`,
+     plain:'Heat stored above 26 °C before Amphan formed. The white contour marks 50 kJ/cm²; the right panel ' +
+       'compares heat under the path before and after the storm.',
+     synth:'Heat stored in water warmer than 26 °C, with a made-up storm track. The right panel samples the heat ' +
+       'along it; the storm is illustrative, not a real cyclone.'}},
+
+  {id:'section', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:f=>f ? f.path.afterIndex : 6, section:'track',
+   title:{real:'Amphan’s cold wake', synth:'A vertical section'},
+   caption:{
+     real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, ${fmt.countWord(tourDaysAfterLandfall(f, t))} days after ` +
+       `landfall, on the genesis-to-landfall line. In HYCOM the surface is about ${fmt.dp(f.section.track.cooling,1)} °C ` +
+       `cooler than on ${fmt.dayMonth(f.analysis.times[f.path.beforeIndex])}, while D26 stays near ` +
+       `${fmt.int(fmt.round(f.section.track.d26After,5))} m: a cold wake.`,
+     plain:'After landfall, on the genesis-to-landfall line: in HYCOM the surface along the path has cooled while D26 ' +
+       'stays at a similar depth, a cold wake.',
+     synth:'A section along the sample track, from the surface to the sea floor. The solid white line is D26, the ' +
+       'dashed one D20. Drag across the sea, or press S, to cut your own.'}},
+
+  {id:'argo', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:f=>f ? tourOverBay(f) : 5, openFloat:'worst',
+   title:{real:'Argo against HYCOM', synth:'Floats against the model (synthetic)'},
+   caption:{
+     real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, Amphan over the Bay. Solid: Argo; dashed: HYCOM ` +
+       `${f.comparison.matchedInTime ? 'matched in place and time' : 'at the nearest analysis'}. Below 300 m the RMS ` +
+       `difference is ${fmt.dp(fmt.roundDown(f.comparison.deepRmse.min,0.05),2)}–` +
+       `${fmt.dp(fmt.roundUp(f.comparison.deepRmse.max,0.05),2)} °C. HYCOM assimilates Argo: a consistency check, ` +
+       `not independent validation.`,
+     plain:'Argo profiles (solid) against HYCOM (dashed) while Amphan was over the Bay. HYCOM assimilates Argo, so ' +
+       'this is a consistency check, not independent validation.',
+     synth:'Synthetic floats sample a slightly different ocean from the model, with noise and gaps. Solid: observed; ' +
+       'dashed: model. One float has a bad salinity sample that the QC check flags.'}},
 ];
+
+// derived from the landfall time rather than typed: the last analysis before landfall, and whole days since it
+function tourLandfall(f){ return Date.parse(f.track && f.track.landfall ? f.track.landfall.time : REAL_TRACK[REAL_TRACK.length-1].t); }
+function tourOverBay(f){ const lf = tourLandfall(f); return f.analysis.times.filter(x=>Date.parse(x) <= lf).length-1; }
+function tourDaysAfterLandfall(f, t){ return Math.round((Date.parse(f.analysis.times[t]) - tourLandfall(f))/864e5); }
+function tourDataMode(){ return (typeof state!=='undefined' && state.dataMode) || (typeof dataMode!=='undefined' ? dataMode : 'real'); }
+function tourFacts(){
+  const f = typeof facts==='function' ? facts().real : null;
+  return f && f.analysis ? f : null;
+}
+function tourCaption(def){
+  const mode = tourDataMode(), f = tourFacts(), c = def.caption;
+  if(mode!=='real') return c.synth;
+  if(c.real && f && typeof fmt!=='undefined' && fmt.dayMonth){
+    try{ return c.real(f, fmt, typeof def.time==='function' ? def.time(f) : def.time); }
+    catch(e){ console.warn('tour caption', def.id, e); }
+  }
+  return c.plain;
+}
+const tourSteps = TOUR_STEP_DEFS.map(def=>{
+  const step = {};
+  Object.keys(def).forEach(k=>{ if(!['title','caption','time'].includes(k)) step[k] = def[k]; });
+  Object.defineProperties(step, {
+    title:  {enumerable:true, get:()=>def.title[tourDataMode()==='real' ? 'real' : 'synth']},
+    caption:{enumerable:true, get:()=>tourCaption(def)},
+    time:   {enumerable:true, get:()=>typeof def.time==='function' ? def.time(tourFacts()) : def.time},
+  });
+  return step;
+});

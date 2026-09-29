@@ -13,7 +13,8 @@ const SECTION_PRESETS = {
 let section = null;                  // {a:[lat,lon], b:[lat,lon], name}
 const sectionState = {open:false};
 const sectionGroup = new THREE.Group();
-scene.add(sectionGroup);
+scene.add(Render.register('section', sectionGroup));
+const tourRunning = ()=> typeof isTourRunning === 'function' ? isTourRunning() : !!tourTimer;
 // curtain rows: 10 m steps through the upper ocean, 25 m below 200 m
 const SECTION_Z = [];
 for(let z=0; z<200; z+=10) SECTION_Z.push(z);
@@ -63,18 +64,14 @@ function sectionNearby(maxKm){
   return out.sort((p,q)=>p.f-q.f);
 }
 
-const secEndLabels = ['A','B'].map(t=>{
-  const el = document.createElement('div');
-  el.className = 'geoLabel secEnd';
-  el.textContent = t;
-  labelLayerEl.appendChild(el);
-  const L = {el, pos:new THREE.Vector3(), visibleIf:()=>section!==null};
-  labelEls.push(L);
-  return L;
-});
+const secEndLabels = ['A','B'].map(t=>makeLabel(t, 'secEnd', new THREE.Vector3(), {visibleIf:()=>section!==null}));
 
 function buildSection(){
-  sectionGroup.children.slice().forEach(o=>{ sectionGroup.remove(o); o.geometry.dispose(); o.material.dispose(); });
+  sectionGroup.children.slice().forEach(o=>{
+    sectionGroup.remove(o); o.geometry.dispose();
+    if(o.material.map) o.material.map.dispose();
+    o.material.dispose();
+  });
   if(!section) return;
   const spec = sectionSpec();
   const n = Math.max(2, Math.min(160, Math.round(haversineKm(section.a, section.b)/15)+1));  // ~15 km columns
@@ -82,13 +79,15 @@ function buildSection(){
   const yOf = d => -d*DEPTH_SCALE*state.exagg;
   const at3 = (c, d, lift) => { const [x,z] = toXZ(c.lat, c.lon); return new THREE.Vector3(x, yOf(d)+lift, z); };
 
-  const positions = [], colors = [];
+  // values per vertex through the palette ramp; land columns are cut at the mid-point to the next water column
+  const positions = [], values = [], mask = [];
   cols.forEach(c=>{
     SECTION_Z.forEach(zd=>{
       const d = Math.min(zd, c.seabed);   // rows below the sea floor fold onto it, so the curtain follows the bottom
       const p = at3(c, d, 0);
       positions.push(p.x, p.y, p.z);
-      colors.push(...(c.land ? [0.56,0.49,0.32] : paletteColor(spec.palette, (c.at(d)-spec.min)/(spec.max-spec.min))));
+      values.push(c.land ? NaN : c.at(d));
+      mask.push(c.land ? 0 : 1);
     });
   });
   const indices = [];
@@ -101,19 +100,23 @@ function buildSection(){
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.setIndex(indices);
-  sectionGroup.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.DoubleSide, toneMapped:false})));
+  Render.setValues(geo, Render.fillMasked(values, mask, R, n), mask);
+  // opaque, pushed back a little in depth so the isolines drawn on it always win
+  sectionGroup.add(new THREE.Mesh(geo, Render.dataSurface({palette:spec.palette, min:spec.min, max:spec.max, masked:true, underLines:true})));
 
-  const line = (pts, color, opacity) => sectionGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
-    new THREE.LineBasicMaterial({color, transparent:true, opacity, toneMapped:false})));
-  line(cols.map(c=>at3(c, 0, 0.06)), 0xffffff, 0.95);                 // along the sea surface
-  line(cols.map(c=>at3(c, c.seabed, -0.004)), 0xdfcd94, 0.75);        // sea floor, or the model bottom
-  [cols[0], cols[n-1]].forEach(c=>line([at3(c, 0, 0.06), at3(c, c.seabed, 0)], 0xffffff, 0.6));
+  const line = (pts, color, opacity, order) => {
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), Render.line(color, {opacity}));
+    l.renderOrder = order;
+    sectionGroup.add(l);
+  };
+  line(cols.map(c=>at3(c, 0, 0.06)), 0xffffff, 0.95, Render.ORDER.surfaceLines);          // along the sea surface
+  line(cols.map(c=>at3(c, c.seabed, -0.004)), 0xdfcd94, 0.75, Render.ORDER.underLines);   // sea floor, or the model bottom
+  [cols[0], cols[n-1]].forEach(c=>line([at3(c, 0, 0.06), at3(c, c.seabed, 0)], 0xffffff, 0.6, Render.ORDER.underLines));
   // isolines on the curtain, broken wherever a column doesn't cross
   sectionContours(spec.v).forEach(ct=>{
     let run = [];
-    const flush = ()=>{ if(run.length > 1) line(run, 0xffffff, ct.dash.length ? 0.5 : 0.95); run = []; };
+    const flush = ()=>{ if(run.length > 1) line(run, 0xffffff, ct.dash.length ? 0.5 : 0.95, Render.ORDER.underLines); run = []; };
     cols.forEach(c=>{
       const d = c.land ? null : firstCrossing(c.at, c.seabed, ct.val);
       if(d===null) flush(); else run.push(at3(c, d, 0));
@@ -138,13 +141,13 @@ function setSectionDraw(on){
   document.getElementById('sectionDrawBtn').classList.toggle('active', on);
   viewport.classList.toggle('drawing', on);
   document.getElementById('drawHint').classList.toggle('show', on);
-  if(on && tourTimer) stopTour();
+  if(on && tourRunning()) stopTour();
 }
 let sectionDrag = null, sectionBuildQueued = false;
 function requestSectionBuild(){
   if(sectionBuildQueued) return;
   sectionBuildQueued = true;
-  requestAnimationFrame(()=>{ sectionBuildQueued = false; buildSection(); });
+  requestAnimationFrame(()=>{ sectionBuildQueued = false; buildSection(); Render.invalidate(); });   // drag input, outside requestUpdate
 }
 renderer.domElement.addEventListener('pointerdown', e=>{
   if(!state.sectionDraw) return;
@@ -171,11 +174,15 @@ renderer.domElement.addEventListener('pointerup', ()=>{
 
 function trackSectionPreset(){
   const T = currentTrack(), last = T[T.length-1];
-  return {name: dataMode==='real' ? 'Along Amphan\'s track' : 'Along the sample cyclone track',
-    a:[T[0].lat, T[0].lon], b:[last.lat, last.lon]};
+  if(!T.length) return null;
+  const ds = typeof dataSource === 'function' ? dataSource() : null;
+  const name = ds && ds.section && ds.section.trackName ? ds.section.trackName
+    : dataMode==='real' ? 'Along Amphan\'s track' : 'Along the sample cyclone track';
+  return {name, a:[T[0].lat, T[0].lon], b:[last.lat, last.lon]};
 }
 function showSectionPreset(key){
   const p = key==='track' ? trackSectionPreset() : SECTION_PRESETS[key];
+  if(!p) return;
   section = {a:p.a.slice(), b:p.b.slice(), name:p.name};
   showSection();
   faceSection();
@@ -215,11 +222,11 @@ function showSection(){
 // after a section has pulled the camera to one corner, ease back to the home view
 function homeCamera(){
   if(camTarget.distanceTo(CAM_TARGET_HOME) < 0.01) return;
-  let to = 0.35;
+  let to = CAM_HOME.az;
   while(to-camAz > Math.PI) to -= 2*Math.PI;
   while(camAz-to > Math.PI) to += 2*Math.PI;
   camTween = {az0:camAz, el0:camEl, r0:camR, t0x:camTarget.x, t0z:camTarget.z,
-    az1:to, el1:0.68, r1:fitDistance(), t1x:CAM_TARGET_HOME.x, t1z:CAM_TARGET_HOME.z, t0:performance.now(), dur:900};
+    az1:to, el1:CAM_HOME.el, r1:fitDistance(), t1x:CAM_TARGET_HOME.x, t1z:CAM_TARGET_HOME.z, t0:performance.now(), dur:900, home:true};
 }
 function clearSection(){
   section = null;
@@ -230,6 +237,6 @@ function clearSection(){
 }
 document.getElementById('sectionDrawBtn').addEventListener('click', ()=>setSectionDraw(!state.sectionDraw));
 document.querySelectorAll('#sectionPresets .preset').forEach(b=>{
-  b.addEventListener('click', ()=>{ setSectionDraw(false); if(tourTimer) stopTour(); showSectionPreset(b.dataset.sec); });
+  b.addEventListener('click', ()=>{ setSectionDraw(false); if(tourRunning()) stopTour(); showSectionPreset(b.dataset.sec); });
 });
 document.getElementById('closeSection').addEventListener('click', clearSection);

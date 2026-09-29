@@ -1,67 +1,154 @@
-// briefing-ready PNG: the 3D view plus what a reader needs to interpret it — title,
-// variable, view, date, the colour bar with units, the map labels and the data caveat
+/* ---- PNG export: the 3D view with what a reader needs to interpret it ----
+   Title and context (real or synthetic, analysis time), the same colour key and legend as the screen, map
+   labels with halos, a north arrow, the exaggeration ratio and the data caveat. Graphics owns the render and
+   read step (Render.renderForExport, labelsForExport, northAngle); this file only composes. */
+function exportScene(){
+  if(typeof Render!=='undefined' && Render.renderForExport) return Render.renderForExport();
+  renderer.render(scene, camera);                     // make sure the buffer is current before reading it
+  return renderer.domElement;
+}
+// label styles in the image mirror viewport.css (.geoLabel and its classes)
+const EXPORT_LABEL_FONT = {sea:'italic 400 13px', land:'600 13px', small:'600 12px', tick:'400 12px', current:'italic 400 12px', secEnd:'600 12px'};
+function exportLabels(){
+  const family = CHART_FONT.split('px ')[1];
+  if(typeof labelsForExport==='function') return labelsForExport().map(L=>{
+    const cls = (L.cls||'').split(' '), key = cls.includes('small') ? 'small' : cls.find(c=>EXPORT_LABEL_FONT[c]) || 'tick';
+    return {text:L.text, x:L.x, y:L.y, font:`${EXPORT_LABEL_FONT[key]} ${family}`,
+      color: key==='tick' ? theme().text2 : theme().text, alpha: L.occluded ? 0.35 : 1};
+  });
+  return labelEls.filter(L=>L.el.style.display!=='none').map(L=>{
+    const cs = getComputedStyle(L.el);
+    return {text:L.el.textContent, x:parseFloat(L.el.style.left), y:parseFloat(L.el.style.top),
+      font:`${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`, color:cs.color, alpha:parseFloat(cs.opacity)};
+  });
+}
+function exportNorth(){
+  if(typeof northAngle==='function') return northAngle();
+  return camAz*180/Math.PI;
+}
+
+function paintKey(g, spec, x, yBottom, w){
+  const th = theme(), lut = keyLUT(spec.palette);
+  const lines = spec.note ? wrapText(g, spec.note, w-20, CHART_FONT) : [];
+  const legendH = spec.legend.length ? spec.legend.length*16 + 12 : 0;
+  const h = 24 + 12 + 26 + legendH + lines.length*15 + 8, y = yBottom-h;
+  g.fillStyle = '#12181e'; g.fillRect(x, y, w, h);
+  g.strokeStyle = th.grid; g.lineWidth = 1; g.strokeRect(x+.5, y+.5, w-1, h-1);
+  g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  g.fillStyle = th.text; g.font = CHART_FONT_BOLD; g.fillText(spec.title, x+10, y+18);
+  const bx = x+10, bw = w-20, by = y+26;
+  for(let i=0;i<bw;i++){
+    const k = Math.min(255, Math.round(i/(bw-1)*255))*3;
+    g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(bx+i, by, 1, 12);
+  }
+  const px = v=>bx + (v-spec.min)/(spec.max-spec.min)*bw, ty = by+27;
+  g.font = CHART_FONT; g.fillStyle = th.text2;
+  g.textAlign = 'left'; g.fillText(spec.ends.min, bx, ty);
+  g.textAlign = 'right'; g.fillText(spec.ends.max, bx+bw, ty);
+  g.textAlign = 'center';
+  const markX = spec.marks.map(m=>px(m.v));
+  spec.ticks.forEach(t=>{ const tx = px(t.v); if([bx, bx+bw, ...markX].every(o=>Math.abs(o-tx) >= bw*0.12)) g.fillText(t.text, tx, ty); });
+  spec.marks.forEach((m,i)=>{
+    const tx = markX[i];
+    g.fillStyle = th.bg; g.fillRect(tx-2, by-3, 4, 22); g.fillStyle = th.text; g.fillRect(tx-1, by-3, 2, 22);
+    g.font = CHART_FONT_BOLD; g.textAlign = tx-bx < 20 ? 'left' : bx+bw-tx < 20 ? 'right' : 'center';
+    g.fillText(m.text, tx, ty); g.font = CHART_FONT; g.fillStyle = th.text2; g.textAlign = 'center';
+  });
+  let cy = ty + 10;
+  if(legendH){
+    g.strokeStyle = th.grid; g.beginPath(); g.moveTo(x+10, cy+.5); g.lineTo(x+w-10, cy+.5); g.stroke();
+    cy += 16; g.textAlign = 'left';
+    spec.legend.forEach(r=>{ legendSwatch(g, r.sw, x+17, cy-4); g.fillStyle = th.text2; g.fillText(r.text, x+32, cy); cy += 16; });
+  }
+  g.fillStyle = th.tick; g.textAlign = 'left';
+  lines.forEach(l=>{ g.fillText(l, x+10, cy+2); cy += 15; });
+}
+function legendSwatch(g, sw, cx, cy){
+  const [kind, cls] = sw.split(' ');
+  g.lineWidth = 1.5; g.setLineDash([]);
+  if(kind==='float'){
+    const fill = {fair:'#9aa3ab', poor:'#15191d', none:'#5f6b76'}[cls] ?? '#f4f4f4';
+    g.beginPath(); g.moveTo(cx, cy-5); g.lineTo(cx+5, cy); g.lineTo(cx, cy+5); g.lineTo(cx-5, cy); g.closePath();
+    if(fill){ g.fillStyle = fill; g.fill(); }
+    g.strokeStyle = cls==='poor' ? '#f4f4f4' : '#0b0f13'; g.stroke();
+  } else if(kind==='glider'){
+    g.beginPath(); g.arc(cx, cy, 4, 0, 7); g.fillStyle = '#f4f4f4'; g.fill(); g.strokeStyle = '#0b0f13'; g.stroke();
+  } else if(kind==='track'){
+    g.strokeStyle = '#e8ecef'; g.lineWidth = 2; g.setLineDash([4,3]);
+    g.beginPath(); g.moveTo(cx-7, cy); g.lineTo(cx+7, cy); g.stroke(); g.setLineDash([]);
+  } else if(kind==='storm'){
+    g.strokeStyle = '#e8ecef'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.stroke();
+  } else if(kind==='contour'){
+    g.fillStyle = '#e8ecef'; g.fillRect(cx-7, cy-1, 14, 2);
+  }
+}
+function wrapText(g, text, maxW, font){
+  g.font = font;
+  const lines = []; let line = '';
+  text.split(' ').forEach(wd=>{ const t = line ? line+' '+wd : wd;
+    if(g.measureText(t).width > maxW && line){ lines.push(line); line = wd; } else line = t; });
+  if(line) lines.push(line);
+  return lines;
+}
+function paintNorth(g, x, y, deg){
+  g.save(); g.translate(x, y);
+  g.fillStyle = '#12181e'; g.beginPath(); g.arc(0, 0, 20, 0, 7); g.fill();
+  g.strokeStyle = '#2c3640'; g.lineWidth = 1; g.stroke();
+  g.rotate(deg*Math.PI/180);
+  g.fillStyle = '#e8ecef'; g.beginPath(); g.moveTo(0, -13); g.lineTo(5, 3); g.lineTo(0, 0); g.lineTo(-5, 3); g.closePath(); g.fill();
+  g.fillStyle = '#6b7680'; g.beginPath(); g.moveTo(0, 13); g.lineTo(5, 3); g.lineTo(0, 0); g.lineTo(-5, 3); g.closePath(); g.fill();
+  g.restore();
+  g.fillStyle = '#e8ecef'; g.font = CHART_FONT_BOLD; g.textAlign = 'center'; g.fillText('N', x, y+34);
+}
+
 function exportPNG(){
-  renderer.render(scene, camera); // ensure the buffer is current before reading it
-  const src = renderer.domElement, cssW = src.clientWidth, cssH = src.clientHeight;
+  const src = exportScene(), cssW = renderer.domElement.clientWidth, cssH = renderer.domElement.clientHeight;
+  if(!src) return;                                     // the WebGL context is lost; boot-guard shows the notice
   const out = document.createElement('canvas');
   out.width = src.width; out.height = src.height;
   const g = out.getContext('2d');
   g.drawImage(src, 0, 0);
   g.scale(src.width/cssW, src.height/cssH);
+  const th = theme(), real = dataMode==='real';
 
-  // geographic labels are HTML overlays, so paint them into the image too
-  g.textAlign = 'center'; g.textBaseline = 'middle';
-  labelEls.forEach(L=>{
-    if(L.el.style.display==='none') return;
-    const cs = getComputedStyle(L.el);
-    g.globalAlpha = parseFloat(cs.opacity);
-    g.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-    g.fillStyle = cs.color;
-    g.fillText(L.el.textContent, parseFloat(L.el.style.left), parseFloat(L.el.style.top));
+  // map labels are HTML over the canvas, so paint them in, with the same dark halo
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+  exportLabels().forEach(L=>{
+    g.globalAlpha = L.alpha ?? 1; g.font = L.font || CHART_FONT;
+    g.lineWidth = 3; g.strokeStyle = '#0b0f13'; g.strokeText(L.text, L.x, L.y);
+    g.fillStyle = L.color || th.text; g.fillText(L.text, L.x, L.y);
   });
   g.globalAlpha = 1; g.textBaseline = 'alphabetic'; g.textAlign = 'left';
 
-  const mono = "'JetBrains Mono', Consolas, monospace";
-  const meta = VAR_META[state.variable], spec = colorbarSpec();
-  const view = state.variable==='tchp' ? 'surface map, D26 surface beneath'
-    : state.mode==='slice' ? `depth slice at ${DEPTHS[state.depthIdx]} m`
-    : state.mode==='iso' ? `isosurface, ${isoLabel()}` : 'volumetric layers';
-  const box = (x,y,w,h)=>{ g.fillStyle = 'rgba(6,13,22,.84)'; g.fillRect(x,y,w,h);
-    g.strokeStyle = '#1b3247'; g.lineWidth = 1; g.strokeRect(x+.5,y+.5,w-1,h-1); };
+  // title block: what, where from, when
+  const spec = keySpec();
+  const context = document.getElementById('ctxText').textContent;
+  const badge = real ? 'Real data' : 'Synthetic demo';
+  g.font = CHART_FONT;
+  const tw = Math.max(g.measureText(context).width + g.measureText(badge).width + 22, g.measureText(spec.title).width, 160);
+  g.fillStyle = '#12181e'; g.fillRect(12, 12, tw+24, 64);
+  g.strokeStyle = th.grid; g.lineWidth = 1; g.strokeRect(12.5, 12.5, tw+23, 63);
+  g.fillStyle = th.text; g.font = "600 15px " + CHART_FONT.split('px ')[1]; g.fillText('OceanLens 3D', 24, 33);
+  g.font = CHART_FONT_BOLD; const bw = g.measureText(badge).width + 12;
+  g.fillStyle = real ? '#1c242c' : '#e3a82b'; g.fillRect(24, 41, bw, 16);
+  g.fillStyle = real ? th.text : '#1a1300'; g.fillText(badge, 30, 53);
+  g.font = CHART_FONT; g.fillStyle = th.text; g.fillText(context, 24+bw+8, 53);
+  g.fillStyle = th.text2; g.fillText(spec.title, 24, 70);
 
-  // title block, top left
-  const l1 = `${meta.label} · ${view}`, l2 = timeLabel(state.time);
-  g.font = `11px ${mono}`;
-  const tw = Math.max(g.measureText(l1).width, g.measureText(l2).width, 120);
-  box(12, 12, tw+28, 66);
-  g.fillStyle = '#dcebf1'; g.font = "600 15px 'Space Grotesk', 'Segoe UI', sans-serif"; g.fillText('OceanLens 3D', 26, 35);
-  g.fillStyle = '#9fb8c8'; g.font = `11px ${mono}`; g.fillText(l1, 26, 53); g.fillText(l2, 26, 68);
+  paintNorth(g, cssW-36, 36, exportNorth());
+  paintKey(g, spec, 12, cssH-40, 280);
 
-  // colour bar, bottom right
-  const bw = 230, bh = 12, bx = cssW-bw-26, by = cssH-44;
-  box(bx-12, by-30, bw+24, 64);
-  g.fillStyle = '#9fb8c8'; g.font = `10.5px ${mono}`;
-  g.fillText(!spec.editable ? `Isosurface depth (m) · ${isoLabel()}`
-    : state.variable==='tchp' ? `TCHP (${meta.unit}) · white line = ${TCHP_THRESHOLD}`
-    : `${meta.label} (${meta.unit})`, bx, by-12);
-  for(let x=0; x<bw; x++){
-    const c = paletteColor(spec.palette, x/bw);
-    g.fillStyle = `rgb(${c[0]*255},${c[1]*255},${c[2]*255})`;
-    g.fillRect(bx+x, by, 1, bh);
-  }
-  const dp = spec.unit==='m' || state.variable==='tchp' ? 0 : 1;
-  g.fillStyle = '#dcebf1'; g.fillText(spec.min.toFixed(dp), bx, by+bh+14);
-  g.textAlign = 'right'; g.fillText(spec.max.toFixed(dp)+' '+spec.unit, bx+bw, by+bh+14);
-  g.textAlign = 'left';
+  // caveat along the bottom
+  const cav = real ? 'Data: HYCOM GOFS 3.1 · Argo GDAC · IBTrACS v04r01 · ETOPO1. Not for operational use.'
+                   : 'Synthetic demo data, not a real ocean state. Not for operational use.';
+  g.font = CHART_FONT; const cw = g.measureText(cav).width;
+  g.fillStyle = '#12181e'; g.fillRect(12, cssH-32, cw+20, 22);
+  g.fillStyle = th.text2; g.fillText(cav, 22, cssH-17);
 
-  // data caveat, bottom left
-  const cav = caveatText();
-  g.font = `9.5px ${mono}`;
-  box(12, cssH-32, g.measureText(cav).width+20, 20);
-  g.fillStyle = '#6e8ba0'; g.fillText(cav, 22, cssH-18);
-
+  const view = state.variable==='tchp' ? 'map' : state.mode==='slice' ? DEPTHS[state.depthIdx]+'m' : state.mode;
+  const when = real ? analysisTimes()[state.time].slice(0,10) : 'day'+demoDay(state.time);
   const link = document.createElement('a');
-  link.download = `oceanlens3d-${state.variable}-T+${state.time*3}d.png`;
+  link.download = `oceanlens3d_${real ? 'real' : 'synthetic'}_${when}_${state.variable}_${view}.png`;
   link.href = out.toDataURL('image/png');
   link.click();
 }

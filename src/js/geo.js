@@ -37,10 +37,18 @@ function displayDepth(depth){
   return depth <= 1000 ? depth : 1000 + (depth-1000)*0.085;
 }
 
-/* ---- masks: data only exists in water, above the seabed (isLand / bathyDepth: ETOPO1) ---- */
-// precompute per grid point so this isn't recomputed every frame
-const gridLand = gridPts.map(p=>isLand(p.lat, p.lon));
-const gridSeabed = gridPts.map(p=>bathyDepth(p.lat, p.lon));
+/* ---- masks: data only exists in water, above the seabed (ETOPO1) ----
+   Node masks use the median of the 0.1° relief in the node's 0.5° cell, so a single bank or islet
+   doesn't decide a whole cell; the bilinear altitudeAt stays for hover, sections, track and particles. */
+function cellMedianAlt(lat, lon){
+  const {g, a} = ETOPO, ci = Math.round((lat-g.lat0)/g.step), cj = Math.round((lon-g.lon0)/g.step), v = [];
+  for(let i=ci-2;i<=ci+2;i++) for(let j=cj-2;j<=cj+2;j++) if(i>=0 && i<g.nlat && j>=0 && j<g.nlon) v.push(a[i*g.nlon+j]);
+  v.sort((p,q)=>p-q);
+  return v.length%2 ? v[v.length>>1] : (v[v.length/2-1]+v[v.length/2])/2;
+}
+const gridAlt = gridPts.map(p=>cellMedianAlt(p.lat, p.lon));
+const gridLand = gridAlt.map(h=>h > 0);
+const gridSeabed = gridAlt.map(h=>Math.max(5, -h));
 
 /* ---- keep instruments in water ----
    Float/glider positions are generated procedurally, so some land on the

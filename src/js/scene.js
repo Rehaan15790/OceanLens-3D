@@ -1,33 +1,57 @@
 /* ============================================================
    THREE.JS SCENE
+   Renderer, backdrop, lights and fog (render.js sets the policy), and the frame loop.
    ============================================================ */
 const viewport = document.getElementById('viewport');
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, preserveDrawingBuffer:true});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
-renderer.outputEncoding = THREE.sRGBEncoding;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
-renderer.physicallyCorrectLights = true;
+// the camera stays at least 0.8 units above the sea (camera.js) and the surface overlays sit
+// 0.01–0.04 apart, so the near plane is as far out as that allows
+const camera = new THREE.PerspectiveCamera(42, 1, 0.3, 100);
+const renderer = Render.createRenderer();
 viewport.appendChild(renderer.domElement);
+renderer.domElement.setAttribute('role', 'img');
+renderer.domElement.setAttribute('aria-label', '3D view of the ocean model');
+renderer.domElement.tabIndex = 0;                 // keyboard orbit and zoom (camera.js)
+renderer.domElement.style.touchAction = 'none';   // touch drags orbit and pinches zoom instead of scrolling
 
-/* ---- atmospheric gradient backdrop: lighter near the "surface", dark toward depth ---- */
-const bgGeo = new THREE.SphereGeometry(42, 20, 20);
-const bgMat = new THREE.ShaderMaterial({
-  uniforms:{ topColor:{value:new THREE.Color(0x1d4a66)}, bottomColor:{value:new THREE.Color(0x060e1a)},
-    offset:{value:6}, exponent:{value:0.75} },
-  vertexShader:`varying vec3 vWorldPosition; void main(){ vec4 wp = modelMatrix*vec4(position,1.0); vWorldPosition = wp.xyz; gl_Position = projectionMatrix*viewMatrix*wp; }`,
-  fragmentShader:`uniform vec3 topColor; uniform vec3 bottomColor; uniform float offset; uniform float exponent;
-    varying vec3 vWorldPosition;
-    void main(){ float h = normalize(vWorldPosition + vec3(0.0, offset, 0.0)).y;
-    gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h,0.0), exponent), 0.0)), 1.0); }`,
-  side:THREE.BackSide, toneMapped:false
-});
-scene.add(new THREE.Mesh(bgGeo, bgMat));
-
+scene.add(Render.register('backdrop', new THREE.Mesh(new THREE.SphereGeometry(42, 20, 20), Render.backdrop(0x1d4a66, 0x060e1a))));
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-const hemi = new THREE.HemisphereLight(0x9fd8ff, 0x0a1c14, 0.85); scene.add(hemi);
-const dl = new THREE.DirectionalLight(0xeaf6ff,0.7); dl.position.set(3,8,4); scene.add(dl);
-// domain corners sit ~20-24 units from the camera, so fog must reach well past that
+scene.add(new THREE.HemisphereLight(0x9fd8ff, 0x0a1c14, 0.85));
+const dl = new THREE.DirectionalLight(0xeaf6ff, 0.7); dl.position.set(3, 8, 4); scene.add(dl);
+// depth cue for the terrain only: data, marks and lines ignore fog (render.js)
 scene.fog = new THREE.Fog(0x081525, 20, 62);
+
+Render.attach({
+  renderer, scene, camera,
+  toWorld: (lat, lon, depth) => { const [x, z] = toXZ(lat, lon); return new THREE.Vector3(x, -depth*DEPTH_SCALE*state.exagg, z); },
+  fromWorld: v => ({lat: -v.z/SCALE_XZ + (LAT0+LAT1)/2, lon: v.x/SCALE_XZ + (LON0+LON1)/2}),
+  beforeRender: () => updateLabels()
+});
+
+/* ---- the frame loop ----
+   Render on demand: a frame is drawn only when something changed (Render.invalidate), while the
+   camera moves, and at 30 fps while current streaks move. Nothing is drawn while the splash or a
+   dialog covers the view. A one-second refresh keeps any missed change from lingering. */
+const splashEl = document.getElementById('splash');
+function viewCovered(){
+  return (splashEl && !splashEl.classList.contains('hide')) ||
+    !!document.querySelector('.overlay.show, #smallScreen:not([hidden])');
+}
+let lastTick = performance.now(), lastFlowTick = 0, lastDrawn = 0, drawnOnce = false, wasCovered = false;
+function renderFrame(){
+  const now = performance.now(), dt = Math.min(0.05, (now - lastTick)/1000);
+  lastTick = now;
+  if(stepCamera(now, dt)) Render.invalidate();
+  const covered = viewCovered();
+  if(covered && drawnOnce){ wasCovered = true; return; }
+  if(wasCovered){ wasCovered = false; Render.invalidate(); }
+  if(flowMesh.visible && !Render.testMode && now - lastFlowTick >= 33){
+    updateFlowParticles(Math.min(0.1, (now - lastFlowTick)/1000));
+    lastFlowTick = now;
+    Render.invalidate();
+  }
+  if(!Render.takeDirty() && now - lastDrawn < 1000) return;
+  updateLabels();
+  renderer.render(scene, camera);
+  lastDrawn = now; drawnOnce = true;
+}

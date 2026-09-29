@@ -1,108 +1,157 @@
-/* Guided tour: runs the steps defined in tour-steps.js. */
-let tourIdx = 0, tourTimer = null, tourRotating = false, tourPaused = false;
-const TOUR_STEP_MS = 9500;
-function setActivePill(container, attr, val){
-  document.querySelectorAll(container+' .pill').forEach(b=>{
-    b.classList.toggle('active', b.dataset[attr]===val);
-  });
+/* Guided tour: runs the steps defined in tour-steps.js.
+   Manual by default (Back / Next / Stop); Autoplay advances after a reading time based on the
+   caption's length. Starting the tour pauses playback and remembers the view; Stop, Esc and
+   Finish put it back. The delayed parts of a step (a section, a float, the track) carry the
+   step's token and do nothing once another step or a stop has replaced it. */
+const tour = {running:false, idx:0, token:0, autoplay:false, timer:null, saved:null};
+let tourRotating = false;   // the camera may turn slowly during this step (read by the render loop)
+let tourPaused = false;     // autoplay was switched off part-way (read by the render loop)
+const TOUR_KEYS = ['variable', 'mode', 'depthIdx', 'isoVal', 'opacity', 'exagg', 'cbMin', 'cbMax', 'palette', 'time',
+                   'colorMisfit', 'showArgo', 'showGlider', 'showGrid', 'showFlow', 'showTrack', 'playing'];
+
+function isTourRunning(){ return tour.running; }
+
+function tourLater(fn, ms){
+  const token = tour.token;
+  setTimeout(()=>{ if(tour.running && token===tour.token) fn(); }, ms);
 }
-function buildTourDots(){
-  const dotsEl = document.getElementById('tourDots');
-  dotsEl.innerHTML = '';
-  tourSteps.forEach((_,i)=>{
-    const d = document.createElement('div');
-    d.className = 'd'+(i===tourIdx?' active':'');
-    d.addEventListener('click', ()=>goToTourStep(i));
-    dotsEl.appendChild(d);
-  });
+// reading time for autoplay: about 3.5 words a second plus 3 s to look at the view, at least 8 s
+function readingTime(text){
+  const words = String(text).trim().split(/\s+/).length;
+  return Math.max(8000, (words/3.5 + 3)*1000);
 }
-function applyTourStep(step){
-  if(dataMode==='real' && step.real) step = Object.assign({}, step, step.real);
-  section = null;          // each step starts without a section; a step can ask for one
+
+function snapshotApp(){
+  const s = {};
+  TOUR_KEYS.forEach(k=>{ s[k] = state[k]; });
+  return {state:s, camera:{az:camAz, el:camEl, r:camR, target:camTarget.clone()},
+          section: section ? {a:section.a.slice(), b:section.b.slice(), name:section.name} : null,
+          panel: state.panel, profile: profileState.current};
+}
+function restoreApp(saved){
+  const {playing, ...rest} = saved.state;
+  Object.assign(state, rest);
+  section = saved.section;
+  buildSection();
+  camTween = null;
+  camAz = saved.camera.az; camEl = saved.camera.el; camR = saved.camera.r; camTarget.copy(saved.camera.target);
+  updateCamera();
+  requestUpdate('full');
+  requestUpdate('overlay');
+  flushUpdate();
+  if(saved.panel==='profile' && saved.profile) openProfile(saved.profile);
+  else if(saved.panel==='track') openTrack();
+  else closeSidePanels();
+  if(playing) setPlaying(true);
+}
+
+function applyTourStep(){
+  const raw = tourSteps[tour.idx];
+  // legacy steps carry real-mode overrides; ux's steps use getters, which the spread evaluates now
+  const step = dataMode==='real' && raw.real ? {...raw, ...raw.real} : {...raw};
+  tour.token++;
+  clearTimeout(tour.timer);
+  section = null;           // each step starts without a section; a step can ask for one
   buildSection();
   if(!step.section) homeCamera();
   setSectionDraw(false);
   state.variable = step.variable;
-  const meta = VAR_META[state.variable];
-  state.cbMin = meta.defMin; state.cbMax = meta.defMax; state.palette = meta.palette;
-  document.getElementById('cbMin').value = meta.defMin;
-  document.getElementById('cbMax').value = meta.defMax;
-  document.getElementById('paletteSel').value = meta.palette;
-  setActivePill('#varPills','v', step.variable);
+  resetRange();
   state.colorMisfit = !!step.openFloat;
-  document.getElementById('swMisfit').classList.toggle('on', state.colorMisfit);
-
-  state.mode = step.mode;
-  setActivePill('#modePills','m', step.mode);
-  document.getElementById('depthGrp').style.display = step.mode==='slice' ? 'block' : 'none';
-  document.getElementById('isoGrp').style.display = step.mode==='iso' ? 'block' : 'none';
-
-  if(step.depthIdx!==undefined){
-    state.depthIdx = step.depthIdx;
-    document.getElementById('depthSlider').value = step.depthIdx;
-    document.getElementById('depthVal').textContent = DEPTHS[step.depthIdx]+' m';
-  }
-  if(step.time!==undefined) setTime(step.time);
+  if(step.mode) state.mode = step.mode;
+  if(step.depthIdx!==undefined) state.depthIdx = step.depthIdx;
+  if(step.time!==undefined) state.time = step.time;
   if(ISO_META[state.variable]) state.isoVal = step.isoVal!==undefined ? step.isoVal : ISO_META[state.variable].def;
-  syncIsoSlider();
-  fullUpdate();
-
-  const cap = document.getElementById('tourCaption');
-  cap.classList.remove('visible');
-  setTimeout(()=>{
-    cap.innerHTML = `<span class="step">STEP ${tourIdx+1} / ${tourSteps.length} · ${step.title.toUpperCase()}</span>`+
-      `<span class="body">${step.caption}</span>`+
-      `<span class="navhint">← → to navigate · hover to pause · click to stop</span>`;
-    cap.classList.add('show');
-    requestAnimationFrame(()=>cap.classList.add('visible'));
-  }, 200);
-  buildTourDots();
-
+  requestUpdate('full');
+  flushUpdate();
   showPanel('empty');
+
+  const n = tourSteps.length;
+  ui.tourStep.textContent = `Step ${tour.idx+1} of ${n} · ${step.title}`;
+  ui.tourText.textContent = step.caption;
+  ui.tourBack.disabled = tour.idx===0;
+  ui.tourNext.textContent = tour.idx===n-1 ? 'Finish' : 'Next';
   tourRotating = !step.section;   // hold the camera still while it faces a section
-  if(step.section) setTimeout(()=>showSectionPreset(step.section), 900);
+  if(step.section) tourLater(()=>showSectionPreset(step.section), 900);
   // open the float that disagrees most with the model, so the comparison has something to show
-  if(step.openFloat) setTimeout(()=>openProfile(worstArgo().userData), 1400);
-  if(step.openTrack) setTimeout(openTrack, 1400);
+  if(step.openFloat) tourLater(()=>{ if(openWorstFloat()) document.getElementById('profChart')?.scrollIntoView({block:'nearest'}); }, 1400);
+  if(step.openTrack) tourLater(openTrack, 1400);
+  if(tour.autoplay && !tourPaused) tour.timer = setTimeout(()=>nextTourStep(true), readingTime(step.caption));
+}
+
+/* ---- actions ---- */
+function startTour(){
+  if(tour.running) return;
+  setSectionDraw(false);
+  tour.saved = snapshotApp();
+  setPlaying(false);
+  tour.running = true; tour.idx = 0; tour.autoplay = false;
+  tourPaused = false;
+  ui.tourStrip.hidden = false;
+  ui.tourPaused.hidden = true;
+  setPressed(ui.tourAuto, false);
+  setPressed(ui.presentBtn, true);
+  applyTourStep();
+}
+// restore: put back the view from before the tour (Stop, Esc, Finish); a control the user
+// touches during the tour stops it without undoing their change
+function stopTour({restore = false} = {}){
+  if(!tour.running) return;
+  tour.running = false;
+  tour.token++;
+  clearTimeout(tour.timer);
+  tourRotating = false; tourPaused = false;
+  ui.tourStrip.hidden = true;
+  setPressed(ui.presentBtn, false);
+  const saved = tour.saved;
+  tour.saved = null;
+  if(restore && saved) restoreApp(saved);
 }
 function goToTourStep(i){
-  tourIdx = ((i % tourSteps.length) + tourSteps.length) % tourSteps.length;
-  applyTourStep(tourSteps[tourIdx]);
-  restartTourTimer();
+  if(!tour.running) return;
+  tour.idx = Math.max(0, Math.min(tourSteps.length-1, i));
+  applyTourStep();
 }
-function restartTourTimer(){
-  clearInterval(tourTimer);
-  tourTimer = setInterval(()=>{ if(!tourPaused) goToTourStep(tourIdx+1); }, TOUR_STEP_MS);
+function nextTourStep(fromAutoplay){
+  if(tour.idx < tourSteps.length-1) return goToTourStep(tour.idx+1);
+  if(fromAutoplay){ setTourAutoplay(false); return; }   // autoplay stops on the last step
+  stopTour({restore:true});                            // "Finish"
 }
-function stopTour(){
-  tourRotating = false; tourPaused = false;
-  clearInterval(tourTimer); tourTimer = null;
-  document.getElementById('presentBtn').classList.remove('active');
-  document.getElementById('presentBtn').textContent = '▶ PRESENT MODE';
-  document.getElementById('tourCaption').classList.remove('show','visible');
-  document.getElementById('tourDots').classList.remove('show');
+function setTourAutoplay(on){
+  tour.autoplay = !!on;
+  tourPaused = false;
+  setPressed(ui.tourAuto, tour.autoplay);
+  ui.tourPaused.hidden = true;
+  clearTimeout(tour.timer);
+  if(tour.running && tour.autoplay) tour.timer = setTimeout(()=>nextTourStep(true), readingTime(ui.tourText.textContent));
 }
-function startTour(){
-  tourIdx = 0; tourRotating = true; tourPaused = false;
-  document.getElementById('presentBtn').classList.add('active');
-  document.getElementById('presentBtn').textContent = '■ STOP';
-  document.getElementById('tourDots').classList.add('show');
-  applyTourStep(tourSteps[0]);
-  restartTourTimer();
+function pauseTourAutoplay(){
+  clearTimeout(tour.timer);
+  tourPaused = true;
+  ui.tourPaused.hidden = false;
 }
-document.getElementById('presentBtn').addEventListener('click', ()=>{
-  if(tourTimer) stopTour(); else startTour();
+
+ui.presentBtn.addEventListener('click', ()=>{ if(tour.running) stopTour({restore:true}); else startTour(); });
+ui.tourBack.addEventListener('click', ()=>goToTourStep(tour.idx-1));
+ui.tourNext.addEventListener('click', ()=>nextTourStep(false));
+ui.tourStop.addEventListener('click', ()=>stopTour({restore:true}));
+ui.tourAuto.addEventListener('click', ()=>{
+  if(!tour.autoplay || tourPaused) setTourAutoplay(true);
+  else pauseTourAutoplay();
 });
-document.getElementById('tourCaption').addEventListener('mouseenter', ()=>{ tourPaused = true; });
-document.getElementById('tourCaption').addEventListener('mouseleave', ()=>{ tourPaused = false; });
 window.addEventListener('keydown', e=>{
-  if(!tourTimer) return;
-  if(e.key==='ArrowRight'){ e.preventDefault(); goToTourStep(tourIdx+1); }
-  if(e.key==='ArrowLeft'){ e.preventDefault(); goToTourStep(tourIdx-1); }
-  if(e.key==='Escape'){ stopTour(); }
+  if(!tour.running || e.ctrlKey || e.metaKey || e.altKey) return;
+  if(e.target.matches && e.target.matches('input, select, textarea')) return;
+  const k = e.key;
+  if(k==='ArrowRight'){ nextTourStep(false); }
+  else if(k==='ArrowLeft'){ goToTourStep(tour.idx-1); }
+  else if(k==='Escape'){ stopTour({restore:true}); }
+  else return;
+  e.preventDefault();
+  e.stopImmediatePropagation();   // the global shortcuts must not act on the same key
 });
-// any manual interaction on the 3D view or side controls ends the guided tour
-renderer.domElement.addEventListener('pointerdown', ()=>{ if(tourTimer) stopTour(); });
-document.querySelectorAll('#varPills .pill, #modePills .pill').forEach(b=>{
-  b.addEventListener('click', ()=>{ if(tourTimer) stopTour(); });
+// orbiting by hand stops the slow rotation for this step; changing a control ends the tour
+renderer.domElement.addEventListener('pointerdown', ()=>{ tourRotating = false; });
+document.querySelectorAll('#varPills .pill, #modePills .pill, #dataToggle button').forEach(b=>{
+  b.addEventListener('click', ()=>stopTour());
 });

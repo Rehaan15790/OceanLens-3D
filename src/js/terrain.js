@@ -1,31 +1,34 @@
-// graticule / base grid
-// true lat/lon graticule (2.5° minor, 5° major) drawn at the sea surface
+// true lat/lon graticule (2.5° minor, 5° major) drawn just above the sea surface: two line sets
 const graticule = new THREE.Group();
-function addGratLine(pts, major){
-  const g = new THREE.BufferGeometry().setFromPoints(pts);
-  const m = new THREE.LineBasicMaterial({color: major?0x2e5c78:0x1a3346,
-    transparent:true, opacity: major?0.55:0.3, toneMapped:false});
-  graticule.add(new THREE.Line(g,m));
-}
-for(let lon=Math.ceil(LON0/2.5)*2.5; lon<=LON1; lon+=2.5){
-  const pts=[]; for(let lat=LAT0; lat<=LAT1; lat+=1){ const [x,z]=toXZ(lat,lon); pts.push(new THREE.Vector3(x,0.02,z)); }
-  addGratLine(pts, Math.abs(lon % 5) < 0.01);
-}
-for(let lat=Math.ceil(LAT0/2.5)*2.5; lat<=LAT1; lat+=2.5){
-  const pts=[]; for(let lon=LON0; lon<=LON1; lon+=1){ const [x,z]=toXZ(lat,lon); pts.push(new THREE.Vector3(x,0.02,z)); }
-  addGratLine(pts, Math.abs(lat % 5) < 0.01);
-}
-scene.add(graticule);
+(function buildGraticule(){
+  const major = [], minor = [];
+  const seg = (list, pts)=>{ for(let k=0;k<pts.length-1;k++) list.push(pts[k], pts[k+1]); };
+  for(let lon=Math.ceil(LON0/2.5)*2.5; lon<=LON1; lon+=2.5){
+    const pts=[]; for(let lat=LAT0; lat<=LAT1; lat+=1){ const [x,z]=toXZ(lat,lon); pts.push(new THREE.Vector3(x,0.02,z)); }
+    seg(Math.abs(lon % 5) < 0.01 ? major : minor, pts);
+  }
+  for(let lat=Math.ceil(LAT0/2.5)*2.5; lat<=LAT1; lat+=2.5){
+    const pts=[]; for(let lon=LON0; lon<=LON1; lon+=1){ const [x,z]=toXZ(lat,lon); pts.push(new THREE.Vector3(x,0.02,z)); }
+    seg(Math.abs(lat % 5) < 0.01 ? major : minor, pts);
+  }
+  [[major, 0x2e5c78, 0.55], [minor, 0x1a3346, 0.3]].forEach(([pts, hex, opacity])=>{
+    const lines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), Render.line(hex, {opacity}));
+    lines.renderOrder = Render.ORDER.surfaceLines;
+    graticule.add(lines);
+  });
+})();
+scene.add(Render.register('graticule', graticule));
 
 // domain bounding box (subtle)
 const boxGeo = new THREE.BoxGeometry(
   (LON1-LON0)*SCALE_XZ, 6, (LAT1-LAT0)*SCALE_XZ);
 const boxEdges = new THREE.EdgesGeometry(boxGeo);
-const boxLines = new THREE.LineSegments(boxEdges, new THREE.LineBasicMaterial({color:0x1b3a4f, transparent:true, opacity:0.35}));
+const boxLines = new THREE.LineSegments(boxEdges, Render.line(0x1b3a4f, {opacity:0.35}));
+boxLines.renderOrder = Render.ORDER.underLines;
 boxLines.position.y = -3;
-scene.add(boxLines);
-// box was authored for the default 3x exaggeration; rescale it when that changes
-function updateDomainBox(){
+scene.add(Render.register('box', boxLines));
+// box was authored for the default 3x exaggeration; rescale it when that changes (updateDepthGeometry)
+function positionBox(){
   const k = state.exagg/3;
   boxLines.scale.y = k;
   boxLines.position.y = -3*k;
@@ -53,16 +56,15 @@ function shadeFloor(){
   floorGeo.setAttribute('color', new THREE.Float32BufferAttribute(floorColors,3));
 }
 shadeFloor();
-const floorMat = new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.97, metalness:0.03, flatShading:false});
-const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-scene.add(floorMesh);
-function updateFloorPosition(){
+const floorMesh = new THREE.Mesh(floorGeo, Render.terrain({vertexColors:true, roughness:0.97, metalness:0.03}));
+scene.add(Render.register('floor', floorMesh));
+// called from updateDepthGeometry() when the vertical exaggeration changes
+function positionFloor(){
   for(let i=0;i<floorPos.count;i++){
     floorPos.setY(i, -displayDepth(floorLatLon[i][2])*DEPTH_SCALE*state.exagg);
   }
   floorPos.needsUpdate = true;
   floorGeo.computeVertexNormals();
-  floorMesh.position.y = 0;
 }
 
 /* ---- land from ETOPO1: marching squares at sea level, so the coast is smooth ----
@@ -127,10 +129,14 @@ const occluders = [];   // meshes that can hide screen-space labels
     geo.computeVertexNormals();
     return geo;
   };
-  scene.add(new THREE.Mesh(geom(top, topCol), new THREE.MeshStandardMaterial({vertexColors:true, roughness:0.9, metalness:0.02, side:THREE.DoubleSide})));
-  scene.add(new THREE.Mesh(geom(wall), new THREE.MeshStandardMaterial({color:0x6f6142, roughness:0.95, metalness:0.02, side:THREE.DoubleSide})));
-  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(coast, 3)),
-    new THREE.LineBasicMaterial({color:0xdfcd94, transparent:true, opacity:0.7})));
+  const land = new THREE.Group();
+  land.add(new THREE.Mesh(geom(top, topCol), Render.terrain({vertexColors:true, roughness:0.9, side:THREE.DoubleSide})));
+  land.add(new THREE.Mesh(geom(wall), Render.terrain({color:0x6f6142, side:THREE.DoubleSide})));
+  scene.add(Render.register('land', land));
+  const coastLine = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(coast, 3)),
+    Render.line(0xdfcd94, {opacity:0.7}));
+  coastLine.renderOrder = Render.ORDER.surfaceLines;
+  scene.add(Render.register('coast', coastLine));
 
   // labels test occlusion against a coarse, invisible copy (every 0.4°), which is far cheaper to raycast
   const occ = [];
@@ -142,16 +148,7 @@ const occluders = [];   // meshes that can hide screen-space labels
       }
     }
   }
-  const occMesh = new THREE.Mesh(geom(occ), new THREE.MeshBasicMaterial({side:THREE.DoubleSide}));
+  const occMesh = new THREE.Mesh(geom(occ), Render.flat(0x000000, {side:THREE.DoubleSide}));
   occMesh.visible = false;
   occluders.push(occMesh);
 })();
-
-/* ---- sea surface sheen (subtle, purely visual) ---- */
-const seaSurfGeo = new THREE.PlaneGeometry((LON1-LON0)*SCALE_XZ*1.02, (LAT1-LAT0)*SCALE_XZ*1.02, 1, 1);
-seaSurfGeo.rotateX(-Math.PI/2);
-const seaSurfMat = new THREE.MeshStandardMaterial({color:0x2a7d92, transparent:true, opacity:0.09,
-  side:THREE.DoubleSide, roughness:0.15, metalness:0.4});
-const seaSurfMesh = new THREE.Mesh(seaSurfGeo, seaSurfMat);
-seaSurfMesh.position.y = 0.01;
-scene.add(seaSurfMesh);
