@@ -136,7 +136,7 @@
     <div class="bl">
       <p>One self-contained HTML file (~3 MB) that opens the Arabian Sea and Bay of Bengal <span style="white-space:nowrap">(6–22°N, 61–92°E)</span> as a navigable 3D ocean volume</p>
       <p>No install, no login, no server — runs offline from a pen drive or an email attachment</p>
-      <p>Real case study built in: Cyclone Amphan, May 2020 — HYCOM model analyses, 171 Argo profiles and the IBTrACS track</p>
+      <p>Real case study built in: Cyclone Amphan, May 2020 — HYCOM model analyses, 206 Argo profiles and the IBTrACS track</p>
     </div>
     <div class="h" style="color:var(--teal2)">HOW IT ADDRESSES THE PROBLEM</div>
     <div class="bl">
@@ -163,20 +163,20 @@
   <div class="card tech" style="left:32.4pt"><b>FRONT END</b>HTML5 · vanilla JavaScript<br>Three.js r128 (WebGL)</div>
   <div class="card tech" style="left:260.6pt"><b>DATA LAYER</b>Python · NumPy<br>OPeNDAP · ERDDAP</div>
   <div class="card tech" style="left:488.9pt"><b>OCEANOGRAPHY</b>UNESCO/EOS-80 density<br>Mackenzie 1981 sound speed</div>
-  <div class="card tech" style="left:717.1pt"><b>VALIDATION</b>Argo QC flags + density test<br>GODAE Class 4 bias · RMSE</div>
+  <div class="card tech" style="left:717.1pt"><b>VALIDATION</b>Argo QC flags + density test<br>bias · RMSE at each profile's time</div>
   <div class="h" style="left:32.4pt;top:212.35pt">METHODOLOGY — DATA FLOW</div>
   <div class="flow">
     <div class="box" style="width:182pt;background:var(--navy)"><b>DATA SOURCES</b>HYCOM GOFS 3.1 analysis<br>Argo GDAC (ERDDAP)<br>ETOPO1 relief<br>IBTrACS best tracks<small>next: INCOIS LAS · Copernicus</small></div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
     <div class="box" style="width:175pt;background:var(--teal)"><b>INGESTION (Python)</b>OPeNDAP / ERDDAP subset<br>0.5° regrid, 11 depths<br>Argo QC, pressure → depth<br>16-bit quantize</div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
-    <div class="box" style="width:154pt;background:var(--teal2)"><b>PAYLOAD</b>16-bit arrays, base64<br>+ JSON header<br>~2 MB for 8 days</div>
+    <div class="box" style="width:154pt;background:var(--teal2)"><b>PAYLOAD</b>16-bit arrays, base64<br>+ JSON header<br>~2.3 MB for 8 analyses</div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
     <div class="box" style="width:176pt;background:var(--teal3)"><b>BROWSER CLIENT</b>one .html file<br>Three.js / WebGL<br>no install, offline</div>
   </div>
   <div class="h" style="left:32.4pt;top:426.95pt">RENDERING METHOD</div>
   <div class="render bl">
-    <p>Volume drawn as stacked semi-transparent depth layers (additive blending, back-to-front) — stable on integrated GPUs where ray-marching fails</p>
+    <p>Volume drawn as an opaque sea surface over faint depth layers (alpha blending, back to front) — stable on integrated GPUs where ray-marching fails</p>
     <p>Isotherm-depth surfaces (D20 / D26) · particle advection along the velocity field for currents · per-layer land masking against ETOPO1 bathymetry</p>
     <p style="color:var(--teal)">Status: working prototype runs end to end on real Cyclone Amphan data — volume, slices, sections, D26 surfaces, float profiles, heat map, demo tour, PNG export</p>
   </div>
@@ -190,11 +190,11 @@
   <div class="logo img-logo"></div>
   <div class="h" style="left:32.4pt;top:95.9pt;font-size:15pt;line-height:15pt;color:var(--green)">WHY IT IS FEASIBLE</div>
   <div class="card feas g" style="top:123.8pt"><b>✓&nbsp; Prototype exists</b>Full 3D scene, float comparison and demo mode already run on real Cyclone Amphan data in one ~3 MB file, built by a working Python pipeline.</div>
-  <div class="card feas g" style="top:214.5pt"><b>✓&nbsp; Data is free and open</b>HYCOM, Argo GDAC, ETOPO1 and IBTrACS are public, with no account or licence; Copernicus Marine needs only a free registration.</div>
+  <div class="card feas g" style="top:214.5pt"><b>✓&nbsp; Data is free and open</b>HYCOM, Argo GDAC, ETOPO1 and IBTrACS are public: no account needed, free to use with attribution; Copernicus Marine needs only a free registration.</div>
   <div class="card feas g" style="top:305.2pt"><b>✓&nbsp; Runs on any laptop</b>Browser + WebGL only. No GPU cluster, no cloud bill, no IT deployment for a district office to use it.</div>
   <div class="card feas g" style="top:395.9pt"><b>✓&nbsp; Built-in quality checks</b>Argo QC flags, a density-inversion test and bias / RMSE against the model run inside the app, so bad data is flagged, not hidden.</div>
   <div class="h" style="left:493.2pt;top:95.9pt;font-size:15pt;line-height:15pt;color:var(--amber)">RISKS → MITIGATION</div>
-  <div class="card feas a" style="top:123.8pt"><b>Payload size vs. detail</b>Regional subsetting + vertical regridding + 16-bit quantization keeps 8 days of model fields plus 171 Argo profiles to about 2 MB.</div>
+  <div class="card feas a" style="top:123.8pt"><b>Payload size vs. detail</b>Regional subsetting + vertical regridding + 16-bit quantization keeps 8 analyses of model fields plus 206 Argo profiles to about 2.3 MB.</div>
   <div class="card feas a" style="top:214.5pt"><b>Weak GPUs on office laptops</b>Layered transparency instead of ray-marching: 11 textured depth layers, cheap on integrated GPUs; Three.js version pinned.</div>
   <div class="card feas a" style="top:305.2pt"><b>Sparse / gappy float coverage</b>Gaps are shown as gaps, never silently interpolated, so users are not misled about data density.</div>
   <div class="card feas a" style="top:395.9pt"><b>Long-term maintenance</b>Zero dependencies beyond one pinned library and no build chain — the usual rot-and-die failure mode is removed.</div>
@@ -218,7 +218,7 @@
   </div>
   <div class="h" style="left:493.2pt;top:202.35pt">BENEFITS OF THE SOLUTION</div>
   <div class="card ben" style="top:229pt"><b>Social</b>Cyclone-relevant ocean heat information reaches district and coastal users, not only well-connected research labs.</div>
-  <div class="card ben" style="top:290.9pt"><b>Economic</b>No licence, hosting or hardware cost; one file replaces a deployed visualization stack for most inspection tasks.</div>
+  <div class="card ben" style="top:290.9pt"><b>Economic</b>No licence fees, hosting or hardware cost; one file replaces a deployed visualization stack for most inspection tasks.</div>
   <div class="card ben" style="top:352.8pt"><b>Environmental</b>Faster reading of thermocline, eddy and monsoon-reversal structure supports marine and fisheries decision-making.</div>
   <div class="card ben" style="top:414.7pt"><b>Scientific</b>Validation is built in — GODAE Class 4 metrics and density-inversion checks show how far each view can be trusted.</div>
   <div class="foot"><span>@SIH Idea submission- Template</span><b>5</b></div>

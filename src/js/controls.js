@@ -51,14 +51,27 @@ function updateColorbarUI(){
   ui.cbMin.value = spec.min; ui.cbMax.value = spec.max;
   ui.cbMin.disabled = ui.cbMax.disabled = ui.paletteSel.disabled = !spec.editable;
   ui.paletteSel.value = spec.palette;
-  ui.cbReset.hidden = !spec.editable ||
-    (state.cbMin===meta.defMin && state.cbMax===meta.defMax && state.palette===meta.palette);
+  ui.cbReset.hidden = !spec.editable || (!state.customRange && state.palette===meta.palette);
 }
 
 /* ---- actions ---- */
+// the default colour range of the view on screen (science's facts): the level shown for the
+// surface and a slice, the whole column for all depth levels and the depth of a value, the heat
+// range for TCHP
+function viewRange(){
+  const r = facts()[dataMode].ranges[state.variable];
+  if(state.variable==='tchp' || state.mode==='layers' || state.mode==='iso') return r.column;
+  return r.levels[state.mode==='slice' ? state.depthIdx : 0];
+}
+// follow the view's default range unless the user has set their own
+function applyViewRange(){
+  if(state.customRange) return;
+  [state.cbMin, state.cbMax] = viewRange();
+}
 function resetRange(){
-  const m = VAR_META[state.variable];
-  state.cbMin = m.defMin; state.cbMax = m.defMax; state.palette = m.palette;
+  state.customRange = false;
+  state.palette = VAR_META[state.variable].palette;
+  applyViewRange();
 }
 function setVariable(v){
   if(!VAR_META[v]) return;
@@ -70,10 +83,12 @@ function setVariable(v){
 function setMode(m){
   if(!MODES.includes(m)) return;
   state.mode = m;
+  applyViewRange();
   requestUpdate('full');
 }
 function setDepth(i){
   state.depthIdx = Math.max(0, Math.min(DEPTHS.length-1, Math.round(i)));
+  applyViewRange();
   requestUpdate('full');
 }
 function setIso(v){
@@ -95,7 +110,7 @@ function setExaggeration(e){
 // false (and nothing changes) unless min < max
 function setRange(min, max){
   if(!(Number.isFinite(min) && Number.isFinite(max) && min < max)) return false;
-  state.cbMin = min; state.cbMax = max;
+  state.cbMin = min; state.cbMax = max; state.customRange = true;
   requestUpdate('full');
   return true;
 }

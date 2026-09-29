@@ -121,6 +121,7 @@ function boot(){
   try {
     resize();
     resetView();
+    resetRange();
     requestUpdate('full');
     flushUpdate();
     exposeTestSurface();

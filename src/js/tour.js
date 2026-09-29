@@ -6,7 +6,7 @@
 const tour = {running:false, idx:0, token:0, autoplay:false, timer:null, saved:null};
 let tourRotating = false;   // the camera may turn slowly during this step (read by the render loop)
 let tourPaused = false;     // autoplay was switched off part-way (read by the render loop)
-const TOUR_KEYS = ['variable', 'mode', 'depthIdx', 'isoVal', 'opacity', 'exagg', 'cbMin', 'cbMax', 'palette', 'time',
+const TOUR_KEYS = ['variable', 'mode', 'depthIdx', 'isoVal', 'opacity', 'exagg', 'cbMin', 'cbMax', 'palette', 'customRange', 'time',
                    'colorMisfit', 'showArgo', 'showGlider', 'showGrid', 'showFlow', 'showTrack', 'playing'];
 
 function isTourRunning(){ return tour.running; }
@@ -56,10 +56,10 @@ function applyTourStep(){
   if(!step.section) homeCamera();
   setSectionDraw(false);
   state.variable = step.variable;
-  resetRange();
   state.colorMisfit = !!step.openFloat;
   if(step.mode) state.mode = step.mode;
   if(step.depthIdx!==undefined) state.depthIdx = step.depthIdx;
+  resetRange();
   if(step.time!==undefined) state.time = step.time;
   if(ISO_META[state.variable]) state.isoVal = step.isoVal!==undefined ? step.isoVal : ISO_META[state.variable].def;
   requestUpdate('full');

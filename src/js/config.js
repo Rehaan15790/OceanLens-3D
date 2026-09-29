@@ -82,7 +82,7 @@ const state = {
   // 'slice': one depth; 'iso': the depth of a value
   variable:'temp', mode:'surface', depthIdx:4, isoVal:ISO_META.temp.def, opacity:0.25,
   exagg:3.0, showArgo:true, showGlider:true, showGrid:true, showFlow:true, colorMisfit:false, showTrack:true,
-  cbMin:VAR_META.temp.defMin, cbMax:VAR_META.temp.defMax, palette:'temperature',
+  cbMin:VAR_META.temp.defMin, cbMax:VAR_META.temp.defMax, palette:'temperature', customRange:false,
   time:0, playing:false, sectionDraw:false,
   panel:'empty'   // which right-hand panel is open: 'empty' | 'profile' | 'track' | 'section'
 };
