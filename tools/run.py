@@ -161,7 +161,7 @@ def main():
 
     if args.build:
         os.environ['OCEANLENS_BUILD'] = str(Path(args.build).resolve())
-    from cdp import default_build, find_browsers
+    from cdp import CDPError, default_build, find_browsers
     suites = QUICK if args.quick else (args.suite.split(',') if args.suite else list(SUITES))
     unknown = [s for s in suites if s not in SUITES]
     if unknown:
@@ -181,7 +181,10 @@ def main():
     build = default_build()
     data = build.read_bytes()
     print(f'build    {build}  ({len(data) / 1e6:.2f} MB, sha256 {hashlib.sha256(data).hexdigest()[:12]})')
-    print(f'browser  {" or ".join(find_browsers())}')
+    try:
+        print(f'browser  {" or ".join(find_browsers())}')
+    except CDPError as e:
+        print(f'browser  none: {e} (browser suites will error)')
     OUTPUT.mkdir(parents=True, exist_ok=True)
     records, t_all = [], time.monotonic()
     for s in suites:

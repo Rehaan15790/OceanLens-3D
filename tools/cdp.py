@@ -211,6 +211,13 @@ class Browser:
                 if i == len(candidates) - 1:
                     raise
 
+    def _stderr_tail(self, n=3):
+        try:
+            lines = [l for l in self.stderr_log.read_text(errors='replace').splitlines() if l.strip()]
+        except OSError:
+            return ''
+        return ('\n  ' + '\n  '.join(lines[-n:])) if lines else ''
+
     def _start(self, exe, width, height, args, headless, backend, offline, network_log, profile):
         self.exe = exe
         self.profile = profile or tempfile.mkdtemp(prefix='oceanlens-cdp-')
@@ -225,13 +232,15 @@ class Browser:
                '--disable-backgrounding-occluded-windows']
         if headless:
             cmd.append('--headless=new')
-        if sys.platform.startswith('linux') and os.environ.get('CI'):
-            cmd.append('--no-sandbox')           # CI containers restrict user namespaces
+        if sys.platform.startswith('linux') and (os.environ.get('CI') or getattr(os, 'geteuid', lambda: 1)() == 0):
+            cmd.append('--no-sandbox')           # CI containers restrict user namespaces; Chrome refuses root without it
         cmd += BACKENDS[backend]
         if offline:   # every host name fails to resolve: the pen-drive case, and tests never reach the network
             cmd.append('--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE localhost , EXCLUDE 127.0.0.1')
         cmd += list(args) + ['about:blank']
-        self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.stderr_log = Path(self.profile) / 'browser-stderr.log'
+        with open(self.stderr_log, 'wb') as err:
+            self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=err)
         end = time.monotonic() + 30
         port = None
         while time.monotonic() < end and port is None:
@@ -239,7 +248,7 @@ class Browser:
                 port = int(port_file.read_text().splitlines()[0])
             except (OSError, ValueError, IndexError):
                 if self.proc.poll() is not None:
-                    raise CDPError(f'browser exited with code {self.proc.returncode}: {self.exe}')
+                    raise CDPError(f'browser exited with code {self.proc.returncode}: {self.exe}{self._stderr_tail()}')
                 time.sleep(0.1)
         if not port:
             self.proc.kill()
