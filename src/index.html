@@ -120,7 +120,7 @@
         </div>
       </section>
 
-      <section class="grp" id="tchpNote" style="display:none;" aria-labelledby="grpTchp">
+      <section class="grp" id="tchpNote" hidden aria-labelledby="grpTchp">
         <h2 id="grpTchp" class="grp-label">What the map shows</h2>
         <p class="note">Heat stored in water warmer than 26 °C, from the surface down to the 26 °C isotherm (D26),
           computed from the model's temperature and salinity. The white contour marks 50 kJ/cm², a common threshold
@@ -128,14 +128,14 @@
         <button type="button" id="trackDetailsBtn" data-needs-shell hidden class="btn btn-block">Show Amphan's track details</button>
       </section>
 
-      <section class="grp" id="depthGrp" style="display:none;">
+      <section class="grp" id="depthGrp" hidden>
         <div class="field">
           <label for="depthSlider">Depth <output id="depthVal" for="depthSlider">100 m</output></label>
           <input type="range" id="depthSlider" min="0" max="10" step="1" value="4">
         </div>
       </section>
 
-      <section class="grp" id="isoGrp" style="display:none;">
+      <section class="grp" id="isoGrp" hidden>
         <div class="field">
           <label for="isoSlider">Value <output id="isoVal" for="isoSlider">26.0 °C</output></label>
           <input type="range" id="isoSlider" min="5" max="32" step="0.1" value="26">
@@ -197,13 +197,8 @@
         <fieldset class="field" id="colourScale">
           <legend>Colour scale</legend>
           <label for="paletteSel">Ramp</label>
-          <select id="paletteSel">
-            <option value="temperature">Temperature</option>
-            <option value="salinity">Salinity</option>
-            <option value="speed">Speed</option>
-            <option value="heat">Heat</option>
-            <option value="depth" hidden>Depth</option>
-          </select>
+          <!-- controls.js adds one option per palette (palettes.js); "depth" stays hidden, it is the depth-of-a-value ramp -->
+          <select id="paletteSel"></select>
           <div class="scale-row">
             <span id="lblScale">Scale</span>
             <div id="scaleToggle" class="segmented segmented-small" role="group" aria-labelledby="lblScale">

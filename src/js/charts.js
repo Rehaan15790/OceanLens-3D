@@ -60,7 +60,11 @@ function niceTicks(min, max, target=5){
   for(let v = Math.ceil((min-eps)/step)*step; v <= max+eps; v += step) out.push(+v.toFixed(10));
   return out;
 }
-const tickText = (v, step)=>v.toFixed(step >= 1 ? 0 : step >= 0.1 ? 1 : 2).replace('-', '−');
+// the decimals that write v exactly (to 6 significant figures): 2 for 0.25, 1 for 2.5 and 32.5, 0 for 25
+const decimalsOf = v=>{ const s = String(+Math.abs(v).toPrecision(6)); return s.includes('e') ? 6 : (s.split('.')[1] || '').length; };
+const tickText = (v, step)=>v.toFixed(decimalsOf(step)).replace('-', '−');
+// a colour-key end: the range's own value (up to 3 decimals), never rounded to the tick step
+const endText = (v, step)=>v.toFixed(Math.max(decimalsOf(step), Math.min(3, decimalsOf(v)))).replace('-', '−');
 
 // markers on the 2D charts look like the ones in 3D: achromatic, with a dark outline
 function drawFloatGlyph(ctx, x, y, r, glider){
@@ -349,23 +353,32 @@ const demoDay = t=>1+3*t;
 function dayMonth(iso){ return new Date(iso).toLocaleDateString('en-GB', {day:'numeric', month:'short', timeZone:'UTC'}); }
 
 function keySpec(){
-  const c = colorbarSpec(), meta = VAR_META[state.variable];
+  const c = colorbarSpec();
   const marks = [], legend = [], notes = [];
   let title;
   if(state.variable==='tchp'){
     title = 'Cyclone heat potential (kJ/cm²)';
     if(TCHP_THRESHOLD >= c.min && TCHP_THRESHOLD <= c.max) marks.push({v:TCHP_THRESHOLD, text:String(TCHP_THRESHOLD)});
     legend.push({sw:'contour', text:'50 kJ/cm² contour'});
-  } else if(state.mode==='iso'){
-    title = `Depth of the ${isoLabel().replace(/ depth$/, '')} surface (m)`;
+  } else if(c.view==='iso' && !c.editable){
+    // title and bar come from the same spec, so they cannot disagree
+    title = `Depth of the ${c.label.replace(/ depth$/, '')} surface\u00a0(${c.unit})`;
+  } else if(c.view==='iso3d' && c.isoValue!==null){
+    // the sheet is drawn in the colour of its value: mark that value on the bar
+    const v = `${fmt.dp(c.isoValue, ISO_META[state.variable].dp)}\u00a0${c.unit}`;
+    title = `${c.label} (${c.unit})\u00a0· ${v}\u00a0isosurface`;
+    if(c.isoValue >= c.min && c.isoValue <= c.max) marks.push({v:c.isoValue, text:v});
   } else {
-    const where = state.mode==='surface' ? 'surface (0 m)'
-      : state.mode==='slice' ? `${DEPTHS[state.depthIdx]} m` : 'all depth levels';
-    title = `${meta.label} (${meta.unit}) · ${where}`;
+    // non-breaking spaces keep a number with its unit; the line breaks after the ·
+    const where = state.mode==='surface' ? 'surface\u00a0(0\u00a0m)'
+      : state.mode==='slice' ? `${DEPTHS[state.depthIdx]}\u00a0m` : 'all\u00a0depth\u00a0levels';
+    title = `${c.label} (${c.unit})\u00a0· ${where}`;
     if(state.variable==='temp' && 26 >= c.min && 26 <= c.max) marks.push({v:26, text:'26 °C'});
     if(state.mode==='surface') notes.push('Lower layers are faint: read values on the surface.');
     if(state.mode==='layers') notes.push('The layers blend: read values on a depth slice.');
   }
+  if(c.empty) notes.push(hasModel(state.variable) ? 'No surface: no water column crosses this value at this time.'
+    : 'No surface: there is no model field to search.');
   if(state.showArgo){
     if(state.colorMisfit){
       legend.push({sw:'float good', text:'Float, temperature RMSE < 0.5 °C'});
@@ -384,8 +397,10 @@ function keySpec(){
   if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);
   if(scale==='log') notes.unshift('Log colour scale.');
   notes.push(`Vertical exaggeration ≈ ${exaggerationRatio(state.exagg)} : 1; below 1000 m the sea floor is compressed a further 12×.`);
+  if(c.empty) return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale, ticks:[], ends:{min:'–', max:'–'},
+    marks, legend, note:notes.join(' '), empty:true};
   if(scale==='log'){
-    const end = v=>String(+v.toPrecision(2));
+    const end = v=>String(+v.toPrecision(3));
     return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale,
       ticks:logTicks(c.min, c.max).map(v=>({v, text:logTickText(v)})),
       ends:{min:end(c.min > 0 ? c.min : c.max*1e-3), max:end(c.max)}, marks, legend, note:notes.join(' ')};
@@ -393,32 +408,45 @@ function keySpec(){
   const ticks = niceTicks(c.min, c.max), step = ticks.length > 1 ? ticks[1]-ticks[0] : 1;
   return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale,
     ticks:ticks.map(v=>({v, text:tickText(v, step)})),
-    ends:{min:tickText(c.min, step), max:tickText(c.max, step)}, marks, legend, note:notes.join(' ')};
+    ends:{min:endText(c.min, step), max:endText(c.max, step)}, marks, legend, note:notes.join(' ')};
 }
 
 function renderKey(spec){
   const $ = id=>document.getElementById(id);
   $('keyTitle').textContent = spec.title;
-  const cv = $('keyBar'), dpr = Math.min(2, window.devicePixelRatio||1), bw = cv.clientWidth || 236;
-  cv.width = Math.round(bw*dpr); cv.height = Math.round(12*dpr);
-  const g = cv.getContext('2d'), lut = keyLUT(spec.palette);
-  for(let i=0;i<cv.width;i++){
-    const k = Math.min(255, Math.round(i/(cv.width-1)*255))*3;
-    g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(i, 0, 1, cv.height);
+  // nothing coloured (an iso view with no surface): no bar, and the note says why
+  const cv = $('keyBar'), row = $('keyTicks');
+  cv.parentNode.hidden = !!spec.empty;
+  row.textContent = '';
+  if(!spec.empty){
+    const dpr = Math.min(2, window.devicePixelRatio||1), bw = cv.clientWidth || 236;
+    cv.width = Math.round(bw*dpr); cv.height = Math.round(12*dpr);
+    const g = cv.getContext('2d'), lut = keyLUT(spec.palette);
+    for(let i=0;i<cv.width;i++){
+      const k = Math.min(255, Math.round(i/(cv.width-1)*255))*3;
+      g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(i, 0, 1, cv.height);
+    }
+    const pos = v=>rampT(v, spec.min, spec.max, spec.scale || 'linear')*100;
+    const add = (cls, left, text)=>{ const el = document.createElement('span'); el.className = cls; el.style.left = left+'%';
+      if(text!==undefined) el.textContent = text; return row.appendChild(el); };
+    // marks (26 °C, 50 kJ/cm²) get bold labels; plain ticks too close to a mark or an end, or whose label would
+    // touch another label (an end such as 32.5 is wider than a tick), are left out
+    const markPos = spec.marks.map(m=>pos(m.v));
+    const endMark = e=>spec.marks.find(m=>Math.abs(pos(m.v)-e) < 3);
+    const lo = endMark(0), hi = endMark(100);
+    add('key-tick first'+(lo ? ' mark' : ''), 0, lo ? lo.text : spec.ends.min);
+    add('key-tick last'+(hi ? ' mark' : ''), 100, hi ? hi.text : spec.ends.max);
+    spec.marks.forEach((m,i)=>{ add('key-mark', markPos[i]); if(m!==lo && m!==hi) add('key-tick mark', markPos[i], m.text); });
+    const plain = spec.ticks.filter(t=>[0, 100, ...markPos].every(o=>Math.abs(o-pos(t.v)) >= 12)).map(t=>add('key-tick', pos(t.v), t.text));
+    const box = new Map([...row.children].map(el=>[el, el.getBoundingClientRect()]));   // one layout
+    const taken = [...box].filter(([el])=>el.textContent && !plain.includes(el)).map(([, r])=>r);
+    if(row.clientWidth) plain.forEach(el=>{
+      const r = box.get(el);
+      if(taken.some(q=>r.left < q.right+4 && r.right > q.left-4)) el.remove(); else taken.push(r);
+    });
   }
-  const pos = v=>rampT(v, spec.min, spec.max, spec.scale || 'linear')*100;
-  const row = $('keyTicks'); row.textContent = '';
-  const add = (cls, left, text)=>{ const el = document.createElement('span'); el.className = cls; el.style.left = left+'%';
-    if(text!==undefined) el.textContent = text; row.appendChild(el); };
-  // marks (26 °C, 50 kJ/cm²) get bold labels; plain ticks too close to a mark or an end are left out
-  const markPos = spec.marks.map(m=>pos(m.v));
-  const endMark = e=>spec.marks.find(m=>Math.abs(pos(m.v)-e) < 3);
-  const lo = endMark(0), hi = endMark(100);
-  add('key-tick first'+(lo ? ' mark' : ''), 0, lo ? lo.text : spec.ends.min);
-  add('key-tick last'+(hi ? ' mark' : ''), 100, hi ? hi.text : spec.ends.max);
-  spec.marks.forEach((m,i)=>{ add('key-mark', markPos[i]); if(m!==lo && m!==hi) add('key-tick mark', markPos[i], m.text); });
-  spec.ticks.forEach(t=>{ const p = pos(t.v); if([0, 100, ...markPos].every(o=>Math.abs(o-p) >= 12)) add('key-tick', p, t.text); });
-  $('keyRange').textContent = `Colour range ${spec.ends.min} to ${spec.ends.max} ${spec.unit}` +
+  $('keyRange').textContent = spec.empty ? 'No colour range: there is no surface to colour.' :
+    `Colour range ${spec.ends.min} to ${spec.ends.max} ${spec.unit}` +
     (spec.scale==='log' ? ', log scale' : '') +
     (spec.marks.length ? `; marked: ${spec.marks.map(m=>m.text).join(', ')}` : '') + '.';
   const ul = $('keyLegend'); ul.textContent = '';

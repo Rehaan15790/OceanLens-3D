@@ -16,7 +16,7 @@ function isoMode(){ return !is2D(state.variable) && ISO_MODES.includes(state.mod
 function isoLabel(){
   const meta = VAR_META[state.variable], im = ISO_META[state.variable];
   return state.variable==='temp' ? `D${+state.isoVal.toFixed(im.dp)} depth`
-    : `${state.isoVal.toFixed(im.dp)} ${meta.unit} depth`;
+    : `${state.isoVal.toFixed(im.dp)}\u00a0${meta.unit} depth`;
 }
 // the view on screen: 'surface' | 'layers' | 'slice' | 'iso' | 'iso3d' | 'tchp' | 'field2d' (other 2D variables)
 function currentView(){ return state.variable==='tchp' ? 'tchp' : is2D(state.variable) ? 'field2d' : state.mode; }
@@ -30,31 +30,42 @@ function updateReadout(){
     const im = ISO_META[state.variable];
     ui.roVar.textContent = `Depth of ${fmt.dp(state.isoVal, im.dp)} ${meta.unit}`;
     const any = Number.isFinite(s.min);
-    ui.roRange.textContent = any ? `Range ${fmt.int(s.min)}–${fmt.int(s.max)} m` : 'No crossing';
+    ui.roRange.textContent = any ? `Range ${fmt.int(s.min)}–${fmt.int(s.max)} m`
+      : hasModel(state.variable) ? 'No crossing' : 'No model field';
     ui.roMean.textContent = any ? `Mean ${fmt.int(s.mean)} m` : '';
-    return;
+    return fitReadout();
   }
   const n = fmt.decimals(state.variable);
   ui.roVar.textContent = is2D(state.variable) ? meta.label : `${meta.label} at ${fmt.depthLabel(readoutDepth())}` +
-    (hasModel(state.variable) ? '' : ', floats only');
+    (hasModel(state.variable) ? '' : ' (floats)');
   ui.roRange.textContent = Number.isFinite(s.min) ? `Range ${fmt.dp(s.min, n)}–${fmt.dp(s.max, n)} ${meta.unit}` : 'No data';
   ui.roMean.textContent = Number.isFinite(s.mean) ? `Mean ${fmt.dp(s.mean, n)} ${meta.unit}` : '';
+  fitReadout();
 }
+// the mean gives way when the line would cut the variable's name (narrow screens, long names such as chlorophyll's)
+function fitReadout(){
+  ui.roMean.hidden = false;
+  ui.roMean.hidden = ui.roVar.scrollWidth > ui.roVar.clientWidth;
+}
+window.addEventListener('resize', fitReadout);
 
 /* ---- colour scale: what the key describes right now ---- */
 function colorbarSpec(){
-  const view = currentView(), meta = VAR_META[state.variable];
-  if(view==='iso' && isoInfo){
-    return {palette:'depth', min:isoInfo.lo, max:isoInfo.hi, scale:'linear', unit:'m', label:isoLabel(), view,
-            depth:null, isoValue:state.isoVal, editable:false};
+  const view = currentView(), meta = VAR_META[state.variable], iso = isoMode();
+  // in both iso views, no surface (no crossing, no model field) gives an empty key: nothing on screen has a colour
+  const any = !!(isoInfo && isoInfo.n);
+  if(view==='iso' && iso){
+    // the surface's own depth range, never the variable's ramp
+    return {palette:'depth', min:any ? isoInfo.lo : NaN, max:any ? isoInfo.hi : NaN, scale:'linear', unit:'m', label:isoLabel(),
+            view, depth:null, isoValue:state.isoVal, editable:false, empty:!any};
   }
   return {palette:state.palette, min:state.cbMin, max:state.cbMax, scale:state.scale, unit:meta.unit, label:meta.label,
           view, depth: view==='tchp' || view==='field2d' || view==='iso3d' ? null : readoutDepth(),
-          isoValue: view==='iso3d' ? state.isoVal : null, editable:true};
+          isoValue: view==='iso3d' && iso ? state.isoVal : null, editable:true, empty:view==='iso3d' && iso && !any};
 }
 function updateColorbarUI(){
   const spec = colorbarSpec(), meta = VAR_META[state.variable];
-  ui.cbMin.value = spec.min; ui.cbMax.value = spec.max;
+  ui.cbMin.value = Number.isFinite(spec.min) ? spec.min : ''; ui.cbMax.value = Number.isFinite(spec.max) ? spec.max : '';
   ui.cbMin.disabled = ui.cbMax.disabled = ui.paletteSel.disabled = !spec.editable;
   ui.paletteSel.value = spec.palette;
   ui.cbReset.hidden = !spec.editable || (!state.customRange && state.palette===meta.palette && state.scale===meta.scale);
@@ -240,6 +251,8 @@ ui.opSlider.addEventListener('input', e=>setOpacity(parseInt(e.target.value, 10)
 ui.exSlider.addEventListener('input', e=>setExaggeration(parseInt(e.target.value, 10)/10));
 ui.cbMin.addEventListener('change', e=>{ if(!setRange(parseFloat(e.target.value), state.cbMax)) e.target.value = state.cbMin; });
 ui.cbMax.addEventListener('change', e=>{ if(!setRange(state.cbMin, parseFloat(e.target.value))) e.target.value = state.cbMax; });
+// one ramp option per palette; 'depth' belongs to the depth-of-a-value view and is never offered
+Object.entries(PALETTES).forEach(([k, p])=>{ const o = new Option(p.label, k); o.hidden = k==='depth'; ui.paletteSel.appendChild(o); });
 ui.paletteSel.addEventListener('change', e=>setPalette(e.target.value));
 ui.cbReset.addEventListener('click', ()=>{ resetRange(); requestUpdate('full'); });
 Object.entries(OVERLAYS).forEach(([id, key])=>ui[id].addEventListener('click', ()=>setOverlay(key, !state[key])));

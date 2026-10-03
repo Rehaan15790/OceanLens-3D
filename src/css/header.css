@@ -4,11 +4,14 @@
 #brand{display:flex;align-items:baseline;gap:var(--s-2);white-space:nowrap;}
 .brand-title{font-size:var(--fs-3);font-weight:600;}
 .brand-sub{font-size:var(--fs-1);color:var(--text-2);}
-.readout{flex:1;display:flex;justify-content:center;gap:var(--s-4);font-size:var(--fs-1);color:var(--text-2);
-  white-space:nowrap;overflow:hidden;min-width:0;}
-.readout #roVar{color:var(--text);font-weight:600;}
+/* centred while it fits; otherwise it keeps its start (safe centring) and the name ends in an ellipsis */
+.readout{flex:1;display:flex;justify-content:center;justify-content:safe center;gap:var(--s-4);font-size:var(--fs-1);
+  color:var(--text-2);white-space:nowrap;overflow:hidden;min-width:0;}
+.readout>span{flex-shrink:0;}
+.readout #roVar{color:var(--text);font-weight:600;flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
 #headRight{display:flex;align-items:center;gap:var(--s-2);}
-@media (max-width:1300px){ .brand-sub{display:none;} }
+/* narrower screens drop the subtitle; the mean gives way where the line still does not fit (controls.js fitReadout) */
+@media (max-width:1550px){ .brand-sub{display:none;} }
 @media (max-width:1100px){ .readout{display:none;} }
 
 
