@@ -43,6 +43,9 @@ class Snapshot:
             qq = np.frombuffer(base64.b64decode(b64), '<i2').astype(float)
             return np.where(qq == m['missing'], np.nan, off + qq * sc).reshape(-1, nL)
         self.T, self.S = dec(A['T'], 'temp'), dec(A['S'], 'sal')
+        nP = len(A['profiles'])
+        self.C = dec(A['C'], 'chl') if A.get('C') else np.full((nP, nL), np.nan)
+        self.O = dec(A['O'], 'oxy') if A.get('O') and 'oxy' in m['quant'] else np.full((nP, nL), np.nan)
         self.profiles = A['profiles']
         mod = A.get('model')
         self.mT = dec(mod['T'], 'temp') if mod else None
@@ -168,6 +171,10 @@ def facts(path):
     F['argo'] = {'profiles': len(P), 'floats': len({p['w'] for p in P}),
                  'perAnalysis': [sum(1 for p in P if p['s'] == t) for t in range(s.nt)],
                  'tempOnly': sum(1 for p in P if p.get('sq', 1) == 0)}
+    hasC, hasO = np.isfinite(s.C).any(1), np.isfinite(s.O).any(1)
+    B = [p for n, p in enumerate(P) if hasC[n] or hasO[n]]
+    F['argo']['bgc'] = {'floats': len({p['w'] for p in B}), 'profiles': len(B),
+                        'chl': int(hasC.sum()), 'oxy': int(hasO.sum())}
 
     T, ts = track(s)
     if not T:

@@ -19,7 +19,7 @@ const layerMeshes = [];
 const layerGroup = new THREE.Group();
 DEPTHS.forEach((depth, k)=>{
   const mesh = new THREE.Mesh(gridGeometry(0),
-    Render.dataSurface({palette:state.palette, min:state.cbMin, max:state.cbMax, masked:true, opaque:false, opacity:state.opacity}));
+    Render.dataSurface({palette:state.palette, min:state.cbMin, max:state.cbMax, scale:state.scale, masked:true, opaque:false, opacity:state.opacity}));
   mesh.renderOrder = Render.layerOrder(k, DEPTHS.length);   // deepest first; the camera is always above the sea
   mesh.userData.depth = depth;
   layerGroup.add(mesh);
@@ -131,7 +131,7 @@ function updateTchpView(){
   const mask = g.map(c=>c && c.q!==null ? 1 : 0);
   Render.setValues(tchpGeo(), Render.fillMasked(g.map(c=>c ? c.q : NaN), mask, LON_N, LAT_N), mask);
   Render.setPalette(tchpMesh.material, state.palette);
-  Render.setRange(tchpMesh.material, state.cbMin, state.cbMax);
+  Render.setRange(tchpMesh.material, state.cbMin, state.cbMax, state.scale);
   // D26 underneath, drawn neutral so the colour bar stays about heat
   disposeMesh(d26Mesh);
   d26Mesh = buildIsoMesh('temp', 26, true).mesh;
@@ -144,41 +144,62 @@ function updateTchpView(){
   scene.add(Render.register('tchpContour', tchpContour));
 }
 function tchpGeo(){ return tchpMesh.geometry; }
+// other map-only fields (2D products): the same surface, no D26 and no threshold line
+function updateField2dView(){
+  const g = field2dGrid(state.variable, state.time);
+  const mask = g.map(v=>v!==null && Number.isFinite(v) ? 1 : 0);
+  Render.setValues(tchpGeo(), Render.fillMasked(g.map(v=>v===null ? NaN : v), mask, LON_N, LAT_N), mask);
+  Render.setPalette(tchpMesh.material, state.palette);
+  Render.setRange(tchpMesh.material, state.cbMin, state.cbMax, state.scale);
+}
 
 /* ============================================================
    FIELD VALUES -> LAYERS
    ============================================================ */
 // masks: land, and anywhere below the seabed (node masks from geo.js)
 function layerMask(depth){ return gridPts.map((p,idx)=> gridLand[idx] || depth > gridSeabed[idx] ? 0 : 1); }
+// the samples of the last recolouring, per level: the 3D isosurface reuses them
+let layerField = null;
+const fieldKey = v => dataMode+'|'+v+'|'+state.time;
+const isMapOnly = v => v==='tchp' || (VAR_META[v] && VAR_META[v].dims===2);
+const hasField = v => typeof hasModel!=='function' || hasModel(v);
 function updateLayerColors(){
-  if(state.variable==='tchp') return;   // 2D field, drawn by updateTchpView()
+  if(isMapOnly(state.variable) || !hasField(state.variable)) return;   // 2D fields: updateTchpView / updateField2dView
+  const levels = [];
   layerMeshes.forEach(mesh=>{
     const depth = mesh.userData.depth, mask = layerMask(depth);
     const vals = gridPts.map(p=>getVal(state.variable, p.lat, p.lon, depth, state.time));
+    vals.forEach((v, idx)=>{ if(!Number.isFinite(v)) mask[idx] = 0; });   // no value: a gap, never a filled-in colour
+    levels.push(vals);
     Render.setValues(mesh.geometry, Render.fillMasked(vals, mask, LON_N, LAT_N), mask);
     Render.setPalette(mesh.material, state.palette);
-    Render.setRange(mesh.material, state.cbMin, state.cbMax);
+    Render.setRange(mesh.material, state.cbMin, state.cbMax, state.scale);
   });
+  layerField = {key:fieldKey(state.variable), levels};
 }
 
 /* ---- what the view shows (decision f) ----
    surface: the 0 m layer opaque, the lower layers faint (opacity slider); layers: every level
-   translucent; slice: one level, opaque; iso: the isosurface, opaque. TCHP: the map, opaque.
-   While a section is open everything in front of the curtain turns translucent. */
+   translucent; slice: one level, opaque; iso: the depth of a value, opaque; iso3d: the 3D isosurface,
+   opaque. TCHP and 2D products: the map, opaque. A variable with no model field (chlorophyll in real
+   mode) draws no field. While a section is open everything in front of the curtain turns translucent. */
 function applyVolumeView(){
   if(typeof viewDescription === 'function') renderer.domElement.setAttribute('aria-label', viewDescription());
-  const tchp = state.variable==='tchp', mode = state.mode, sec = !!section;
+  const view = currentView(), tchp = view==='tchp', map2d = tchp || view==='field2d', mode = state.mode, sec = !!section;
   layerMeshes.forEach(m=>{ m.visible = false; });
   arrowGroup.visible = false;
   if(isoMesh) isoMesh.visible = false;
-  tchpMesh.visible = tchp;
+  iso3dMesh.visible = false;
+  tchpMesh.visible = map2d;
   if(d26Mesh) d26Mesh.visible = tchp;
   if(tchpContour) tchpContour.visible = tchp;
   applyTrackVisibility();
   applyFlowVisibility();
-  if(tchp){
-    updateTchpView();
+  if(map2d){
+    if(tchp) updateTchpView(); else updateField2dView();
     Render.setSurfaceRole(tchpMesh.material, !sec, 0.5);
+  } else if(!hasField(state.variable)){
+    if(isoMode()) isoInfo = null;
   } else if(mode==='surface' || mode==='layers'){
     layerMeshes.forEach((m, k)=>{
       m.visible = true;
@@ -200,6 +221,9 @@ function applyVolumeView(){
     buildIsoGeometry();
     isoMesh.visible = true;
     Render.setSurfaceRole(isoMesh.material, !sec, 0.5);
+  } else if(mode==='iso3d'){
+    updateIso3d();
+    Render.setSurfaceRole(iso3dMesh.material, !sec, 0.5);
   }
 }
 // the opacity slider: the faint layers only (fast path, no recolouring)

@@ -38,7 +38,7 @@ TEMPORARY_EXTERNAL = ()
 BANNER = '<!-- Built by build.py from src/. Edit the sources, not this file. -->\n'
 # the page's content security policy; script-src gets a hash for every inline script that runs
 CSP = ("default-src 'none'; script-src {scripts}; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; "
-       "connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'")
+       "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")
 SITE_HEADERS = ['Referrer-Policy: no-referrer', 'X-Content-Type-Options: nosniff',
                 'Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()', 'Cache-Control: no-cache']
 NOT_FOUND = ('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>Not found · OceanLens 3D</title>\n'

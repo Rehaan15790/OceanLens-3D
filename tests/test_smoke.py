@@ -89,7 +89,10 @@ class Controls:
                     opened = True
                     break
         self.assertTrue(opened, 'no float marker opened the profile panel')
-        for tab in ('sal', 'dens', 'chl', 'temp'):
+        # chlorophyll and oxygen tabs are hidden when the profile has no such data
+        tabs = self.js("[...document.querySelectorAll('.tabbtn')].filter(b=>!b.hidden).map(b=>b.dataset.p)")
+        self.assertIn('temp', tabs)
+        for tab in [t for t in tabs if t != 'temp'] + ['temp']:
             self.b.click(f'.tabbtn[data-p="{tab}"]')
         self.b.key('Escape')
         self.b.pump(0.3)

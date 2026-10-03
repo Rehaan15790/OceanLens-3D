@@ -503,7 +503,10 @@ def open_app(b, path=None, test=True, enter=True, seed=1, timeout=30):
     if test:
         b.send('Page.addScriptToEvaluateOnNewDocument', source=TEST_MODE_JS % seed)
     mark = b.mark()
-    b.goto(file_url(path or default_build(), 'test' if test else ''))
+    if str(path).startswith(('http://', 'https://')):          # a served page (server/serve.py)
+        b.goto(path + (('&' if '?' in path else '?') + 'test' if test else ''))
+    else:
+        b.goto(file_url(path or default_build(), 'test' if test else ''))
     # older builds never report 'error' themselves: after the load event, uncaught exceptions and no sign of
     # readiness for 2 s mean boot failed
     end, loaded, state = time.monotonic() + timeout, time.monotonic(), None

@@ -1,6 +1,7 @@
-/* ---- markers: floats and gliders ----
+/* ---- markers: every instrument type in the registry (Argo, glider, CTD, mooring, imported) ----
    Constant-size screen marks with a dark outline (render.js), achromatic so no palette can hide
-   them. Stems show each float's profiling range. Picking is done on screen, within PICK_PX. */
+   them; the type's marker style sets the shape. Stems show each profile's depth range; types with
+   track:true join one platform's profiles in time order. Picking is done on screen, within PICK_PX. */
 const markerGroup = new THREE.Group(); scene.add(Render.register('markers', markerGroup));
 const stemGroup = new THREE.Group(); scene.add(Render.register('stems', stemGroup));
 const PICK_PX = 12, MARK_PX = 13;
@@ -17,7 +18,15 @@ function misfitClass(inst){
   const s = summarize(misfit(inst, state.time, 'temp'));
   return s ? MISFIT_CLASSES.findIndex(c=>s.rmse < c.max) : MISFIT_CLASSES.length;
 }
-let markerItems = [];      // [{pos:Vector3, kind:'argo'|'glider', userData}] for picking and hover
+let markerItems = [];      // [{pos:Vector3, kind:instrument type, vis, userData}] for picking and hover
+const instType = kind => typeof instrumentType === 'function' ? instrumentType(kind) : null;
+function markStyle(kind){ const t = instType(kind); return (t && t.marker) || (kind === 'glider' ? 'circle' : 'diamond'); }
+// vis: the instrument (or {kind}) that instrumentVisible() decides on
+function isShown(vis){
+  if(typeof instrumentVisible === 'function') return instrumentVisible(vis);
+  return vis.kind === 'glider' ? state.showGlider : state.showArgo;
+}
+const timeOf = inst => typeof inst.time === 'number' ? inst.time : Date.parse(inst.time);
 function marksObject(items, opts){
   const geo = new THREE.BufferGeometry().setFromPoints(items.map(it=>it.pos));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(items.flatMap(it=>Render.gpuColor(new THREE.Color(it.hex).toArray())), 3));
@@ -32,48 +41,61 @@ function buildMarkers(){
   clearGroup(markerGroup); clearGroup(stemGroup);
   markerItems = [];
   const floats = dataMode==='real' ? instrumentsNow() : argoFloats.map(f=>f.inst);
-  const light = [], dark = [], stems = [];
+  const marks = new Map(), stems = new Map(), tracks = new Map();   // keyed by type (marks: and outline)
+  const push = (map, key, v) => { if(!map.has(key)) map.set(key, []); map.get(key).push(v); };
   floats.forEach(inst=>{
+    const kind = inst.kind || 'argo', t = instType(kind);
     const [x,z] = toXZ(inst.lat, inst.lon);
     const cls = state.colorMisfit ? misfitClass(inst) : -1;
     const hex = cls < 0 ? FLOAT_DEFAULT.color : cls < MISFIT_CLASSES.length ? MISFIT_CLASSES[cls].color : NO_MISFIT.color;
-    const item = {pos:new THREE.Vector3(x, 0.05, z), kind:'argo', userData:inst.userData, hex};
-    (cls === 2 ? dark : light).push(item);
+    const userData = inst.userData || {type:kind, data:{id:inst.id, inst}};
+    const item = {pos:new THREE.Vector3(x, 0.05, z), kind, vis:inst, userData, hex};
+    push(marks, kind + (cls === 2 ? '|dark' : '|light'), item);
     markerItems.push(item);
-    stems.push(new THREE.Vector3(x,0.05,z), new THREE.Vector3(x, -(inst.real ? inst.maxDepth : 1000)*DEPTH_SCALE*state.exagg, z));
+    if(t ? t.stem !== false : kind !== 'glider')
+      push(stems, kind, [new THREE.Vector3(x,0.05,z), new THREE.Vector3(x, -(inst.real ? inst.maxDepth : 1000)*DEPTH_SCALE*state.exagg, z)]);
+    if(t && t.track) push(tracks, kind + '|' + inst.id, item);
   });
-  if(light.length) markerGroup.add(Object.assign(marksObject(light, {shape:'diamond', sizePx:MARK_PX}), {userData:{type:'argo'}}));
-  // the darkest class gets a light outline and a size step, so it never reads as a hole
-  if(dark.length) markerGroup.add(Object.assign(marksObject(dark, {shape:'diamond', sizePx:Math.round(MARK_PX*1.25), outline:'light'}), {userData:{type:'argo'}}));
-  if(stems.length){
-    const s = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(stems), Render.line(0xdfe5ea, {opacity:0.7}));
+  // the darkest misfit class gets a light outline and a size step, so it never reads as a hole
+  marks.forEach((items, key)=>{
+    const [kind, tone] = key.split('|'), dark = tone === 'dark';
+    const o = marksObject(items, {shape:markStyle(kind), sizePx:dark ? Math.round(MARK_PX*1.25) : MARK_PX, outline:dark ? 'light' : 'dark'});
+    markerGroup.add(Object.assign(o, {userData:{type:kind, vis:items[0].vis}}));
+  });
+  stems.forEach((pairs, kind)=>{
+    const s = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pairs.flat()), Render.line(0xdfe5ea, {opacity:0.7}));
     s.renderOrder = Render.ORDER.underLines;
-    s.userData.type = 'argo';
+    s.userData = {type:kind, vis:floats.find(f=>(f.kind || 'argo')===kind)};
     stemGroup.add(s);
-  }
+  });
+  tracks.forEach((items, key)=>{
+    if(items.length < 2) return;
+    items.sort((a, b)=>timeOf(a.vis) - timeOf(b.vis));
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(items.map(it=>it.pos)), Render.line(0xaeb8c1, {opacity:0.6}));
+    line.renderOrder = Render.ORDER.underLines;
+    line.userData = {type:items[0].kind, vis:items[0].vis};
+    stemGroup.add(line);
+  });
   if(dataMode==='synth'){   // no public glider data in the real window
-    const wps = [];
+    const wps = [], vis = {kind:'glider'};
     gliderTracks.forEach(track=>{
       const pts = track.waypoints.map(w=>{ const [x,z] = toXZ(w.lat, w.lon); return new THREE.Vector3(x, -w.depth*DEPTH_SCALE*state.exagg, z); });
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), Render.line(0xaeb8c1, {opacity:0.6}));
       line.renderOrder = Render.ORDER.underLines;
-      line.userData.type = 'glider';
+      line.userData = {type:'glider', vis};
       stemGroup.add(line);
       track.waypoints.forEach((w,wi)=>{
-        const item = {pos:pts[wi], kind:'glider', userData:{type:'glider', data:track, wp:w, wpIndex:wi}, hex:0xf4f4f4};
+        const item = {pos:pts[wi], kind:'glider', vis, userData:{type:'glider', data:track, wp:w, wpIndex:wi}, hex:0xf4f4f4};
         wps.push(item); markerItems.push(item);
       });
     });
-    if(wps.length) markerGroup.add(Object.assign(marksObject(wps, {shape:'circle', sizePx:MARK_PX}), {userData:{type:'glider'}}));
+    if(wps.length) markerGroup.add(Object.assign(marksObject(wps, {shape:markStyle('glider'), sizePx:MARK_PX}), {userData:{type:'glider', vis}}));
   }
   applyMarkerVisibility();
   placeSelection();
 }
 function applyMarkerVisibility(){
-  [markerGroup, stemGroup].forEach(g=>g.children.forEach(o=>{
-    if(o.userData.type==='argo') o.visible = state.showArgo;
-    if(o.userData.type==='glider') o.visible = state.showGlider;
-  }));
+  [markerGroup, stemGroup].forEach(g=>g.children.forEach(o=>{ o.visible = !!o.userData.vis && isShown(o.userData.vis); }));
 }
 
 /* ---- the selected float or waypoint: a static ring ---- */
@@ -103,9 +125,7 @@ function pickAt(clientX, clientY){
     const d = Math.hypot((_pp.x*0.5+0.5)*rect.width - x, (-_pp.y*0.5+0.5)*rect.height - y);
     if(d < bestD){ bestD = d; best = hit; }
   };
-  markerItems.forEach(it=>{
-    if((it.kind==='argo' && state.showArgo) || (it.kind==='glider' && state.showGlider)) consider(it.pos, it);
-  });
+  markerItems.forEach(it=>{ if(isShown(it.vis)) consider(it.pos, it); });
   if(trackGroup.visible) trackFixes.forEach(f=>consider(f.pos, {kind:'track', index:f.index}));
   return best;
 }
@@ -113,7 +133,7 @@ function handleClick(e){
   const hit = pickAt(e.clientX, e.clientY);
   if(!hit) return;
   if(hit.kind==='track') openTrack();
-  else openProfile(hit.kind==='argo' ? hit.userData.data.inst.userData : hit.userData.wp.inst.userData);
+  else openProfile(hit.userData.wp ? hit.userData.wp.inst.userData : hit.userData.data.inst.userData || hit.userData.data.inst);
 }
 buildMarkers();
 
@@ -125,10 +145,7 @@ function pickableMarks(kind){
     if(_pp.z > 1 || Math.abs(_pp.x) > 1 || Math.abs(_pp.y) > 1) return;
     out.push({kind:k, id, x:rect.left + (_pp.x*0.5+0.5)*rect.width, y:rect.top + (-_pp.y*0.5+0.5)*rect.height});
   };
-  markerItems.forEach(it=>{
-    if((it.kind==='argo' && !state.showArgo) || (it.kind==='glider' && !state.showGlider)) return;
-    add(it.pos, it.kind, it.kind==='argo' ? it.userData.data.inst.id : it.userData.wp.inst.id);
-  });
+  markerItems.forEach(it=>{ if(isShown(it.vis)) add(it.pos, it.kind, it.userData.wp ? it.userData.wp.inst.id : it.userData.data.inst.id); });
   if(trackGroup.visible) trackFixes.forEach(f=>add(f.pos, 'track', f.index));
   return kind ? out.filter(m=>m.kind===kind) : out;
 }

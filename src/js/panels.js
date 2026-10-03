@@ -7,9 +7,9 @@
 const profileState = {open:false, inst:null, current:null, floatId:null, tab:'temp', depthIdx:undefined};
 const trackState = {open:false};
 const fmtSigned = fmt.signed;
-const VAR_DP = {temp:2, sal:2, dens:2, chl:2};
+const VAR_DP = {temp:2, sal:2, dens:2, chl:2, oxy:1};
 // RMSE above which a profile's misfit is highlighted (per variable)
-const RMSE_WARN = {temp:0.5, sal:0.15, dens:0.15, chl:0.1};
+const RMSE_WARN = {temp:0.5, sal:0.15, dens:0.15, chl:0.1, oxy:10};
 
 function showPanel(which){   // 'empty' | 'profile' | 'track' | 'section'
   state.panel = which;
@@ -27,7 +27,7 @@ function closeSidePanels(){
 }
 function worstArgo(){
   let worst = null, top = -1;
-  instrumentsNow().filter(i=>i.kind==='argo').forEach(inst=>{
+  instrumentsNow().filter(i=>i.kind==='argo' && !i.imported).forEach(inst=>{
     const s = summarize(misfit(inst, state.time, 'temp'));
     if(s && s.rmse > top){ top = s.rmse; worst = inst; }
   });
@@ -55,7 +55,8 @@ function renderValidation(){
   const key = dataMode+state.time;
   if(validationFor===key) return;   // depends on the source and time step only
   validationFor = key;
-  const src = dataSource(), t = state.time, bands = [[0,100],[100,300],[300,1000]], insts = instrumentsNow();
+  const src = dataSource(), t = state.time, bands = [[0,100],[100,300],[300,1000]];
+  const insts = instrumentsNow().filter(i=>!i.imported);   // the summary is the built-in comparison (facts)
   const table = (v, title) => {
     const all = insts.flatMap(inst=>misfit(inst, t, v));
     const rows = bands.map(([z0,z1])=>{
@@ -136,26 +137,34 @@ function renderDerived(){
     : `<div class="qc pass">QC: no density inversions${nMissing ? `; ${nMissing} missing levels, shown as gaps` : ''}.</div>`;
 }
 
-function openProfile(userData){
-  const inst = userData.type==='argo' ? userData.data.inst : userData.wp.inst;
+// takes an instrument or its userData (a glider waypoint's userData carries wp)
+function openProfile(x){
+  const userData = x.userData && !x.data && !x.wp ? x.userData : x;
+  const inst = userData.wp ? userData.wp.inst : userData.data.inst;
+  const type = instrumentType(inst.kind);
   showPanel('profile');
   showSelection(inst);
   profileState.current = userData;
   profileState.inst = inst;
   profileState.floatId = inst.id;
   profileState.tab = 'temp';
+  syncProfileTabs();
   if(profileState.depthIdx===undefined) profileState.depthIdx = state.mode==='slice' ? state.depthIdx : 4;
-  document.querySelectorAll('.tabbtn').forEach(b=>setSelected(b, b.dataset.p==='temp'));
   const seabed = Math.round(bathyDepth(inst.lat, inst.lon));
   const where = `<span class="region">${fmt.esc(regionName(inst.lat, inst.lon))}</span><br>`+
     `${fmt.latLon2(inst.lat, inst.lon)}<br>`;
-  const sampling = `5–${inst.maxDepth} m, ${inst.levels.length} levels · seabed ${seabed} m`;
+  const sampling = `${inst.imported ? Math.round(inst.levels[0]) : 5}–${Math.round(inst.maxDepth)} m, ${inst.levels.length} levels · seabed ${seabed} m`;
   const MODE = {D:'Delayed mode (quality-controlled)', A:'Adjusted', R:'Real time'};
   const salNote = inst.salOk===false ? '<br>Salinity failed delayed-mode QC; density uses model salinity.' : '';
   ui.profName.textContent = userData.data.id;
-  ui.profKind.textContent = dataSource().profile.kind(inst, userData.wpIndex);
-  ui.profKind.className = 'kind ' + (userData.type==='argo' ? 'kind-argo' : 'kind-glider');
-  if(userData.type==='argo'){
+  ui.profKind.textContent = type.kindLabel(inst, userData.wpIndex);
+  ui.profKind.className = 'kind kind-' + (inst.imported ? type.marker : userData.type==='argo' ? 'argo' : 'glider');
+  if(inst.imported){
+    const gap = inst.gapH, far = Math.abs(gap) > 36;
+    ui.profMeta.innerHTML = where + `${fmt.esc(inst.datasetName)} · ${fmt.floatTime(inst.time)}<br>` +
+      `${far ? 'Compared with the nearest analysis, ' : 'Model: the analysis '}${fmt.dp(Math.abs(gap)/24, 1)} days ` +
+      `${gap >= 0 ? 'before' : 'after'} the profile<br>${sampling}`;
+  } else if(userData.type==='argo'){
     ui.profMeta.innerHTML = where + (inst.real
       ? `Cycle ${fmt.esc(inst.cycle)} · ${fmt.floatTime(inst.time)} · ${fmt.esc(modelGap(inst))}<br>`+
         `${fmt.esc(MODE[inst.mode]||inst.mode)} · ${sampling}${salNote}`
@@ -173,6 +182,17 @@ function modelGap(inst){
   if(h===null) return analysisGap(inst);
   return `model matched at ${fmt.floatTime(inst.model.time)}, ${fmt.dp(Math.abs(h), 1)} h ${h >= 0 ? 'before' : 'after'} the profile`;
 }
+// chlorophyll and oxygen tabs only for profiles that carry them; a hidden current tab falls back to temperature
+function syncProfileTabs(){
+  const inst = profileState.inst, p = inst ? observeProfile(inst, state.time) : null;
+  const tabs = document.querySelectorAll('.tabbtn');
+  tabs.forEach(b=>{
+    const k = b.dataset.p, arr = p && (k==='chl' || k==='oxy') ? obsArray(p, k) : null;
+    b.hidden = (k==='chl' || k==='oxy') && !(arr && arr.some(Number.isFinite));
+  });
+  if([...tabs].some(b=>b.hidden && b.dataset.p===profileState.tab)) profileState.tab = 'temp';
+  tabs.forEach(b=>setSelected(b, b.dataset.p===profileState.tab));
+}
 function setSelected(b, on){
   b.classList.toggle('active', on);
   b.setAttribute('aria-selected', on ? 'true' : 'false');
@@ -188,7 +208,8 @@ function followProfile(){
     const tab = profileState.tab;
     openProfile(match.userData);
     profileState.tab = tab;
-    document.querySelectorAll('.tabbtn').forEach(b=>setSelected(b, b.dataset.p===tab));
+    syncProfileTabs();
+    drawProfileChart();
     return;
   }
   profileState.inst = null;

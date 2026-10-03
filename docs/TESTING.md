@@ -5,7 +5,7 @@ install. numpy is needed only for the data-pipeline tests.
 
 ```
 python tools/check.py                 # hygiene, build.py --check, build into dist/, all suites
-python tools/check.py --quick         # unit + smoke (CI)
+python tools/check.py --quick         # unit + server + smoke (CI)
 python tools/run.py --build dist/OceanLens3D.html --suite smoke,tour
 python tools/run.py -k Tour           # tests whose id contains "Tour"
 python tools/run.py --list
@@ -25,7 +25,9 @@ goes to `tests/output/` (gitignored): `report.json`, `fingerprint.json`, `sizes/
 | Suite | What it checks |
 |---|---|
 | `unit` | The app's pure functions called inside the real page (EOS-80, TCHP, crossings, contours, misfit, `realAt`); the runtime `facts` against science's independent recomputation (`tests/facts_expected.json`, dotted paths under `__ol.facts`, written by `data-pipeline/facts_reference.py --expected`); the data-pipeline tests in `data-pipeline/test_*.py` |
+| `server` | `server/serve.py` in-process, no browser: REST shapes and values against the snapshot, JSON errors, CORS, the `?dataset=` page; WMS capabilities, a valid PNG with the palette colour at a known node (linear, log, both axis orders), transparent land, GetFeatureInfo, exceptions; WCS capabilities, DescribeCoverage, a CF NetCDF-3 round trip through `data-pipeline/ncio.py`, CSV; a CF NetCDF model file as a dataset |
 | `smoke` | Real mouse and keyboard input in both data modes: every variable × display mode, depth keys, sections, a float click, a storm-fix click, timeline and playback, overlays, PNG export, Ctrl chords left to the browser, help and about. Any console error or uncaught exception fails the test. No network requests. |
+| `extend` | Round-6 features: a variable and an instrument registered at runtime through `window.OceanLens` (the variable is drawn exactly as sampled); every file in `samples/` imports, shows markers and opens its profile; the import dialog adds and removes; the colour bar editor, opacity and exaggeration controls; the log scale matches the bar; the 3D isosurface builds and rebuilds; the page served by `server/serve.py` lists the server's datasets |
 | `tour` | All eight steps in both modes; the timer races (stop at once, skip the section step, stop before a panel opens, playback paused) |
 | `robust` | No WebGL (a message, no dead button); context loss (a notice, recovery); an error after boot is shown; GPU geometries flat over 20 rebuild cycles |
 | `a11y` | Accessible names, keyboard reachability, no text under 12 px, WCAG AA contrast, dialogs, page language (at 1366×768) |
@@ -86,7 +88,7 @@ tests from reaching the network.
 
 | Method | Purpose |
 |---|---|
-| `goto(url)`, `open_app(b, path, test=True, enter=True)` | Load a page, or load the app and wait for ready |
+| `goto(url)`, `open_app(b, path, test=True, enter=True)` | Load a page, or load the app and wait for ready; `path` may be an `http://` URL (the page served by `server/serve.py`) |
 | `eval(js)` | Evaluate an expression and return its JSON value. Wrap statements as `(()=>{…})()`. |
 | `wait(js, timeout)` | Poll until the expression is truthy |
 | `click(selector)`, `click_at(x, y)`, `drag(...)`, `wheel(...)` | Real pointer input |

@@ -44,34 +44,20 @@ function b64Int16(s){
   return new Int16Array(u8.buffer);
 }
 
-// defaults span the actual data range so nothing clips and no range is wasted
-const VAR_META = {
-  temp:{label:'Temperature', unit:'°C', defMin:5, defMax:32, palette:'temperature'},
-  sal: {label:'Salinity', unit:'PSU', defMin:32.4, defMax:36.6, palette:'salinity'},
-  cur: {label:'Current speed', unit:'m/s', defMin:0, defMax:0.36, palette:'speed'},
-  // 2D field derived from the temperature/salinity columns — see tchpColumn()
-  // 0–200 matches operational TCHP maps; the rare warm-eddy column above 200 saturates
-  tchp:{label:'Cyclone heat potential', unit:'kJ/cm²', defMin:0, defMax:200, palette:'heat'}
-};
-// isosurface threshold slider, in the variable's own units
-const ISO_META = {
-  temp:{min:5, max:32, step:0.1, def:26, dp:1},
-  sal: {min:32.4, max:36.6, step:0.05, def:35, dp:2},
-  cur: {min:0.02, max:0.36, step:0.01, def:0.1, dp:2}
-};
-// iso-slider limits and fallback colour ranges per data source; the colour defaults per view come from facts
-const MODE_DEFAULTS = {
-  synth:{temp:[5,32], sal:[32.4,36.6], cur:[0,0.36]},
-  real: {temp:[6,32], sal:[32.6,36.8], cur:[0,1.0]}
-};
+// Variable metadata comes from the registry (plugins.js): VAR_META[key] is the registered spec, with
+// defMin/defMax set for the current data source; ISO_META[key] exists only for variables with an iso slider.
+const VAR_META = {};
+const ISO_META = {};
+// fallback colour ranges and iso-slider limits for the current data source; the colour defaults per view come from facts
 function applyModeDefaults(){
-  const d = MODE_DEFAULTS[dataMode];
-  Object.keys(d).forEach(k=>{ VAR_META[k].defMin = d[k][0]; VAR_META[k].defMax = d[k][1]; });
-  ISO_META.temp.min = d.temp[0]; ISO_META.temp.max = d.temp[1];
-  ISO_META.sal.min = d.sal[0];   ISO_META.sal.max = d.sal[1];
-  ISO_META.cur.max = d.cur[1];   ISO_META.cur.def = +(d.cur[1]*0.3).toFixed(2);
+  Object.entries(VAR_META).forEach(([k, v])=>{
+    const r = v.ranges[dataMode] || v.ranges.real || [0, 1];
+    v.defMin = r[0]; v.defMax = r[1];
+    if(!v.iso) return;
+    ISO_META[k] = {min: v.iso.min ?? r[0], max: v.iso.max ?? r[1], step: v.iso.step, dp: v.iso.dp,
+                   def: typeof v.iso.def === 'function' ? v.iso.def(r) : v.iso.def};
+  });
 }
-applyModeDefaults();
 
 /* ============================================================
    STATE
@@ -79,10 +65,11 @@ applyModeDefaults();
    ============================================================ */
 const state = {
   // 'surface': opaque sea surface with faint deeper layers; 'layers': all depth levels;
-  // 'slice': one depth; 'iso': the depth of a value
-  variable:'temp', mode:'surface', depthIdx:4, isoVal:ISO_META.temp.def, opacity:0.25,
+  // 'slice': one depth; 'iso': the depth of a value; 'iso3d': the isosurface of a value
+  variable:'temp', mode:'surface', depthIdx:4, isoVal:26, opacity:0.25,
   exagg:3.0, showArgo:true, showGlider:true, showGrid:true, showFlow:true, colorMisfit:false, showTrack:true,
-  cbMin:VAR_META.temp.defMin, cbMax:VAR_META.temp.defMax, palette:'temperature', customRange:false,
+  cbMin:0, cbMax:1, palette:'temperature', scale:'linear', customRange:false,   // boot runs resetRange()
+  showOther:true, showAllImported:false,   // imported non-Argo/glider instruments; imported data outside ±1.5 days
   time:0, playing:false, sectionDraw:false,
   panel:'empty'   // which right-hand panel is open: 'empty' | 'profile' | 'track' | 'section'
 };

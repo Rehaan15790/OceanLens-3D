@@ -454,6 +454,174 @@ class GeneratedFiles(unittest.TestCase):
         self.assertTrue(F['comparison']['matchedInTime'])
 
 
+import ncio  # noqa: E402
+
+
+class NetCDFClassic(unittest.TestCase):
+    def dataset(self):
+        dims = {'time': None, 'depth': 3, 'station': 2, 'strlen': 6}
+        V = {'time': {'dims': ('time',), 'attrs': {'units': 'days since 1950-01-01 00:00:00 UTC'},
+                      'data': np.array([25700.0, 25700.5])},
+             'name': {'dims': ('station', 'strlen'), 'attrs': {}, 'data': np.array(['AB', 'CDEFGH'])},
+             'temp': {'dims': ('time', 'depth', 'station'), 'dtype': 'i2',
+                      'attrs': {'scale_factor': 0.001, 'add_offset': 20.0, '_FillValue': -32767,
+                                'standard_name': 'sea_water_temperature', 'units': 'degree_Celsius'},
+                      'data': np.array([[[1.5, np.nan], [2, 3], [4, 5]], [[6, 7], [8, 9], [10, 11]]])},
+             'flag': {'dims': ('time',), 'attrs': {}, 'data': np.array([1, 2], 'i1')}}
+        return dims, V
+
+    def test_round_trip_in_every_format(self):
+        dims, V = self.dataset()
+        for fmt in ('CDF-1', 'CDF-2', 'CDF-5'):
+            d = ncio.read_bytes(ncio.write_bytes(dims, V, {'title': 'x', 'n': 3}, fmt))
+            t = d['vars']['temp']['data']
+            self.assertEqual(d['dims']['time'], 2)
+            self.assertEqual(d['unlimited'], 'time')
+            self.assertTrue(np.isnan(t[0, 0, 1]))
+            np.testing.assert_allclose(t[1, 2], [10, 11], atol=1e-9)
+            self.assertEqual(list(d['vars']['name']['data']), ['AB', 'CDEFGH'])
+            self.assertEqual(list(d['vars']['flag']['data']), [1, 2])
+            self.assertEqual((d['attrs']['title'], d['attrs']['n']), ('x', 3))
+            self.assertEqual(ncio.read_bytes(ncio.write_bytes(dims, V, None, fmt), raw=True)['vars']['temp']['data'][0, 0, 1],
+                             -32767)
+
+    def test_single_record_variable_has_no_record_padding(self):
+        b = ncio.write_bytes({'t': None}, {'c': {'dims': ('t',), 'attrs': {}, 'data': np.array([1, 2, 3], 'i1')}})
+        self.assertEqual(list(ncio.read_bytes(b)['vars']['c']['data']), [1, 2, 3])
+        self.assertEqual(len(b) % 4, 3)
+
+    def test_cf_helpers(self):
+        dims, V = self.dataset()
+        d = ncio.read_bytes(ncio.write_bytes(dims, V))
+        self.assertEqual(ncio.cf_find(d, ['sea_water_temperature']), 'temp')
+        self.assertEqual(ncio.cf_axis(d, 'T', 'temp'), 'time')
+        self.assertEqual(ncio.cf_times(d['vars']['time'])[1], datetime(2020, 5, 13, 12, tzinfo=timezone.utc))
+        self.assertTrue(np.allclose(ncio.cf_depth({'attrs': {'positive': 'up'}, 'data': np.array([-5.0])}), [5]))
+
+    def test_bad_input(self):
+        with self.assertRaisesRegex(ncio.NetCDFError, 'NetCDF-4'):
+            ncio.read_bytes(b'\x89HDF\r\n\x1a\n' + b'\x00' * 32)
+        with self.assertRaises(ncio.NetCDFError):
+            ncio.read_bytes(b'CDF\x01' + b'\x00' * 3)
+        with self.assertRaisesRegex(ncio.NetCDFError, 'without _FillValue'):
+            ncio.write_bytes({'x': 1}, {'v': {'dims': ('x',), 'dtype': 'i2', 'attrs': {'scale_factor': 0.1},
+                                              'data': np.array([np.nan])}})
+
+    def test_the_real_erddap_sample_reads(self):
+        path = os.path.join(HERE, '..', 'samples', 'bgc-argo-2902120-c227.nc')
+        if not os.path.exists(path):
+            self.skipTest('samples/bgc-argo-2902120-c227.nc is missing')
+        d = ncio.read(path)
+        v = d['vars']
+        self.assertEqual(d['dims']['row'], 172)
+        self.assertEqual(set(v['platform_number']['data']), {'2902120'})
+        self.assertEqual(ncio.cf_times(v['time'])[0].strftime('%Y-%m-%d'), '2020-05-17')
+        good = np.isin(v['doxy_adjusted_qc']['data'], list(B.ARGO_GOOD)) & np.isfinite(v['doxy_adjusted']['data'])
+        self.assertGreater(good.sum(), 50)
+        self.assertTrue(((v['doxy_adjusted']['data'][good] > 0) & (v['doxy_adjusted']['data'][good] < 300)).all())
+
+
+class BgcSelection(unittest.TestCase):
+    names = B.bgc_cols('chla').split(',')
+
+    def row(self, w, c, pres, chla, qc='1', pqc='1', pa=''):
+        r = dict.fromkeys(self.names, '')
+        r.update(platform_number=w, cycle_number=str(c), pres=str(pres), pres_qc=pqc, pres_adjusted=pa,
+                 pres_adjusted_qc=pqc if pa else ' ', chla_adjusted=str(chla), chla_adjusted_qc=qc)
+        return [r[n] for n in self.names]
+
+    def test_flags_range_and_pressure(self):
+        rows = [self.row('2902120', 227, p, 0.2 + p / 1000) for p in (5, 10, 20)]
+        rows += [self.row('2902120', 227, 30, 0.5, qc='3'), self.row('2902120', 227, 40, 60.0),
+                 self.row('2902120', 227, 50, 0.1, pqc='4'), self.row('2902120', 227, 999, 0.1, pa='60')]
+        per, c = B.select_bgc(self.names, rows, 'chla')
+        self.assertEqual([p for p, _ in per[('2902120', 227)]], [5, 10, 20, 60])
+        self.assertEqual((c['rejected_qc'], c['rejected_range'], c['profiles'], c['floats']), (2, 1, 1, 1))
+        L = B.bgc_levels(per[('2902120', 227)], 15)
+        self.assertAlmostEqual(L[0], 0.205, places=3)
+
+    def test_header_is_checked(self):
+        with self.assertRaises(ValueError):
+            B.parse_bgc_csv('chla')(b'platform_number,chla\n,\n')
+
+    def test_query_uses_adjusted_values_only(self):
+        q = B.bgc_query('doxy')
+        self.assertIn('doxy_adjusted!=NaN', q)
+        self.assertNotIn(',doxy,', ',' + q[0] + ',')
+
+
+class ModelNetcdf(unittest.TestCase):
+    """--model-netcdf: a CF file written by ncio, on a finer, reversed, 0-360 grid in kelvin, comes back
+    on the app grid. The fields are linear in lat, lon and depth, so cell means and level interpolation are exact."""
+
+    @staticmethod
+    def truth(key, lat, lon, z, t):
+        return {'temp': 29 - z / 60 + 0.05 * lat + 0.01 * lon + t, 'sal': 34 + z / 2000 - 0.02 * lat,
+                'u': 0.1 + 0.001 * lon, 'v': -0.05 + 0.002 * lat - z / 20000}[key]
+
+    def write(self, path):
+        lat = np.arange(23.0, 4.99, -0.25)                       # north to south
+        lon = np.arange(60.0, 93.01, 0.25) % 360
+        dep = np.array([0.5, 10, 30, 60, 90, 125, 175, 250, 400, 600, 900, 1200.0])
+        T, Z, Y, X = np.meshgrid([0, 1], dep, lat, lon, indexing='ij')
+        land = (Y > 21.6) & (X > 88.6)
+        V = {'time': {'dims': ('time',), 'attrs': {'standard_name': 'time', 'units': 'hours since 2020-05-10 12:00:00'},
+                      'data': np.array([0.0, 144.0])},
+             'depth': {'dims': ('depth',), 'attrs': {'standard_name': 'depth', 'positive': 'down', 'units': 'm'}, 'data': dep},
+             'latitude': {'dims': ('latitude',), 'attrs': {'standard_name': 'latitude', 'units': 'degrees_north'}, 'data': lat},
+             'longitude': {'dims': ('longitude',), 'attrs': {'standard_name': 'longitude', 'units': 'degrees_east'},
+                           'data': lon}}
+        names = {'temp': ('thetao', 'sea_water_potential_temperature', 'K'), 'sal': ('so', 'sea_water_salinity', '1e-3'),
+                 'u': ('uo', 'eastward_sea_water_velocity', 'm s-1'), 'v': ('vo', 'northward_sea_water_velocity', 'm s-1')}
+        for key, (nm, sn, units) in names.items():
+            a = self.truth(key, Y, X, Z, T) + (273.15 if key == 'temp' else 0)
+            V[nm] = {'dims': ('time', 'depth', 'latitude', 'longitude'), 'dtype': 'f4',
+                     'attrs': {'standard_name': sn, 'units': units, '_FillValue': np.float32(1e20)},
+                     'data': np.where(land, np.nan, a).astype('f4')}
+        ncio.write(path, {'time': None, 'depth': len(dep), 'latitude': len(lat), 'longitude': len(lon)}, V,
+                   {'title': 'test model', 'Conventions': 'CF-1.6'}, 'CDF-2')
+
+    def test_regrid_matches_the_analytic_fields(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'model.nc')
+            self.write(path)
+            model, wet, times, info = B.model_from_netcdf(path, log=lambda *a: None)
+        self.assertEqual([t.strftime('%d %H') for t in times], ['10 12', '16 12'])
+        self.assertEqual(model.shape, (2, 4, len(B.DEPTHS), len(B.LATS), len(B.LONS)))
+        self.assertEqual(info['variables'], {'temp': 'thetao', 'sal': 'so', 'u': 'uo', 'v': 'vo'})
+        self.assertFalse(wet[0, -1, -1])
+        self.assertTrue(wet[:, 0, 0].all())
+        Z, Y, X = np.meshgrid(B.DEPTHS, B.LATS, B.LONS, indexing='ij')
+        Z = np.maximum(Z, 0.5)                                    # the first level stands in for the surface
+        full = wet & ~((Y >= 21.5) & (X >= 88.5))                 # cells by the coast average their wet points only
+        for vi, key in enumerate(('temp', 'sal', 'u', 'v')):
+            for t in (0, 1):
+                np.testing.assert_allclose(model[t, vi][full], self.truth(key, Y, X, Z, t)[full], atol=2e-4,
+                                           err_msg=key)
+
+    def test_missing_variable_is_named(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'm.nc')
+            ncio.write(path, {'x': 2}, {'x': {'dims': ('x',), 'attrs': {}, 'data': np.array([1.0, 2.0])}})
+            with self.assertRaisesRegex(B.InvariantError, 'no temp variable'):
+                B.model_from_netcdf(path, log=lambda *a: None)
+
+    def test_full_build_from_the_file(self):
+        cache = cache_dir()
+        if not cache:
+            self.skipTest('no raw cache')
+        with tempfile.TemporaryDirectory() as d:
+            path, out = os.path.join(d, 'model.nc'), os.path.join(d, 'snap.json')
+            self.write(path)
+            with mock.patch('builtins.print'):
+                self.assertEqual(B.main(['--cache', cache, '--model-netcdf', path, '--out', out]), 0)
+            with open(out, encoding='utf-8') as f:
+                snap = json.load(f)
+        self.assertEqual(snap['meta']['times'], ['2020-05-10T12:00Z', '2020-05-16T12:00Z'])
+        self.assertEqual(snap['meta']['provenance']['model']['file'], 'model.nc')
+        self.assertEqual({p['s'] for p in snap['argo']['profiles']}, {0, 1})
+
+
 def cache_dir():
     c = os.environ.get('OCEANLENS_CACHE') or os.path.join(HERE, 'cache')
     return c if os.path.isdir(c) and os.path.exists(os.path.join(c, 'argo.csv')) else None

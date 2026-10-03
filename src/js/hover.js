@@ -19,7 +19,7 @@ function hoverText(e){
     return `${fmtDeg(f.lat, f.lon)}<br>${t}${wind ? ' · '+wind : ''}`;
   }
   if(pick){
-    const inst = pick.kind==='argo' ? pick.userData.data.inst : pick.userData.wp.inst;
+    const inst = pick.userData.wp ? pick.userData.wp.inst : pick.userData.data.inst;
     const when = inst.real ? fmt.floatTime(inst.time) : '';
     return `${fmtDeg(inst.lat, inst.lon)}<br>${fmt.esc(inst.id)}${when ? ' · '+when : ''} (click to compare)`;
   }
@@ -34,8 +34,9 @@ function hoverText(e){
     }
   }
   const tchp = state.variable==='tchp';
-  if(!tchp && state.mode==='iso' && isoMesh){
-    const hit = hoverRay.intersectObject(isoMesh, false)[0];
+  const isoObj = tchp ? null : state.mode==='iso' ? isoMesh : state.mode==='iso3d' ? iso3dMesh : null;
+  if(isoObj && isoObj.visible){
+    const hit = hoverRay.intersectObject(isoObj, false)[0];
     if(hit){
       const {lat, lon} = worldLatLon(hit.point), z = -hit.point.y/(DEPTH_SCALE*state.exagg);
       return `${fmtDeg(lat, lon)}<br>${isoLabel()} at ${Math.round(z)} m`;

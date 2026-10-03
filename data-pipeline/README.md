@@ -75,3 +75,25 @@ A single JSON object, ASCII only, with `</` escaped so it can sit inside a `<scr
 ## Citations
 
 The text for each source is in `meta.citations` and in `THIRD_PARTY_NOTICES.md`.
+
+## BGC-Argo chlorophyll and oxygen
+
+`argo.C` (chlorophyll-a, mg/m³) and `argo.O` (dissolved oxygen, µmol/kg, quant `oxy`) come from the BGC-Argo
+synthetic profiles on Ifremer ERDDAP (`ArgoFloats-synthetic-BGC`, cache files `bgc_chla.csv` and `bgc_doxy.csv`,
+1–28 May 2020, ascending profiles, pressure ≤ 1100 dbar). Only `CHLA_ADJUSTED` / `DOXY_ADJUSTED` are used (raw
+real-time values never), with flags 1, 2, 5 or 8, pressure from `PRES_ADJUSTED` where present, and range checks
+(CHLA −0.1–50, DOXY −5–600). Values attach to the selected core profile with the same float and cycle and are gridded
+like temperature. HYCOM has no biogeochemistry, so real mode has no chlorophyll or oxygen field, only floats. Rules
+and counts are in `meta.provenance.bgc`.
+
+## Any CF NetCDF model output
+
+    python data-pipeline/build_snapshot.py --model-netcdf FILE --out data/other.json
+
+replaces HYCOM with a CF NetCDF-3 file (e.g. a Copernicus GLOBAL_MULTIYEAR_PHY_001_030 subset saved with
+`--netcdf3-compatible`, or an INCOIS LAS export). Temperature, salinity and both current components are found by
+`standard_name` (then common names such as thetao/so/uo/vo); longitudes are wrapped, axes sorted, kelvin and cm/s
+converted, each 0.5° cell is the mean of the native points inside it and levels are interpolated to the app depths.
+The file must reach 1000 m. Argo, bathymetry and the track still come from the cache; Argo profiles are matched to
+the file's times (up to 16). `ncio.py` is the numpy NetCDF classic reader/writer (CDF-1, CDF-2, CDF-5) used here
+and by `server/serve.py`.

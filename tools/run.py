@@ -3,7 +3,7 @@
 
     python tools/run.py                          all suites against the default build
     python tools/run.py --build dist/OceanLens3D.html --suite smoke,tour
-    python tools/run.py --quick                  unit + smoke (what CI runs)
+    python tools/run.py --quick                  unit + server + smoke (what CI runs)
     python tools/run.py --suite fingerprint --fp-baseline tests/output/fingerprint-before.json
     python tools/run.py --list
 
@@ -19,7 +19,9 @@ sys.path.insert(0, str(REPO / 'tests'))
 
 SUITES = {
     'unit':        ['test_pure', 'test_facts', '@pipeline'],
+    'server':      ['test_server'],
     'smoke':       ['test_splash', 'test_smoke'],
+    'extend':      ['test_extend'],
     'tour':        ['test_tour'],
     'robust':      ['test_robustness'],
     'render':      ['test_render'],
@@ -28,7 +30,7 @@ SUITES = {
     'perf':        ['test_perf'],
     'fingerprint': ['@fingerprint'],
 }
-QUICK = ['unit', 'smoke']
+QUICK = ['unit', 'server', 'smoke']
 OUTPUT = REPO / 'tests' / 'output'
 
 
@@ -150,7 +152,7 @@ def main():
                                  epilog=__doc__.split('\n', 2)[2])
     ap.add_argument('--build', help='built OceanLens3D.html to test')
     ap.add_argument('--suite', help='comma-separated: ' + ', '.join(SUITES))
-    ap.add_argument('--quick', action='store_true', help='unit and smoke only')
+    ap.add_argument('--quick', action='store_true', help='unit, server and smoke only')
     ap.add_argument('-k', dest='pattern', help='only tests whose id contains this text')
     ap.add_argument('--fp-baseline', help='fingerprint JSON to compare against')
     ap.add_argument('--fp-save', default=str(OUTPUT / 'fingerprint.json'), help='where to write the fingerprint')

@@ -93,7 +93,8 @@ class AppTestCase(unittest.TestCase):
         """Console errors, warnings and exceptions since this test began, minus the offline-font noise
         that the network test reports on its own."""
         return [f"[{p['kind']}] {p['text'][:200]} @{p['where']}" for p in self.b.problems(since=self.mark)
-                if not (p['kind'] == 'log:network' and 'ERR_NAME_NOT_RESOLVED' in p['text'])]
+                if not (p['kind'] == 'log:network' and 'ERR_NAME_NOT_RESOLVED' in p['text'])
+                and 'GPU stall due to ReadPixels' not in p['text']]     # driver note when tests read pixels back
 
     def assertNoProblems(self):
         self.b.pump(0.15)

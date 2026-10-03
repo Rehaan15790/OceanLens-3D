@@ -4,18 +4,22 @@
    tour.js) are the only writers of `state`; each ends in requestUpdate(), which also runs
    syncControls() to write the state back into every control, aria states included.
    ============================================================ */
-const MODES = ['surface', 'layers', 'slice', 'iso'];
+const MODES = ['surface', 'layers', 'slice', 'iso', 'iso3d'];
 const OVERLAYS = {swArgo:'showArgo', swMisfit:'colorMisfit', swGlider:'showGlider', swTrack:'showTrack',
                   swFlow:'showFlow', swGrid:'showGrid'};
+// switches ux may add; wired only when present
+const OPTIONAL_OVERLAYS = {swOther:'showOther', swAllImported:'showAllImported'};
+const optUi = Object.fromEntries(['scaleToggle', ...Object.keys(OPTIONAL_OVERLAYS)].map(id=>[id, document.getElementById(id)]));
+const ISO_MODES = ['iso', 'iso3d'];
 
-function isoMode(){ return state.variable!=='tchp' && state.mode==='iso'; }
+function isoMode(){ return !is2D(state.variable) && ISO_MODES.includes(state.mode) && !!ISO_META[state.variable]; }
 function isoLabel(){
   const meta = VAR_META[state.variable], im = ISO_META[state.variable];
   return state.variable==='temp' ? `D${+state.isoVal.toFixed(im.dp)} depth`
     : `${state.isoVal.toFixed(im.dp)} ${meta.unit} depth`;
 }
-// the view on screen: 'surface' | 'layers' | 'slice' | 'iso' | 'tchp'
-function currentView(){ return state.variable==='tchp' ? 'tchp' : state.mode; }
+// the view on screen: 'surface' | 'layers' | 'slice' | 'iso' | 'iso3d' | 'tchp' | 'field2d' (other 2D variables)
+function currentView(){ return state.variable==='tchp' ? 'tchp' : is2D(state.variable) ? 'field2d' : state.mode; }
 // the level the header statistics describe: the slice depth, otherwise the surface
 function readoutDepth(){ return state.mode==='slice' ? DEPTHS[state.depthIdx] : 0; }
 
@@ -31,7 +35,8 @@ function updateReadout(){
     return;
   }
   const n = fmt.decimals(state.variable);
-  ui.roVar.textContent = state.variable==='tchp' ? meta.label : `${meta.label} at ${fmt.depthLabel(readoutDepth())}`;
+  ui.roVar.textContent = is2D(state.variable) ? meta.label : `${meta.label} at ${fmt.depthLabel(readoutDepth())}` +
+    (hasModel(state.variable) ? '' : ', floats only');
   ui.roRange.textContent = Number.isFinite(s.min) ? `Range ${fmt.dp(s.min, n)}–${fmt.dp(s.max, n)} ${meta.unit}` : 'No data';
   ui.roMean.textContent = Number.isFinite(s.mean) ? `Mean ${fmt.dp(s.mean, n)} ${meta.unit}` : '';
 }
@@ -40,48 +45,62 @@ function updateReadout(){
 function colorbarSpec(){
   const view = currentView(), meta = VAR_META[state.variable];
   if(view==='iso' && isoInfo){
-    return {palette:'depth', min:isoInfo.lo, max:isoInfo.hi, unit:'m', label:isoLabel(), view,
+    return {palette:'depth', min:isoInfo.lo, max:isoInfo.hi, scale:'linear', unit:'m', label:isoLabel(), view,
             depth:null, isoValue:state.isoVal, editable:false};
   }
-  return {palette:state.palette, min:state.cbMin, max:state.cbMax, unit:meta.unit, label:meta.label, view,
-          depth: view==='tchp' ? null : readoutDepth(), isoValue:null, editable:true};
+  return {palette:state.palette, min:state.cbMin, max:state.cbMax, scale:state.scale, unit:meta.unit, label:meta.label,
+          view, depth: view==='tchp' || view==='field2d' || view==='iso3d' ? null : readoutDepth(),
+          isoValue: view==='iso3d' ? state.isoVal : null, editable:true};
 }
 function updateColorbarUI(){
   const spec = colorbarSpec(), meta = VAR_META[state.variable];
   ui.cbMin.value = spec.min; ui.cbMax.value = spec.max;
   ui.cbMin.disabled = ui.cbMax.disabled = ui.paletteSel.disabled = !spec.editable;
   ui.paletteSel.value = spec.palette;
-  ui.cbReset.hidden = !spec.editable || (!state.customRange && state.palette===meta.palette);
+  ui.cbReset.hidden = !spec.editable || (!state.customRange && state.palette===meta.palette && state.scale===meta.scale);
+  if(optUi.scaleToggle) optUi.scaleToggle.querySelectorAll('[data-scale]').forEach(b=>{
+    setPressed(b, b.dataset.scale===spec.scale);
+    b.disabled = !spec.editable;
+  });
 }
 
 /* ---- actions ---- */
 // the default colour range of the view on screen (science's facts): the level shown for the
 // surface and a slice, the whole column for all depth levels and the depth of a value, the heat
 // range for TCHP
+// variables without facts ranges (plugins, products) use the registry's range for the data source
 function viewRange(){
-  const r = facts()[dataMode].ranges[state.variable];
-  if(state.variable==='tchp' || state.mode==='layers' || state.mode==='iso') return r.column;
-  return r.levels[state.mode==='slice' ? state.depthIdx : 0];
+  const r = facts()[dataMode].ranges[state.variable], meta = VAR_META[state.variable], own = [meta.defMin, meta.defMax];
+  if(!r) return own;
+  if(is2D(state.variable) || state.mode==='layers' || ISO_MODES.includes(state.mode)) return r.column || own;
+  return (r.levels && r.levels[state.mode==='slice' ? state.depthIdx : 0]) || r.column || own;
+}
+// a log scale needs a positive minimum
+function logSafeMin(){
+  if(state.scale==='log' && !(state.cbMin > 0)) state.cbMin = state.cbMax > 0 ? +(state.cbMax/100).toPrecision(2) : 0.01;
 }
 // follow the view's default range unless the user has set their own
 function applyViewRange(){
   if(state.customRange) return;
   [state.cbMin, state.cbMax] = viewRange();
+  logSafeMin();
 }
 function resetRange(){
   state.customRange = false;
   state.palette = VAR_META[state.variable].palette;
+  state.scale = VAR_META[state.variable].scale;
   applyViewRange();
 }
 function setVariable(v){
   if(!VAR_META[v]) return;
   state.variable = v;
+  if(ISO_MODES.includes(state.mode) && !ISO_META[v]) state.mode = 'surface';
   resetRange();
   if(ISO_META[v]) state.isoVal = ISO_META[v].def;
   requestUpdate('full');
 }
 function setMode(m){
-  if(!MODES.includes(m)) return;
+  if(!MODES.includes(m) || (ISO_MODES.includes(m) && !ISO_META[state.variable])) return;
   state.mode = m;
   applyViewRange();
   requestUpdate('full');
@@ -109,10 +128,16 @@ function setExaggeration(e){
 }
 // false (and nothing changes) unless min < max
 function setRange(min, max){
-  if(!(Number.isFinite(min) && Number.isFinite(max) && min < max)) return false;
+  if(!(Number.isFinite(min) && Number.isFinite(max) && min < max) || (state.scale==='log' && min <= 0)) return false;
   state.cbMin = min; state.cbMax = max; state.customRange = true;
   requestUpdate('full');
   return true;
+}
+function setScale(s){
+  if(s!=='linear' && s!=='log') return;
+  state.scale = s;
+  logSafeMin();
+  requestUpdate('full');
 }
 function setPalette(name){
   if(typeof name !== 'string' || !name) return;
@@ -120,10 +145,10 @@ function setPalette(name){
   requestUpdate('full');
 }
 function setOverlay(key, on){
-  if(!Object.values(OVERLAYS).includes(key)) return;
+  if(!Object.values(OVERLAYS).includes(key) && !Object.values(OPTIONAL_OVERLAYS).includes(key)) return;
   state[key] = !!on;
   if(key==='colorMisfit' && on) state.showArgo = true;   // misfit colours need the floats on
-  requestUpdate(key==='colorMisfit' || key==='showTrack' ? 'full' : 'overlay');
+  requestUpdate(['colorMisfit', 'showTrack', 'showAllImported'].includes(key) ? 'full' : 'overlay');
 }
 // the overlays that change visibility only
 function applyOverlays(){
@@ -149,14 +174,18 @@ function syncIsoSlider(){
     setPressed(b, state.variable==='temp' && Math.abs(parseFloat(b.dataset.iso)-state.isoVal) < 1e-6);
   });
 }
+function setShowAllImported(on){ setOverlay('showAllImported', on); }
 function syncControls(){
-  const tchp = state.variable==='tchp', src = dataSource();
+  const tchp = is2D(state.variable), src = dataSource();
   ui.varPills.querySelectorAll('.pill').forEach(b=>setPressed(b, b.dataset.v===state.variable));
-  ui.modePills.querySelectorAll('.pill').forEach(b=>setPressed(b, b.dataset.m===state.mode));
+  ui.modePills.querySelectorAll('.pill').forEach(b=>{
+    setPressed(b, b.dataset.m===state.mode);
+    b.disabled = ISO_MODES.includes(b.dataset.m) && !ISO_META[state.variable];
+  });
   ui.modeGrp.hidden = tchp;
   ui.tchpNote.hidden = !tchp;
   ui.depthGrp.hidden = tchp || state.mode!=='slice';
-  ui.isoGrp.hidden = tchp || state.mode!=='iso';
+  ui.isoGrp.hidden = !isoMode();
   ui.depthSlider.max = DEPTHS.length-1;
   ui.depthSlider.value = state.depthIdx;
   ui.depthVal.textContent = fmt.depthLabel(DEPTHS[state.depthIdx]);
@@ -169,8 +198,14 @@ function syncControls(){
     ui[id].classList.toggle('on', state[key]);
     ui[id].setAttribute('aria-checked', state[key] ? 'true' : 'false');
   });
-  ui.swGlider.disabled = !src.hasGliders;
-  ui.rowGlider.title = src.hasGliders ? '' : 'No glider data in this data set';
+  Object.entries(OPTIONAL_OVERLAYS).forEach(([id, key])=>{
+    if(!optUi[id]) return;
+    optUi[id].classList.toggle('on', state[key]);
+    optUi[id].setAttribute('aria-checked', state[key] ? 'true' : 'false');
+  });
+  const gliders = src.hasGliders || (dataMode==='real' && importedInsts.some(i=>i.kind==='glider'));
+  ui.swGlider.disabled = !gliders;
+  ui.rowGlider.title = gliders ? '' : 'No glider data in this data set';
   updateColorbarUI();
   ui.dataToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.mode===dataMode));
   ui.secTrackBtn.textContent = src.section.trackPreset;
@@ -179,8 +214,25 @@ function syncControls(){
 }
 
 /* ---- controls -> actions ---- */
-ui.varPills.querySelectorAll('.pill').forEach(btn=>btn.addEventListener('click', ()=>setVariable(btn.dataset.v)));
-ui.modePills.querySelectorAll('.pill').forEach(btn=>btn.addEventListener('click', ()=>setMode(btn.dataset.m)));
+// pills by delegation, so pills added later (runtime variables, new views) work too
+ui.varPills.addEventListener('click', e=>{ const b = e.target.closest('.pill[data-v]'); if(b) setVariable(b.dataset.v); });
+ui.modePills.addEventListener('click', e=>{ const b = e.target.closest('.pill[data-m]'); if(b) setMode(b.dataset.m); });
+// a pill for every listed variable the page does not already have
+function addVariablePills(){
+  Object.values(VAR_META).forEach(v=>{
+    if(!v.listed || ui.varPills.querySelector(`.pill[data-v="${v.key}"]`)) return;
+    const b = document.createElement('button'), u = document.createElement('span');
+    b.type = 'button'; b.className = 'pill'; b.dataset.v = v.key; b.setAttribute('aria-pressed', 'false');
+    b.textContent = v.label + ' ';
+    u.className = 'unit'; u.textContent = v.unit;
+    b.appendChild(u);
+    ui.varPills.appendChild(b);
+  });
+}
+addVariablePills();
+OceanLens.on('variable', addVariablePills);
+if(optUi.scaleToggle) optUi.scaleToggle.addEventListener('click', e=>{ const b = e.target.closest('[data-scale]'); if(b) setScale(b.dataset.scale); });
+Object.entries(OPTIONAL_OVERLAYS).forEach(([id, key])=>{ if(optUi[id]) optUi[id].addEventListener('click', ()=>setOverlay(key, !state[key])); });
 ui.isoPresets.querySelectorAll('.preset').forEach(b=>b.addEventListener('click', ()=>setIso(parseFloat(b.dataset.iso))));
 ui.depthSlider.addEventListener('input', e=>setDepth(parseInt(e.target.value, 10)));
 ui.isoSlider.addEventListener('input', e=>setIso(parseFloat(e.target.value)));

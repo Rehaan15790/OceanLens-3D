@@ -6,6 +6,8 @@
      ramp texture: the vertex carries the value (uv.x), the texture turns it into a
      colour, so what is drawn between grid nodes is the colour of the interpolated
      value, and colour-range changes never touch geometry.
+   - The colour scale is linear or log10 (state.scale). Data surfaces apply it per pixel to the
+     interpolated value; CPU-coloured things use rampPos(), so both agree.
    - Data, categorical marks and lines are unlit, untoned and unfogged, so they match
      the colour bar and legend. Only terrain (land, walls, floor) is lit, tone mapped
      and fogged.
@@ -46,6 +48,23 @@ const Render = (() => {
     return [(a[o] + (a[o+3] - a[o])*f)/255, (a[o+1] + (a[o+4] - a[o+1])*f)/255, (a[o+2] + (a[o+5] - a[o+2])*f)/255];
   }
 
+  /* ---- colour scale: value -> ramp position, linear or log10 ----
+     In log mode anything at or below the floor (min, or max/1000 when min <= 0) takes the colour of min. */
+  const currentScale = () => (typeof state === 'object' && state && state.scale === 'log') ? 'log' : 'linear';
+  const logFloor = (min, max) => min > 0 ? min : max > 0 ? max*1e-3 : 1e-6;
+  // [a, b]: the range in the scale's own units (log10 of the values in log mode)
+  function scaleDomain(min, max, scale){
+    if(scale !== 'log') return [min, max];
+    const lo = logFloor(min, max);
+    return [Math.log10(lo), Math.log10(max > lo ? max : lo*10)];
+  }
+  // t in [0, 1] for value v on the key min..max; scale defaults to state.scale
+  function rampPos(v, min, max, scale){
+    const sc = scale || currentScale(), [a, b] = scaleDomain(min, max, sc);
+    const x = sc === 'log' ? Math.log10(Math.max(v, logFloor(min, max))) : v, t = (x - a)/((b - a) || 1);
+    return Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0));
+  }
+
   /* ---- ramp textures ---- */
   const rampImages = {};
   function rampTexture(name){
@@ -55,7 +74,7 @@ const Render = (() => {
       for(let i=0; i<RAMP_N; i++){ data[i*4] = a[i*3]; data[i*4+1] = a[i*3+1]; data[i*4+2] = a[i*3+2]; data[i*4+3] = 255; }
       rampImages[key] = data;
     }
-    // one texture per material: the range lives in the texture's uv transform
+    // one texture per material (setPalette swaps it); the range lives in the material's ramp uniforms
     const tex = new THREE.DataTexture(rampImages[key], RAMP_N, 1, THREE.RGBAFormat);
     tex.encoding = THREE.sRGBEncoding;
     tex.magFilter = tex.minFilter = THREE.LinearFilter;
@@ -65,19 +84,37 @@ const Render = (() => {
     tex.name = key;                 // r128 textures have no userData
     return tex;
   }
-  // value → texel centre: min lands on entry 0, max on entry 255, anything outside clamps
-  function setRange(material, min, max){
-    const tex = material.map, span = (max - min) || 1, s = (RAMP_N - 1)/(RAMP_N*span);
-    tex.repeat.set(s, 1);
-    tex.offset.set(0.5/RAMP_N - min*s, 0);
+  // value -> texel centre: min lands on entry 0, max on entry 255, anything outside clamps.
+  // scale: 'linear' (default) or 'log'; a uniform change, no recompile, no geometry change
+  function setRange(material, min, max, scale){
+    const sc = scale === 'log' ? 'log' : 'linear', [a, b] = scaleDomain(min, max, sc);
+    const s = (RAMP_N - 1)/(RAMP_N*((b - a) || 1)), u = material.userData.ramp;
+    u.st.value.set(s, 0.5/RAMP_N - a*s);
+    u.log.value = sc === 'log' ? 1 : 0;
+    u.floor.value = logFloor(min, max);
     material.userData.range = [min, max];
+    material.userData.scale = sc;
   }
   function setPalette(material, name){
     if(paletteKey(name) === material.map.name) return;
     const [min, max] = material.userData.range, old = material.map;
     material.map = rampTexture(name);
     old.dispose();
-    setRange(material, min, max);
+    setRange(material, min, max, material.userData.scale);
+  }
+  // Data surfaces sample the ramp in the fragment shader from the interpolated raw value (uv.x), so the
+  // log is taken per pixel: what is drawn between nodes is the colour of the interpolated value.
+  function patchRamp(shader){
+    const u = this.userData.ramp;
+    shader.uniforms.olRampST = u.st; shader.uniforms.olRampLog = u.log; shader.uniforms.olRampFloor = u.floor;
+    shader.vertexShader = 'varying float vOlRaw;\n' +
+      shader.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\n\tvOlRaw = uv.x;');
+    shader.fragmentShader = 'uniform vec2 olRampST;\nuniform float olRampLog;\nuniform float olRampFloor;\nvarying float vOlRaw;\n' +
+      shader.fragmentShader.replace('#include <map_fragment>', `#ifdef USE_MAP
+	float olV = olRampLog > 0.5 ? log2(max(vOlRaw, olRampFloor))*0.30102999566398 : vOlRaw;
+	vec4 texelColor = mapTexelToLinear(texture2D(map, vec2(olV*olRampST.x + olRampST.y, 0.5)));
+	diffuseColor *= texelColor;
+#endif`);
   }
 
   /* ---- draw order bands (transparent pass; the opaque pass needs none) ---- */
@@ -113,8 +150,8 @@ const Render = (() => {
      Every material in the app comes from one of these, so the policy above holds. */
   const common = {toneMapped:false, fog:false};
 
-  // A surface coloured by a data value: layers, slices, the TCHP map, the section curtain, isosurfaces.
-  // opts: palette, min, max; opaque (default true); opacity (translucent only);
+  // A surface coloured by a data value: layers, slices, the TCHP map, the section curtain, depth of a value.
+  // opts: palette, min, max, scale ('linear' | 'log'); opaque (default true); opacity (translucent only);
   //       masked: geometry carries RGBA vertex colours whose alpha is the land/seabed mask;
   //       underLines: lines are drawn on this surface, so push it back a little in depth.
   function dataSurface(opts){
@@ -130,7 +167,9 @@ const Render = (() => {
       polygonOffset: o.underLines, polygonOffsetFactor: 1, polygonOffsetUnits: 1
     }));
     m.userData.kind = 'data';
-    setRange(m, o.min, o.max);
+    m.userData.ramp = {st:{value:new THREE.Vector2(1, 0)}, log:{value:0}, floor:{value:1e-6}};
+    m.onBeforeCompile = patchRamp;   // one shared function: one program cache key for all data surfaces
+    setRange(m, o.min, o.max, o.scale);
     return m;
   }
   // Solid categorical colour (rings, fixes, occluder): sRGB hex in, unlit.
@@ -189,7 +228,16 @@ const Render = (() => {
       t.encoding = THREE.sRGBEncoding;
       return (markTextures[key] = t);
     }
+    // diamond: Argo; circle: glider; triangle (point down): CTD cast; square: mooring; cross: anything else
     if(shape === 'diamond'){ g.moveTo(s/2, 3); g.lineTo(s-3, s/2); g.lineTo(s/2, s-3); g.lineTo(3, s/2); g.closePath(); }
+    else if(shape === 'triangle'){ g.moveTo(4, 8); g.lineTo(s-4, 8); g.lineTo(s/2, s-3); g.closePath(); }
+    else if(shape === 'square') g.rect(10, 10, s-20, s-20);
+    else if(shape === 'cross'){
+      g.translate(s/2, s/2); g.rotate(Math.PI/4);
+      const a = 8, b = 27;
+      [[-a,-b],[a,-b],[a,-a],[b,-a],[b,a],[a,a],[a,b],[-a,b],[-a,a],[-b,a],[-b,-a],[-a,-a]].forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y));
+      g.closePath();
+    }
     else g.arc(s/2, s/2, s/2 - 4, 0, Math.PI*2);
     g.fillStyle = '#ffffff'; g.fill();
     g.lineWidth = 6; g.strokeStyle = outline === 'light' ? '#f4f4f4' : '#0b0f13'; g.stroke();
@@ -204,6 +252,22 @@ const Render = (() => {
     m.userData.kind = 'marks';
     return m;
   }
+  // The 3D isosurface: one colour (sRGB 0-1, from paletteColor), lightly shaded by a light just above the
+  // camera so its shape reads. Faces turned to that light show the key's colour exactly; the rest darken to 70 %.
+  // Written straight to the screen like the backdrop, so the colour stays sRGB. Opacity follows m.opacity.
+  function isoShaded(rgb){
+    const m = new THREE.ShaderMaterial({
+      uniforms:{olColor:{value:new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2])}, olOpacity:{get value(){ return m.opacity; }}},
+      vertexShader:`varying vec3 vN; void main(){ vN = normalMatrix*normal; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }`,
+      fragmentShader:`uniform vec3 olColor; uniform float olOpacity; varying vec3 vN;
+        void main(){ float d = abs(dot(normalize(vN), vec3(0.0, 0.410365, 0.911922)));
+        gl_FragColor = vec4(olColor*(0.7 + 0.3*d), olOpacity); }`,
+      side:THREE.DoubleSide, toneMapped:false
+    });
+    m.userData.kind = 'iso3d';
+    return m;
+  }
+  function setIsoColour(m, rgb){ m.uniforms.olColor.value.setRGB(rgb[0], rgb[1], rgb[2]); dirty = true; }
   // The backdrop gradient: a ShaderMaterial writes its uniforms straight to the screen (no encoding).
   function backdrop(topHex, bottomHex){
     const m = new THREE.ShaderMaterial({
@@ -289,7 +353,7 @@ const Render = (() => {
   const groups = new Map();       // name → Object3D
   function attach(c){ ctx = c; }
   function register(name, obj){ groups.set(name, obj); return obj; }
-  const ISOLATE_KEEP = new Set(['surface','layers','slice','tchp','iso','d26','section','land','floor','backdrop']);
+  const ISOLATE_KEEP = new Set(['surface','layers','slice','tchp','iso','iso3d','d26','section','land','floor','backdrop']);
 
   function renderNow(){
     if(ctx.beforeRender) ctx.beforeRender();
@@ -349,8 +413,9 @@ const Render = (() => {
   // pts: [[lat, lon, depthM], …], one render for all
   const pixelsAt = (pts, opts) => readMany(pts.map(p => screenOf(p[0], p[1], p[2])), opts).map((res, k) => withHit(res, pts[k][0], pts[k][1], pts[k][2]));
   const readAt = (x, y, opts) => readMany([[x, y]], opts)[0];
-  function expectedColour(name, value, min, max){
-    return paletteColor(name, (value - min)/(max - min)).map(c => Math.round(c*255));
+  // the colour the key gives a value; scale defaults to state.scale
+  function expectedColour(name, value, min, max, scale){
+    return paletteColor(name, rampPos(value, min, max, scale)).map(c => Math.round(c*255));
   }
   function toggle(name, visible){ const o = groups.get(name); if(o) o.visible = visible; return !!o; }
 
@@ -371,8 +436,8 @@ const Render = (() => {
     expectedColour, groups:() => [...groups.keys()], toggle,
     marks:kind => typeof pickableMarks === 'function' ? pickableMarks(kind) : []};
 
-  return {testMode, gpuColor, gpuHex, paletteKey, paletteColor, rampLUT, renderForExport, rampTexture, setRange, setPalette,
-    ORDER, layerOrder, invalidate, takeDirty, setSurfaceRole, dataSurface, flat, line, vertexColoured, terrain, marks, backdrop,
+  return {testMode, gpuColor, gpuHex, paletteKey, paletteColor, rampPos, rampLUT, renderForExport, rampTexture, setRange, setPalette,
+    ORDER, layerOrder, invalidate, takeDirty, setSurfaceRole, dataSurface, flat, line, vertexColoured, terrain, marks, isoShaded, setIsoColour, backdrop,
     setValues, fillMasked, createRenderer, pixelRatio, applySize, attach, register, test};
 })();
 // the 2D charts, colour bar and export call paletteColor(key, t); palettes.js holds data only

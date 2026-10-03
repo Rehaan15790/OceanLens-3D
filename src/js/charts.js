@@ -11,11 +11,35 @@ function theme(){
   return chartTheme;
 }
 // readout formats (until fmt.js has them): temperature 1 dp, salinity and speed 2 dp
-const VALUE_DP = {temp:1, sal:2, cur:2, dens:2, chl:2};
+const VALUE_DP = {temp:1, sal:2, cur:2, dens:2, chl:2, oxy:0};
+const PROFILE_UNITS = {temp:'°C', sal:'PSU', chl:'mg/m³', oxy:'µmol/kg', dens:'kg/m³'};
+const PROFILE_NAMES = {temp:'temperature', sal:'salinity', chl:'chlorophyll', oxy:'oxygen', dens:'density'};
+const escapeHtml = s=>String(s).replace(/[&<>"']/g, c=>({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[c]);
+// an instrument type's label from the plugin registry, for imported and plugin data
+function instrumentLabel(kind){
+  const reg = window.OceanLens && OceanLens.instrument ? OceanLens.instrument(kind) : null;
+  return reg && reg.label ? reg.label : kind ? kind.charAt(0).toUpperCase()+kind.slice(1) : 'Observed';
+}
 const ll2 = (lat, lon)=>`${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
 const signed = (v, dp)=>(v >= 0 ? '+' : '−') + Math.abs(v).toFixed(dp);
 
 // a canvas sized in CSS pixels, drawn at device resolution so text stays sharp
+// value -> ramp position, linear or log10 as the GPU does it (graphics' Render.rampPos)
+function scaleNow(){ return state.scale==='log' ? 'log' : 'linear'; }
+function rampT(v, min, max, scale=scaleNow()){
+  if(Render.rampPos) return Render.rampPos(v, min, max, scale);
+  return Math.max(0, Math.min(1, (v-min)/(max-min)));
+}
+// round ticks for a log axis: 1, 2, 5 per decade, thinned to about `target`
+function logTicks(min, max, target=5){
+  const lo = min > 0 ? min : max*1e-3, out = [];
+  for(let e=Math.floor(Math.log10(lo)); e<=Math.ceil(Math.log10(max)); e++)
+    [1, 2, 5].forEach(m=>{ const v = +(m*Math.pow(10, e)).toPrecision(1); if(v >= lo*0.999 && v <= max*1.001) out.push(v); });
+  if(out.length <= target) return out;
+  const decades = out.filter(v=>{ const l = Math.log10(v); return Math.abs(l-Math.round(l)) < 1e-9; });
+  return decades.length >= 2 ? decades : out.filter((v,i)=>i%2===0);
+}
+const logTickText = v=>v >= 1 ? String(Math.round(v)) : String(+v.toPrecision(1));
 function hidpiCanvas(c, cssH){
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = c.clientWidth || 272;
@@ -67,7 +91,7 @@ function drawSectionPanel(){
     for(let py=0; py<ih; py++){
       const z = maxD*Math.pow((py+0.5)/ih, 2);
       const rgb = col.land ? [0.34,0.30,0.21] : z > col.seabed ? [0.055,0.075,0.094]
-        : paletteColor(spec.palette, (col.at(z)-spec.min)/(spec.max-spec.min));
+        : paletteColor(spec.palette, rampT(col.at(z), spec.min, spec.max, spec.scale || scaleNow()));
       const o = (py*iw+px)*4;
       img.data[o] = rgb[0]*255; img.data[o+1] = rgb[1]*255; img.data[o+2] = rgb[2]*255; img.data[o+3] = 255;
     }
@@ -201,14 +225,16 @@ function drawProfileChart(){
   if(!inst) return;
   const th = theme();
   const {ctx, w, h} = hidpiCanvas(document.getElementById('profChart'), 300);
-  const {lat, lon} = inst, t = state.time, tab = profileState.tab;
+  // imported profiles shown at other times ("show all") stay compared with their nearest analysis
+  const {lat, lon} = inst, t = inst.real && Number.isInteger(inst.snap) ? inst.snap : state.time, tab = profileState.tab;
   const p = observeProfile(inst, t);
-  const units = {temp:'°C', sal:'PSU', chl:'mg/m³', dens:'kg/m³'};
+  const units = PROFILE_UNITS;
   const obs = obsArray(p, tab);
-  const hasObs = !(tab==='chl' && !inst.bgc);
+  const hasObs = obs.some(v=>Number.isFinite(v));
+  const real = dataMode==='real', modelName = real ? 'HYCOM' : 'The model';
 
-  // the chart spans the observed profile: 1000 m for Argo, a few hundred metres for gliders
-  const maxDepth = inst.kind==='argo' ? 1000 : Math.ceil(inst.maxDepth/100)*100;
+  // the chart spans the observed profile (model levels stop at 1000 m): 1000 m for Argo, less for shallow casts
+  const maxDepth = inst.kind==='argo' || !(inst.maxDepth > 0) ? 1000 : Math.min(1000, Math.ceil(inst.maxDepth/100)*100);
   const modelZ = DEPTHS.filter(z=>z<maxDepth).concat([maxDepth]);
   const modelV = modelZ.map(z=>modelAt(tab, lat, lon, z, t));
   const hasModel = modelV.every(v=>v!==null);   // false for chlorophyll in real mode (HYCOM has none)
@@ -272,11 +298,11 @@ function drawProfileChart(){
       if(!p.flag[k] || !Number.isFinite(obs[k])) return;
       ctx.beginPath(); ctx.arc(xOf(obs[k]), yOf(z), 4.5, 0, 7); ctx.stroke();
     });
-    if(!hasModel){ ctx.fillStyle = th.text2; ctx.textAlign = 'right'; ctx.fillText('HYCOM has no chlorophyll.', w-pad.r-4, pad.t+plotH-8); }
+    if(!hasModel){ ctx.fillStyle = th.text2; ctx.textAlign = 'right'; ctx.fillText(`${modelName} has no ${PROFILE_NAMES[tab]}.`, w-pad.r-4, pad.t+plotH-8); }
   } else {
     ctx.fillStyle = th.text2; ctx.textAlign = 'center';
-    ctx.fillText('No chlorophyll sensor on this float.', pad.l+plotW/2, pad.t+plotH*0.5);
-    if(!hasModel) ctx.fillText('HYCOM has no chlorophyll.', pad.l+plotW/2, pad.t+plotH*0.5+16);
+    ctx.fillText(`No ${PROFILE_NAMES[tab]} in this profile.`, pad.l+plotW/2, pad.t+plotH*0.5);
+    if(!hasModel) ctx.fillText(`${modelName} has no ${PROFILE_NAMES[tab]}.`, pad.l+plotW/2, pad.t+plotH*0.5+16);
   }
 
   // the depth the value cards show
@@ -289,10 +315,10 @@ function drawProfileChart(){
   }
   ctx.textAlign = 'left';
 
-  const real = dataMode==='real';
-  const obsName = inst.kind==='argo' ? (real ? 'Argo' : 'Synthetic float') : 'Synthetic glider';
+  const obsName = inst.imported ? instrumentLabel(inst.kind)
+    : inst.kind==='argo' ? (real ? 'Argo' : 'Synthetic float') : 'Synthetic glider';
   document.getElementById('obsLegend').innerHTML =
-    `<span><i class="lg lg-obs"></i>${obsName}</span>` +
+    `<span><i class="lg lg-obs"></i>${escapeHtml(obsName)}</span>` +
     (hasModel ? `<span><i class="lg lg-model"></i>${real ? 'HYCOM' : 'Model'}</span>` : '') +
     (p.flag.some(f=>f) ? `<span><i class="lg lg-flag"></i>QC flag</span>` : '');
 
@@ -353,9 +379,19 @@ function keySpec(){
     legend.push({sw:'track', text:dataSource().legend.track});
     if(stormNow.visible && dataSource().legend.now) legend.push({sw:'storm', text:dataSource().legend.now});
   }
+  importedLegend().forEach(r=>legend.push(r));
+  const scale = c.scale || (c.editable ? scaleNow() : 'linear');
+  if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);
+  if(scale==='log') notes.unshift('Log colour scale.');
   notes.push(`Vertical exaggeration ≈ ${exaggerationRatio(state.exagg)} : 1; below 1000 m the sea floor is compressed a further 12×.`);
+  if(scale==='log'){
+    const end = v=>String(+v.toPrecision(2));
+    return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale,
+      ticks:logTicks(c.min, c.max).map(v=>({v, text:logTickText(v)})),
+      ends:{min:end(c.min > 0 ? c.min : c.max*1e-3), max:end(c.max)}, marks, legend, note:notes.join(' ')};
+  }
   const ticks = niceTicks(c.min, c.max), step = ticks.length > 1 ? ticks[1]-ticks[0] : 1;
-  return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit,
+  return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale,
     ticks:ticks.map(v=>({v, text:tickText(v, step)})),
     ends:{min:tickText(c.min, step), max:tickText(c.max, step)}, marks, legend, note:notes.join(' ')};
 }
@@ -370,7 +406,7 @@ function renderKey(spec){
     const k = Math.min(255, Math.round(i/(cv.width-1)*255))*3;
     g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(i, 0, 1, cv.height);
   }
-  const pos = v=>(v-spec.min)/(spec.max-spec.min)*100;
+  const pos = v=>rampT(v, spec.min, spec.max, spec.scale || 'linear')*100;
   const row = $('keyTicks'); row.textContent = '';
   const add = (cls, left, text)=>{ const el = document.createElement('span'); el.className = cls; el.style.left = left+'%';
     if(text!==undefined) el.textContent = text; row.appendChild(el); };
@@ -383,6 +419,7 @@ function renderKey(spec){
   spec.marks.forEach((m,i)=>{ add('key-mark', markPos[i]); if(m!==lo && m!==hi) add('key-tick mark', markPos[i], m.text); });
   spec.ticks.forEach(t=>{ const p = pos(t.v); if([0, 100, ...markPos].every(o=>Math.abs(o-p) >= 12)) add('key-tick', p, t.text); });
   $('keyRange').textContent = `Colour range ${spec.ends.min} to ${spec.ends.max} ${spec.unit}` +
+    (spec.scale==='log' ? ', log scale' : '') +
     (spec.marks.length ? `; marked: ${spec.marks.map(m=>m.text).join(', ')}` : '') + '.';
   const ul = $('keyLegend'); ul.textContent = '';
   spec.legend.forEach(r=>{
@@ -429,4 +466,24 @@ function updateLegend(){
   renderTimeLabels();
   const r = document.getElementById('exRatioVal');
   if(r) r.textContent = exaggerationRatio(state.exagg);
+  const cn = document.getElementById('chlNote'), vars = dataSource().vars;
+  if(cn){ cn.textContent = state.variable==='chl' && vars ? vars.chlNote : ''; cn.hidden = !cn.textContent; }
+  if(typeof importUI!=='undefined') importUI.syncMode();
+}
+
+// legend rows for imported instruments whose marker the built-in rows don't cover
+const MARKER_SWATCH = {triangle:'ctd', square:'mooring', cross:'other', circle:'glider', diamond:'float'};
+function importedLegend(){
+  const OL = window.OceanLens;
+  if(!OL || !OL.datasets || dataMode!=='real') return [];
+  const types = new Set();
+  OL.datasets().forEach(ds=>Object.keys(ds.types || {}).forEach(t=>types.add(t)));
+  const rows = [];
+  types.forEach(t=>{
+    const spec = OL.instrument ? OL.instrument(t) : null, sw = MARKER_SWATCH[spec && spec.marker] || 'other';
+    if(sw==='float') return;                                   // shares the Argo row
+    const on = sw==='glider' ? state.showGlider : state.showOther!==false;
+    if(on) rows.push({sw, text:`${instrumentLabel(t)} (your data)`});
+  });
+  return rows;
 }

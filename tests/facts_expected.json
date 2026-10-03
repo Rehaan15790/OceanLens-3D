@@ -44,6 +44,26 @@
   "tol": 0.005,
   "value": 36.15
  },
+ "real.argo.bgc.chl": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 36
+ },
+ "real.argo.bgc.floats": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 14
+ },
+ "real.argo.bgc.oxy": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 24
+ },
+ "real.argo.bgc.profiles": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 39
+ },
  "real.argo.floats": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,

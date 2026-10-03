@@ -57,6 +57,9 @@ function realFacts(){
   const P = realProfiles;
   F.argo = {profiles:P.length, floats:new Set(P.map(p=>p.id)).size,
     perAnalysis:times.map((_,t)=>P.filter(p=>p.snap===t).length), tempOnly:P.filter(p=>!p.salOk).length};
+  const B = P.filter(p=>p.bgc || p.hasOxy);          // BGC-Argo: chlorophyll and/or oxygen passed QC
+  F.argo.bgc = {floats:new Set(B.map(p=>p.id)).size, profiles:B.length,
+    chl:P.filter(p=>p.bgc).length, oxy:P.filter(p=>p.hasOxy).length};
 
   const T = REAL_TRACK;
   if(T.length) Object.assign(F, trackFacts(T));
@@ -126,7 +129,9 @@ function realFacts(){
   F.view = viewFacts();
   F.ranges = rangeFacts((vi, t, k, i, j)=>node(t, vi, k, i, j),
     (t, k, i, j)=>Math.hypot(node(t,2,k,i,j), node(t,3,k,i,j)),
-    (p, t, seabed)=>tchpAt(p.lat, p.lon, t, seabed));
+    (p, t, seabed)=>tchpAt(p.lat, p.lon, t, seabed),
+    k=>{ const L = P.length ? P[0].levels : [], n = nearestLevel(L, DEPTHS[k]);   // floats only: HYCOM has no chlorophyll
+      return P.map(p=>p.obs.C[n]).filter(Number.isFinite); });
   return F;
 }
 
@@ -184,7 +189,9 @@ function synthFacts(){
     (vi, t, k, i, j)=>{ const p = gridPts[nodeIndex(i,j)]; return (vi ? synthSal : synthTemp)(p.lat, p.lon, DEPTHS[k], t); },
     (t, k, i, j)=>{ const p = gridPts[nodeIndex(i,j)], c = synthCurrentUV(p.lat, p.lon, DEPTHS[k], t); return Math.hypot(c.u, c.v); },
     (p, t, seabed)=>tchpColumn(columnInterp(DEPTHS.map(d=>synthTemp(p.lat, p.lon, d, t))),
-      columnInterp(DEPTHS.map(d=>synthSal(p.lat, p.lon, d, t))), Math.min(seabed, DEPTHS[DEPTHS.length-1])).q)};
+      columnInterp(DEPTHS.map(d=>synthSal(p.lat, p.lon, d, t))), Math.min(seabed, DEPTHS[DEPTHS.length-1])).q,
+    k=>{ const v = []; gridPts.forEach((p,idx)=>{ if(!gridLand[idx] && DEPTHS[k] <= gridSeabed[idx])
+      for(let t=0;t<NT;t++) v.push(synthChl(p.lat, p.lon, DEPTHS[k], t)); }); return v; })};
 }
 
 function viewFacts(){
@@ -196,7 +203,9 @@ function viewFacts(){
 // Default colour ranges: p1–p99 over the visible nodes of all analyses, per level and for the whole
 // column, rounded outward (temperature 1 °C, salinity 0.1, speed from 0 up to 0.1 m/s). At the surface
 // and down to 50 m the temperature range always includes 26 °C. Heat: 0 to p99 rounded up to 25 kJ/cm².
-function rangeFacts(val, speed, heat){
+// Chlorophyll (log scale): p1–p99 rounded outward on the 1-2-5 sequence, never below 0.01 mg/m³; a level
+// with fewer than 5 float values takes the column range.
+function rangeFacts(val, speed, heat, chlAt){
   const down = (x, s)=>Math.floor(x/s+1e-9)*s, up = (x, s)=>Math.ceil(x/s-1e-9)*s, r3 = x=>Math.round(x*1000)/1000;
   const visible = (k, fn)=>{
     const v = [];
@@ -224,5 +233,28 @@ function rangeFacts(val, speed, heat){
     gridPts.forEach((p,idx)=>{ if(!gridLand[idx]) for(let t=0;t<NT;t++) q.push(heat(p, t, gridSeabed[idx])); });
     return {column:[0, up(percentile(q, 99), 25)]};
   });
+  if(chlAt) lazyProp(R, 'chl', ()=>{
+    const per = DEPTHS.map((_,k)=>chlAt(k)), all = [].concat(...per);
+    if(all.length < 5) return null;
+    const column = logRange(all);
+    return {levels:per.map(v=>v.length >= 5 ? logRange(v) : column), column};
+  });
   return R;
+}
+
+// p1–p99 of positive values, widened to the 1-2-5 sequence (0.01, 0.02, 0.05, 0.1 …), floor 0.01
+function logRange(v){
+  const nice = (x, dir)=>{
+    const e = Math.floor(Math.log10(x)), m = x/Math.pow(10, e), steps = [1, 2, 5, 10];
+    const s = dir < 0 ? [...steps].reverse().find(q=>q <= m*(1+1e-9)) : steps.find(q=>q >= m*(1-1e-9));
+    return +(s*Math.pow(10, e)).toPrecision(3);
+  };
+  const pos = v.filter(x=>x > 0);
+  const lo = Math.max(0.01, nice(Math.max(percentile(pos, 1), 0.01), -1));
+  return [lo, Math.max(nice(percentile(pos, 99), 1), lo*10)];
+}
+function nearestLevel(L, d){
+  let best = 0;
+  L.forEach((z,k)=>{ if(Math.abs(z-d) < Math.abs(L[best]-d)) best = k; });
+  return best;
 }

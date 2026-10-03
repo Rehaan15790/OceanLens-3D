@@ -38,7 +38,9 @@ const SOURCES = {
               'not independent validation.'; }},
     profile: {kind: inst=>inst.bgc ? 'BGC-Argo float' : 'Argo float',
               none:(id, t)=>`${id} has no profile within 1.5 days of ${fmt.dayMonth(META.times[t])}.`},
-    export: {caveat:'Data: HYCOM GOFS 3.1 · Argo GDAC · IBTrACS v04r01 · ETOPO1. Not for operational use.',
+    vars: {chlNote:'From BGC-Argo floats only. HYCOM has no chlorophyll, so the map has no model field: click a float to see its profile.',
+           chlKey:'HYCOM has no chlorophyll; only BGC-Argo floats carry it.'},
+    export: {caveat:'Data: HYCOM GOFS 3.1 · Argo GDAC incl. BGC-Argo · IBTrACS v04r01 · ETOPO1. Not for operational use.',
              file: (t, variable, view)=>`oceanlens3d_real_${META.times[t].slice(0, 10)}_${variable}_${view}.png`}
   },
   synth: {
@@ -64,6 +66,7 @@ const SOURCES = {
           foot:'Synthetic observations compared with the synthetic model in the same way. They are not real data.'},
     profile: {kind: (inst, wpIndex)=>inst.kind==='glider' ? `Synthetic glider, waypoint ${wpIndex+1}` : 'Synthetic float',
               none:()=>''},
+    vars: {chlNote:'Synthetic field generated in the browser, shown on a log scale by default.', chlKey:''},
     export: {caveat:'Synthetic demo data, not a real ocean state. Not for operational use.',
              file: (t, variable, view)=>`oceanlens3d_synthetic_day${fmt.demoDay(t)}_${variable}_${view}.png`}
   }
@@ -76,14 +79,18 @@ function fieldCurrentUV(lat, lon, depth, t){ return dataSource().uv(lat, lon, de
 function fieldChl(lat, lon, depth, t){ return dataSource().chl(lat, lon, depth, t); }
 function currentSpeed(lat,lon,depth,t){const {u,v}=fieldCurrentUV(lat,lon,depth,t);return Math.sqrt(u*u+v*v);}
 
+// any registered variable at a point; a 2D variable ignores the depth
 function getVal(varKey, lat, lon, depth, t){
-  if(varKey==='temp') return fieldTemp(lat,lon,depth,t);
-  if(varKey==='sal') return fieldSal(lat,lon,depth,t);
-  if(varKey==='cur') return currentSpeed(lat,lon,depth,t);
-  throw new Error(`getVal: ${varKey} is not a 3D field`);
+  const v = VAR_META[varKey];
+  if(!v) throw new Error(`getVal: no variable ${varKey}`);
+  return v.sample(lat, lon, v.dims===2 ? 0 : depth, t);
 }
-// the profiles on screen: real ones belong to one snapshot, synthetic instruments are fixed
-function instrumentsNow(){ return dataSource().instruments(state.time); }
+// the profiles on screen: real ones belong to one snapshot, synthetic instruments are fixed;
+// imported ones (real mode only) show within ±1.5 days of the analysis, or all with "show all"
+function instrumentsNow(){
+  const own = dataSource().instruments(state.time);
+  return dataMode==='real' && importedInsts.length ? own.concat(importedNow(state.time)) : own;
+}
 function currentTrack(){ return dataSource().fixes(); }
 function caveatText(){ return dataSource().export.caveat; }
 

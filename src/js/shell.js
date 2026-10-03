@@ -48,9 +48,12 @@ const shell = (()=>{
   // dialogs: focus moves in on open, Tab stays inside, Esc closes, focus returns to the opener
   let current = null, opener = null, onClose = null;
   const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  // dialogs with steps hide whole blocks, so only rendered controls count
+  const focusables = el=>[...el.querySelectorAll(FOCUSABLE)].filter(f=>f.getClientRects().length > 0);
   function openDialog(dialogEl, closeFn){
     opener = document.activeElement; current = dialogEl; onClose = closeFn;
-    const first = dialogEl.querySelector(FOCUSABLE);
+    const first = focusables(dialogEl)[0];
+    if(!first && !dialogEl.hasAttribute('tabindex')) dialogEl.tabIndex = -1;
     (first || dialogEl).focus();
   }
   function closeDialog(){
@@ -64,8 +67,8 @@ const shell = (()=>{
     if(!current) return;
     if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); closeDialog(); return; }
     if(e.key!=='Tab') return;
-    const f = [...current.querySelectorAll(FOCUSABLE)];
-    if(!f.length) return;
+    const f = focusables(current);
+    if(!f.length){ e.preventDefault(); return; }
     const i = f.indexOf(document.activeElement);
     if(e.shiftKey && i<=0){ e.preventDefault(); f[f.length-1].focus(); }
     else if(!e.shiftKey && i===f.length-1){ e.preventDefault(); f[0].focus(); }

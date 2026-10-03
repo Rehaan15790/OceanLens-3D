@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="css/tour.css">
 <link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/overlays.css">
+<link rel="stylesheet" href="css/import.css">
 <script src="js/boot-guard.js"></script>
 <!-- Three.js r128 (MIT licence) is inlined so the file runs offline: no CDN, no server -->
 <script src="../vendor/three.r128.min.js"></script>
@@ -71,6 +72,8 @@
         <button type="button" data-mode="real" aria-pressed="true">Real data: Amphan 2020</button>
         <button type="button" data-mode="synth" aria-pressed="false">Synthetic demo</button>
       </div>
+      <button id="addDataBtn" class="btn" aria-haspopup="dialog">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>Add data</button>
       <button id="presentBtn" class="btn" aria-pressed="false">Guided tour</button>
       <button id="aboutBtn" class="btn" aria-haspopup="dialog">About the data</button>
       <button id="rightToggle" data-needs-shell hidden class="icon-btn" aria-controls="right" aria-expanded="true" aria-label="Hide analysis panel" title="Hide analysis panel">
@@ -84,6 +87,14 @@
     <!-- ============ left: controls ============ -->
     <aside id="left" aria-label="Controls">
 
+      <!-- server mode only: architect fills #sourceSel from /api/v1/datasets and sets data-state on #sourceStatus -->
+      <section class="grp" id="sourceGrp" aria-labelledby="grpSource" hidden>
+        <h2 id="grpSource" class="grp-label">Data source</h2>
+        <label for="sourceSel" class="sr-only">Data set on the server</label>
+        <select id="sourceSel"></select>
+        <p id="sourceStatus" class="source-status" data-state="live" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="sourceStatusText">Live: connected to the OceanLens server</span></p>
+      </section>
+
       <section class="grp" aria-labelledby="grpVar">
         <h2 id="grpVar" class="grp-label">Variable</h2>
         <div class="pillrow" id="varPills" role="group" aria-labelledby="grpVar">
@@ -91,7 +102,10 @@
           <button type="button" class="pill" data-v="sal" aria-pressed="false">Salinity <span class="unit">PSU</span></button>
           <button type="button" class="pill" data-v="cur" aria-pressed="false">Current speed <span class="unit">m/s</span></button>
           <button type="button" class="pill" data-v="tchp" aria-pressed="false">Cyclone heat potential <span class="unit">kJ/cm²</span></button>
+          <button type="button" class="pill" data-v="chl" aria-pressed="false" aria-describedby="chlNote">Chlorophyll <span class="unit">mg/m³</span></button>
         </div>
+        <!-- charts.js updateLegend() fills this from the copy table and shows it while chlorophyll is selected -->
+        <p id="chlNote" class="note var-note" hidden></p>
       </section>
 
       <section class="grp" id="modeGrp" aria-labelledby="grpView">
@@ -102,6 +116,7 @@
           <button type="button" class="pill" data-m="layers" aria-pressed="false">All depth levels</button>
           <button type="button" class="pill" data-m="slice" aria-pressed="false">Depth slice</button>
           <button type="button" class="pill" data-m="iso" aria-pressed="false">Depth of a value</button>
+          <button type="button" class="pill" data-m="iso3d" aria-pressed="false">Isosurface (3D)</button>
         </div>
       </section>
 
@@ -141,12 +156,29 @@
             <span id="hintMisfit" class="sr-only">Shade each float by the temperature RMSE between its profile and the model</span></li>
           <li id="rowGlider"><span id="lblGlider">Glider tracks</span>
             <button type="button" class="switch on" id="swGlider" role="switch" aria-checked="true" aria-labelledby="lblGlider"><span class="knob"></span></button></li>
+          <li id="rowOther" hidden><span id="lblOther">CTD, moorings and other</span>
+            <button type="button" class="switch on" id="swOther" role="switch" aria-checked="true" aria-labelledby="lblOther" aria-describedby="hintOther"><span class="knob"></span></button>
+            <span id="hintOther" class="sr-only">Markers for imported instruments that are not Argo floats or gliders</span></li>
           <li id="rowTrack"><span id="lblTrack">Cyclone track</span>
             <button type="button" class="switch on" id="swTrack" role="switch" aria-checked="true" aria-labelledby="lblTrack"><span class="knob"></span></button></li>
           <li><span id="lblFlow">Current streaks</span>
             <button type="button" class="switch on" id="swFlow" role="switch" aria-checked="true" aria-labelledby="lblFlow"><span class="knob"></span></button></li>
           <li><span id="lblGrid">Grid</span>
             <button type="button" class="switch on" id="swGrid" role="switch" aria-checked="true" aria-labelledby="lblGrid"><span class="knob"></span></button></li>
+        </ul>
+      </section>
+
+      <!-- imported data sets: import-ui.js renders the list -->
+      <section class="grp" id="userDataGrp" aria-labelledby="grpUser">
+        <h2 id="grpUser" class="grp-label">Your data</h2>
+        <ul id="userDataList" class="data-list"></ul>
+        <p id="userDataEmpty" class="note">None added. Use Add data, or drop a CSV or NetCDF file on the 3D view.</p>
+        <p id="userDataMode" class="note" hidden>Your data is shown in Real data mode only.</p>
+        <p id="importAnnounce" class="note import-done" aria-live="polite"></p>
+        <ul class="switch-list" id="userDataOpts" hidden>
+          <li id="rowAllImported"><span id="lblAllTimes">Show all times</span>
+            <button type="button" class="switch" id="swAllImported" role="switch" aria-checked="false" aria-labelledby="lblAllTimes" aria-describedby="hintAllTimes"><span class="knob"></span></button>
+            <span id="hintAllTimes" class="sr-only">When off, only your profiles within 1.5 days of the analysis time are shown</span></li>
         </ul>
       </section>
 
@@ -171,6 +203,13 @@
             <option value="heat">Heat</option>
             <option value="depth" hidden>Depth</option>
           </select>
+          <div class="scale-row">
+            <span id="lblScale">Scale</span>
+            <div id="scaleToggle" class="segmented segmented-small" role="group" aria-labelledby="lblScale">
+              <button type="button" data-scale="linear" aria-pressed="true">Linear</button>
+              <button type="button" data-scale="log" aria-pressed="false">Log</button>
+            </div>
+          </div>
           <div class="minmax">
             <label for="cbMin">Min</label><input type="number" id="cbMin" step="0.1" inputmode="decimal">
             <label for="cbMax">Max</label><input type="number" id="cbMax" step="0.1" inputmode="decimal">
@@ -243,6 +282,7 @@
       </div>
 
       <p id="drawHint" class="chip" role="status">Drag across the sea to cut a section. <kbd>Esc</kbd> cancels.</p>
+      <div id="dropZone" aria-hidden="true" hidden><p class="drop-text">Drop to add CSV or NetCDF data</p></div>
     </main>
 
     <!-- ============ right: analysis ============ -->
@@ -275,6 +315,7 @@
           <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="sal">Salinity</button>
           <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="dens">Density</button>
           <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="chl">Chlorophyll</button>
+          <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="oxy">Oxygen</button>
         </div>
         <div id="obsLegend" class="chart-legend"></div>
         <canvas id="profChart" role="img" aria-label="Observed profile and model column"></canvas>
@@ -345,8 +386,8 @@
         <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
     </div>
     <table class="keys">
-      <tr><th scope="row"><kbd>1</kbd>–<kbd>4</kbd></th><td>Temperature, salinity, current speed, cyclone heat potential</td></tr>
-      <tr><th scope="row"><kbd>U</kbd> <kbd>L</kbd> <kbd>D</kbd> <kbd>I</kbd></th><td>Surface, all depth levels, depth slice, depth of a value</td></tr>
+      <tr><th scope="row"><kbd>1</kbd>–<kbd>5</kbd></th><td>Temperature, salinity, current speed, cyclone heat potential, chlorophyll</td></tr>
+      <tr><th scope="row"><kbd>U</kbd> <kbd>L</kbd> <kbd>D</kbd> <kbd>I</kbd> <kbd>O</kbd></th><td>Surface, all depth levels, depth slice, depth of a value, isosurface (3D)</td></tr>
       <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Depth slice up or down</td></tr>
       <tr><th scope="row"><kbd>Space</kbd></th><td>Play or pause the analyses</td></tr>
       <tr><th scope="row"><kbd>S</kbd></th><td>Draw a vertical section (drag across the sea)</td></tr>
@@ -389,6 +430,11 @@
       <dd><span data-fact="argo.profiles" data-fmt="int"></span> profiles from
         <span data-fact="argo.floats" data-fmt="int"></span> floats, from the Argo GDAC via Ifremer ERDDAP. Delayed-mode
         or adjusted values where they exist; only QC flags 1, 2, 5 and 8 kept. <span data-copy="about.argoMatch"></span></dd>
+      <dt>BGC-Argo</dt>
+      <dd>Chlorophyll-a (mg/m³) and dissolved oxygen (µmol/kg) from <span data-fact="argo.bgc.profiles" data-fmt="int"></span>
+        profiles of <span data-fact="argo.bgc.floats" data-fmt="int"></span> biogeochemical floats, from the synthetic
+        BGC-Argo profiles on Ifremer ERDDAP. Adjusted values only, never raw real-time values, with QC flags 1, 2, 5 or 8
+        and a range check (chlorophyll −0.1 to 50 mg/m³, oxygen −5 to 600 µmol/kg).</dd>
       <dt>Cyclone</dt>
       <dd>Six-hourly positions and winds from IBTrACS v04r01: IMD (RSMC New Delhi, 3-minute winds) and JTWC (1-minute
         winds), shown side by side.</dd>
@@ -407,8 +453,20 @@
         <span data-fact="view.deepCompression" data-fmt="int"></span> times.</li>
       <li>Current labels mark where these currents usually flow; they are not drawn from this data.</li>
       <li>Current streaks move at an illustrative speed, not a physical one.</li>
-      <li>HYCOM has no chlorophyll, and no glider data is included for this period.</li>
+      <li>HYCOM has no chlorophyll or oxygen. In real mode those come only from BGC-Argo floats, so there is no model
+        column to compare them with.</li>
+      <li>No glider data is included for this period.</li>
     </ul>
+
+    <h3>Add your own data</h3>
+    <p>Add data (or a file dropped on the 3D view) reads CSV or tab-separated text and NetCDF-3 files: Argo profile
+      files, Ifremer EGO glider files, ERDDAP tabledap downloads and CF profile data. Profiles appear as markers, follow
+      the timeline (within 1.5 days of each analysis, unless you show all times) and open in the profile panel against
+      the model column. Files are read in this browser and never uploaded. NetCDF-4 files need converting first, with
+      the data pipeline or by exporting NetCDF-3 or CSV.</p>
+    <p>The <code>samples/</code> folder next to this file has three to try: a real BGC-Argo profile from May 2020
+      as NetCDF-3 from Ifremer ERDDAP, real Argo temperature and salinity samples from this snapshot as CSV, and a
+      made-up CTD cast for testing, which is not real data. <code>samples/README.md</code> says which is which.</p>
 
     <h3>Synthetic demo</h3>
     <p>Analytic fields, floats and gliders generated in the browser to show the tools on data with known behaviour,
@@ -420,6 +478,7 @@
     <!-- wording supplied by science; platform mirrors it in THIRD_PARTY_NOTICES.md -->
     <ul class="about-bullets" id="aboutCitations">
       <li data-cite="argo"></li>
+      <li data-cite="bgc_argo"></li>
       <li data-cite="hycom"></li>
       <li data-cite="ibtracs"></li>
       <li data-cite="etopo1"></li>
@@ -433,10 +492,71 @@
 </div>
 
 
+<!-- Add data: import-ui.js runs the steps (pick, review, error) and calls architect's import API -->
+<div id="importOverlay" class="overlay">
+  <div id="importCard" class="dialog" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+    <div class="dialog-head">
+      <h2 id="importTitle">Add data</h2>
+      <button type="button" id="importClose" class="icon-btn" aria-label="Close Add data">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+
+    <div id="importPick">
+      <p>Add profiles from your own instruments. They appear on the map with the Argo floats, follow the timeline and
+        open in the profile panel against the model column. The file is read in this browser; nothing is uploaded.</p>
+      <div class="import-choose">
+        <button type="button" id="importChoose" class="btn btn-primary">Choose a file</button>
+        <span class="field-note">or drop one on the 3D view</span>
+      </div>
+      <h3>Files it reads</h3>
+      <ul class="about-bullets">
+        <li>Comma-, tab- or semicolon-separated text with one row per sample: latitude, longitude, time, depth or
+          pressure, and any of temperature, salinity, chlorophyll and oxygen.</li>
+        <li>NetCDF-3 (.nc): Argo profile files, Ifremer EGO glider files, ERDDAP tabledap downloads, CF profile data.</li>
+      </ul>
+      <p class="field-note">NetCDF-4 files need converting first: run them through the data pipeline, or export them
+        as NetCDF-3 or CSV.</p>
+    </div>
+
+    <div id="importReview" hidden>
+      <p id="importFile" class="import-file"></p>
+      <dl id="importSummary" class="import-summary"></dl>
+      <fieldset id="importMapping" class="field import-mapping" hidden>
+        <legend>Match the columns</legend>
+        <p class="field-note">Some column names weren't recognised. Pick the column that holds each quantity.
+          Latitude, longitude, time and depth or pressure are required.</p>
+        <div id="importMapGrid" class="map-grid"></div>
+      </fieldset>
+      <div class="import-fields">
+        <div class="field">
+          <label for="importType">Instrument</label>
+          <select id="importType"></select>
+        </div>
+        <div class="field">
+          <label for="importName">Name in the list</label>
+          <input type="text" id="importName" maxlength="48" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+    </div>
+
+    <p id="importStatus" class="import-status" role="status"></p>
+    <p id="importError" class="import-error" role="alert" hidden></p>
+    <div class="dialog-actions import-actions">
+      <button type="button" id="importBack" class="btn" hidden>Choose another file</button>
+      <button type="button" id="importCancel" class="btn">Cancel</button>
+      <button type="button" id="importAdd" class="btn btn-primary" hidden>Add to map</button>
+    </div>
+  </div>
+  <input type="file" id="importInput" accept=".csv,.tsv,.txt,.nc,.cdf" hidden>
+</div>
+
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
 <!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element. -->
 <script src="js/config.js"></script>
 <script src="js/palettes.js"></script>
+<script src="js/plugins.js"></script>
+<script src="js/plugins/ctd.js"></script>
+<script src="js/plugins/mooring.js"></script>
 <script src="js/fmt.js"></script>
 <script src="js/geo.js"></script>
 <script src="js/data-source.js"></script>
@@ -450,6 +570,7 @@
 <script src="js/terrain.js"></script>
 <script src="js/labels.js"></script>
 <script src="js/volume.js"></script>
+<script src="js/isosurface.js"></script>
 <script src="js/track.js"></script>
 <script src="js/section.js"></script>
 <script src="js/charts.js"></script>
@@ -460,6 +581,11 @@
 <script src="js/tour-steps.js"></script>
 <script src="js/tour.js"></script>
 <script src="js/panels.js"></script>
+<script src="js/import/csv.js"></script>
+<script src="js/import/netcdf3.js"></script>
+<script src="js/import/import.js"></script>
+<script src="js/import/formats.js"></script>
+<script src="js/import-ui.js"></script>
 <script src="js/shell.js"></script>
 <script src="js/hover.js"></script>
 <script src="js/export.js"></script>

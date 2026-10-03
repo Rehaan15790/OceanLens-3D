@@ -135,6 +135,9 @@ def ramps():
         # dark green -> green -> yellow-green -> pale yellow; fast is light
         'speed': ('Speed', designed(12, 92, [0, 0.4, 0.8, 1], [0.06, 0.12, 0.15, 0.13],
                                     [0, 0.4, 0.8, 1], [165, 145, 125, 105])),
+        # dark violet-blue -> teal -> green -> pale yellow-green; high chlorophyll is light (meant for log scale)
+        'chlorophyll': ('Chlorophyll', designed(14, 93, [0, 0.4, 0.8, 1], [0.08, 0.11, 0.15, 0.14],
+                                                [0, 0.35, 0.7, 1], [290, 225, 150, 112])),
         'heat': ('Heat', from_stops([[0, [22, 18, 44]], [0.3, [104, 32, 96]], [0.6, [214, 78, 52]],
                                      [0.85, [248, 176, 62]], [1, [255, 244, 204]]])),
         # index 0 = shallow (pale), 255 = deep (dark)

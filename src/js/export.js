@@ -127,7 +127,8 @@ function exportPNG(){
   paintKey(g, spec, 12, cssH-40, 280);
 
   // caveat along the bottom
-  const cav = dataSource().export.caveat;
+  const added = dataMode==='real' && window.OceanLens && OceanLens.datasets ? OceanLens.datasets().length : 0;
+  const cav = dataSource().export.caveat + (added ? ` Includes ${added===1 ? 'one added data set' : added+' added data sets'}.` : '');
   g.font = CHART_FONT; const cw = g.measureText(cav).width;
   g.fillStyle = '#12181e'; g.fillRect(12, cssH-32, cw+20, 22);
   g.fillStyle = th.text2; g.fillText(cav, 22, cssH-17);

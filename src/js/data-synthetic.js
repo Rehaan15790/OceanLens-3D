@@ -128,7 +128,7 @@ function instrumentTraits(key, lon){
     chlScale: 0.7 + r()*0.8
   };
 }
-function makeInstrument(id, kind, lat, lon, maxDepth, opts){
+function makeInstrument(id, kind, lat, lon, maxDepth, opts = {}){
   const levels = kind==='argo' ? ARGO_LEVELS.filter(z=>z<=maxDepth)
     : Array.from({length:Math.floor(maxDepth/5)}, (_,k)=>5+k*5);   // gliders sample every ~5 m
   return Object.assign({id, kind, lat, lon, maxDepth, levels, bgc:false, spikeAt:null,

@@ -1,5 +1,6 @@
 # Lean by design: Actions minutes and artifact storage are metered on private repositories.
-# One Linux job runs the same checks as `python tools/check.py --quick` locally. The full suite runs on demand.
+# One Linux job runs the same checks as `python tools/check.py --quick` locally (unit, server, smoke).
+# The full suite runs on demand.
 name: check
 
 on:

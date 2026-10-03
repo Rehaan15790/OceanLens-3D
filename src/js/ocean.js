@@ -25,13 +25,20 @@ function soundSpeed(T,S,z){
 const MODEL_FN = {temp:fieldTemp, sal:fieldSal, chl:fieldChl, cur:currentSpeed};
 // the model is known on its levels only; in between it is linearly interpolated,
 // which is how a Class 4 comparison reads gridded output
-function modelAt(varKey, lat, lon, z, t){
+// the registry's sampler (plugin variables too); null when the variable has no model field in this mode
+function modelFn(varKey){
   if(varKey==='chl' && dataMode==='real') return null;   // HYCOM has no chlorophyll
+  if(typeof hasModel==='function' && !hasModel(varKey)) return null;
+  const meta = typeof VAR_META!=='undefined' ? VAR_META[varKey] : null;
+  return (meta && meta.dims!==2 && meta.sample) || MODEL_FN[varKey] || null;
+}
+function modelAt(varKey, lat, lon, z, t){
   if(varKey==='dens'){
     const T = modelAt('temp',lat,lon,z,t), S = modelAt('sal',lat,lon,z,t);
     return T===null || S===null ? null : sigmaT(S,T);
   }
-  const fn = MODEL_FN[varKey];
+  const fn = modelFn(varKey);
+  if(!fn) return null;
   if(z <= 0) return fn(lat,lon,0,t);
   for(let k=0;k<DEPTHS.length-1;k++){
     if(z <= DEPTHS[k+1]){
@@ -118,7 +125,7 @@ function observeProfile(inst, t){
   obsCache.set(key, p);
   return p;
 }
-function obsArray(p, varKey){ return {temp:p.T, sal:p.S, chl:p.C, dens:p.D}[varKey]; }
+function obsArray(p, varKey){ return {temp:p.T, sal:p.S, chl:p.C, oxy:p.O, dens:p.D}[varKey] || (p.vars ? p.vars[varKey] : undefined); }
 // value of an observed profile at depth z; null inside a gap, on a flagged level or below the
 // profile. Above the first level (5 m) the first value stands in for the mixed layer.
 function obsInterp(p, arr){

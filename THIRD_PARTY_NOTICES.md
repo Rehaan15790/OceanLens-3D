@@ -57,6 +57,10 @@ that contribute to it (https://argo.ucsd.edu, https://www.ocean-ops.org). The Ar
 Ocean Observing System. Argo (2000), Argo float data and metadata from Global Data Assembly Centre (Argo GDAC),
 SEANOE, doi:10.17882/42182; accessed through the Ifremer ERDDAP server.
 
+Chlorophyll-a and dissolved oxygen: BGC-Argo synthetic profiles (Argo GDAC, doi:10.17882/42182) via Ifremer ERDDAP
+(ArgoFloats-synthetic-BGC). Bittig, H. C. et al. (2019), A BGC-Argo guide, Front. Mar. Sci. 6:502,
+doi:10.3389/fmars.2019.00502. The sample file `samples/bgc-argo-2902120-c227.nc` is one such profile.
+
 ### ETOPO1 Global Relief Model
 
 Amante, C. and B. W. Eakins (2009), ETOPO1 1 Arc-Minute Global Relief Model: Procedures, Data Sources and Analysis,

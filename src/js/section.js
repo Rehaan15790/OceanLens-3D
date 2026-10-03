@@ -23,11 +23,12 @@ for(let z=200; z<=1000; z+=25) SECTION_Z.push(z);
 // what the section is coloured by. TCHP is a 2-D field, so in that view the section shows
 // temperature, whose 26 °C line is the bottom of the heat the map measures
 function sectionSpec(){
-  if(state.variable==='tchp'){
-    return {v:'temp', palette:'temperature', min:VAR_META.temp.defMin, max:VAR_META.temp.defMax, unit:'°C', label:'Temperature'};
-  }
+  // map-only fields (TCHP, 2D products) and variables with no model field: the section shows temperature
   const m = VAR_META[state.variable];
-  return {v:state.variable, palette:state.palette, min:state.cbMin, max:state.cbMax, unit:m.unit, label:m.label};
+  if(state.variable==='tchp' || m.dims===2 || (typeof hasModel==='function' && !hasModel(state.variable))){
+    return {v:'temp', palette:'temperature', min:VAR_META.temp.defMin, max:VAR_META.temp.defMax, unit:'°C', label:'Temperature', scale:'linear'};
+  }
+  return {v:state.variable, palette:state.palette, min:state.cbMin, max:state.cbMax, unit:m.unit, label:m.label, scale:state.scale || 'linear'};
 }
 function sectionContours(v){
   if(v==='temp') return [{val:26, label:'D26', dash:[]}, {val:20, label:'D20', dash:[4,3]}];
@@ -103,7 +104,7 @@ function buildSection(){
   geo.setIndex(indices);
   Render.setValues(geo, Render.fillMasked(values, mask, R, n), mask);
   // opaque, pushed back a little in depth so the isolines drawn on it always win
-  sectionGroup.add(new THREE.Mesh(geo, Render.dataSurface({palette:spec.palette, min:spec.min, max:spec.max, masked:true, underLines:true})));
+  sectionGroup.add(new THREE.Mesh(geo, Render.dataSurface({palette:spec.palette, min:spec.min, max:spec.max, scale:spec.scale, masked:true, underLines:true})));
 
   const line = (pts, color, opacity, order) => {
     const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), Render.line(color, {opacity}));

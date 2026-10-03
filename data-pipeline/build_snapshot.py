@@ -3,7 +3,8 @@
 
 Sources, all open and needing no account:
   model       HYCOM + NCODA GOFS 3.1 analysis, GLBy0.08/expt_93.0 (tds.hycom.org, OPeNDAP ASCII)
-  in situ     Argo GDAC profiles via Ifremer ERDDAP (ArgoFloats)
+  in situ     Argo GDAC profiles via Ifremer ERDDAP (ArgoFloats); chlorophyll-a and oxygen from the
+              BGC-Argo synthetic profiles (ArgoFloats-synthetic-BGC), adjusted values only
   bathymetry  ETOPO1 via NOAA ERDDAP (etopo180), every 0.1 degree
   track       IBTrACS v04r01, North Indian basin (NOAA NCEI)
 
@@ -13,6 +14,7 @@ TLS-inspecting proxy or antivirus). Nothing is written to the cache in offline r
 
     python build_snapshot.py [--cache DIR] [--out FILE] [--check]
     python build_snapshot.py --fetch [--ca-bundle PEM]
+    python build_snapshot.py --model-netcdf FILE --out OTHER.json   # any CF NetCDF-3 model output
 
 The result is a JSON file (default ../data/amphan-2020.json) that build.py inlines into OceanLens3D.html.
 The same cache always gives byte-identical output.
@@ -25,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 
 SCHEMA = 1
-PIPELINE_VERSION = '2'
+PIPELINE_VERSION = '3'
 
 # ---- what the app expects: the grid is checked against meta at boot ----
 LAT0, LAT1, LON0, LON1, STEP = 6.0, 22.0, 61.0, 92.0, 0.5
@@ -46,7 +48,8 @@ IBTRACS = ('https://www.ncei.noaa.gov/data/international-best-track-archive-for-
 DEFAULT_ACCESSED = '2026-09-27'
 
 # Int16 packing: value = offset + q * scale. Salinity uses HYCOM's own packing, so estuary water fits.
-QUANT = {'temp': (15.0, 0.001), 'sal': (20.0, 0.001), 'u': (0.0, 0.0001), 'v': (0.0, 0.0001), 'chl': (0.0, 0.001)}
+QUANT = {'temp': (15.0, 0.001), 'sal': (20.0, 0.001), 'u': (0.0, 0.0001), 'v': (0.0, 0.0001), 'chl': (0.0, 0.001),
+         'oxy': (150.0, 0.01)}
 MISSING = -32768
 
 # Argo: data-centre flags kept, then a re-run of the real-time tests the app relies on
@@ -70,6 +73,10 @@ CITATIONS = [
              'programs that contribute to it (https://argo.ucsd.edu, https://www.ocean-ops.org). The Argo Program is '
              'part of the Global Ocean Observing System. Argo (2000), Argo float data and metadata from Global Data '
              'Assembly Centre (Argo GDAC), SEANOE, doi:10.17882/42182; accessed through the Ifremer ERDDAP server.'},
+    {'id': 'bgc_argo', 'doi': '10.3389/fmars.2019.00502',
+     'text': 'Chlorophyll-a and dissolved oxygen from BGC-Argo synthetic profiles (Argo GDAC, doi:10.17882/42182). '
+             'Bittig, H. C. et al. (2019), A BGC-Argo guide: planning, deployment, data handling and usage, '
+             'Front. Mar. Sci. 6:502, doi:10.3389/fmars.2019.00502.'},
     {'id': 'etopo1', 'doi': '10.7289/V5C8276M',
      'text': 'Amante, C. and B. W. Eakins (2009), ETOPO1 1 Arc-Minute Global Relief Model: Procedures, Data Sources '
              'and Analysis, NOAA Technical Memorandum NESDIS NGDC-24, doi:10.7289/V5C8276M. (ETOPO1 is superseded '
@@ -486,9 +493,10 @@ def parse_argo_csv(data):
     return rows[0], rows[2:]                                           # row 1 holds units
 
 
-def select_argo(names, rows, temperature_only=False):
+def select_argo(names, rows, temperature_only=False, snaps=None):
     """Group rows into profiles, apply QC, grid onto ARGO_LEVELS and keep one profile per float per
     analysis (the closest in time). Returns (profiles, counts)."""
+    SNAPS = snaps or globals()['SNAPS']
     ix = {n: i for i, n in enumerate(names)}
     profs = {}
     for r in rows:
@@ -541,7 +549,6 @@ def select_argo(names, rows, temperature_only=False):
             return to_levels(z[keep], v[keep])
 
         T, S = column('temp'), column('psal')
-        C = chla_column(rs, ix, lat)
         nT, nS = int(np.isfinite(T).sum()), int(np.isfinite(S).sum())
         if nT < MIN_LEVELS:
             counts['too_few_levels'] += 1
@@ -553,7 +560,7 @@ def select_argo(names, rows, temperature_only=False):
                 continue
             S, sq = np.full(len(ARGO_LEVELS), np.nan), 0
         out.append({'w': wmo, 'c': cyc, 't': tstr[:16] + 'Z', 'la': round(lat, 3), 'lo': round(lon, 3),
-                    's': snap, 'm': mode, 'sq': sq, 'dt': dt, 'when': when, 'T': T, 'S': S, 'C': C})
+                    's': snap, 'm': mode, 'sq': sq, 'dt': dt, 'when': when, 'T': T, 'S': S})
 
     best = {}
     for p in out:
@@ -564,11 +571,77 @@ def select_argo(names, rows, temperature_only=False):
     return sorted(best.values(), key=lambda p: (p['s'], p['w'])), counts
 
 
-def chla_column(rs, ix, lat):
-    """Chlorophyll where a float has good-flagged values. This dataset has no adjusted chla, and real-time
-    chla is flagged 3 by rule, so in practice the column stays empty."""
-    pts = sorted((float(r[ix['pres']]), float(r[ix['chla']])) for r in rs
-                 if r[ix['chla_qc']] in ARGO_GOOD and r[ix['pres']] not in ('', 'NaN') and r[ix['chla']] not in ('', 'NaN'))
+def fetch_argo(F, temperature_only=False, snaps=None):
+    q = argo_query()
+    url = ARGO + '?' + '&'.join(urllib.parse.quote(p, safe='=,') for p in q)
+    names, rows = F.get(url, 'argo.csv', parse_argo_csv, timeout=900)
+    profiles, counts = select_argo(names, rows, temperature_only, snaps)
+    return profiles, counts, url
+
+
+# ------------------------------------------------------------------ BGC-Argo (chlorophyll-a, oxygen)
+# The core ArgoFloats rows carry no adjusted chla and real-time BGC values are flagged 3 by rule, so
+# chlorophyll and oxygen come from the synthetic BGC profiles, adjusted values only.
+BGC = 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats-synthetic-BGC.csv'
+BGC_VARS = {'chla': 'C', 'doxy': 'O'}                               # ERDDAP name -> argo block key
+BGC_RANGE = {'chla': (-0.1, 50.0), 'doxy': (-5.0, 600.0)}           # mg/m3, umol/kg
+BGC_WINDOW = ('2020-05-01T00:00:00Z', '2020-05-28T23:59:59Z')
+
+
+def bgc_cols(var):
+    return ('platform_number,cycle_number,pres,pres_qc,pres_adjusted,pres_adjusted_qc,temp,temp_qc,temp_adjusted,'
+            f'temp_adjusted_qc,psal,psal_qc,psal_adjusted,psal_adjusted_qc,{var}_adjusted,{var}_adjusted_qc')
+
+
+def bgc_query(var):
+    return [bgc_cols(var), f'time>={BGC_WINDOW[0]}', f'time<={BGC_WINDOW[1]}', f'latitude>={LAT0}',
+            f'latitude<={LAT1}', f'longitude>={LON0}', f'longitude<={LON1}', 'pres<=1100', 'direction="A"',
+            f'{var}_adjusted!=NaN']
+
+
+def bgc_url(var):
+    return BGC + '?' + '&'.join(urllib.parse.quote(p, safe='=,') for p in bgc_query(var))
+
+
+def parse_bgc_csv(var):
+    def parse(data):
+        rows = list(csv.reader(io.StringIO(data.decode('utf-8'))))
+        if not rows or rows[0] != bgc_cols(var).split(','):
+            raise ValueError(f'unexpected BGC-Argo {var} CSV header')
+        return rows[0], rows[2:]
+    return parse
+
+
+def select_bgc(names, rows, var):
+    """Adjusted samples of one BGC variable that pass QC, per (float, cycle), sorted by pressure.
+    Pressure is PRES_ADJUSTED where the core profile has one, else PRES; both need a good flag."""
+    ix = {n: i for i, n in enumerate(names)}
+    lo, hi = BGC_RANGE[var]
+    counts = {'rows': len(rows), 'rejected_qc': 0, 'rejected_range': 0}
+    out = {}
+    for r in rows:
+        key = (r[ix['platform_number']].strip(), int(float(r[ix['cycle_number']])))
+        pa, p = r[ix['pres_adjusted']], r[ix['pres']]
+        if pa not in ('', 'NaN'):
+            pr, pq = pa, r[ix['pres_adjusted_qc']]
+        else:
+            pr, pq = p, r[ix['pres_qc']]
+        x, xq = r[ix[var + '_adjusted']], r[ix[var + '_adjusted_qc']]
+        if pr in ('', 'NaN') or x in ('', 'NaN') or pq not in ARGO_GOOD or xq not in ARGO_GOOD:
+            counts['rejected_qc'] += 1
+            continue
+        v = float(x)
+        if not lo <= v <= hi:
+            counts['rejected_range'] += 1
+            continue
+        out.setdefault(key, []).append((float(pr), v))
+    counts['profiles'] = len({(r[ix['platform_number']].strip(), int(float(r[ix['cycle_number']]))) for r in rows})
+    counts['floats'] = len({r[ix['platform_number']].strip() for r in rows})
+    return {k: sorted(v) for k, v in out.items()}, counts
+
+
+def bgc_levels(pts, lat):
+    """(pres, value) pairs -> ARGO_LEVELS, the same gridding as temperature and salinity."""
     if not pts:
         return np.full(len(ARGO_LEVELS), np.nan)
     z = np.array([p2z(a, lat) for a, _ in pts]); v = np.array([b for _, b in pts])
@@ -576,12 +649,19 @@ def chla_column(rs, ix, lat):
     return to_levels(z[keep], v[keep])
 
 
-def fetch_argo(F, temperature_only=False):
-    q = argo_query()
-    url = ARGO + '?' + '&'.join(urllib.parse.quote(p, safe='=,') for p in q)
-    names, rows = F.get(url, 'argo.csv', parse_argo_csv, timeout=900)
-    profiles, counts = select_argo(names, rows, temperature_only)
-    return profiles, counts, url
+def fetch_bgc(F, argo):
+    """Attach chlorophyll (C) and oxygen (O) to the selected Argo profiles of BGC floats."""
+    counts = {}
+    for var, key in BGC_VARS.items():
+        names, rows = F.get(bgc_url(var), f'bgc_{var}.csv', parse_bgc_csv(var), timeout=600)
+        per, c = select_bgc(names, rows, var)
+        n = 0
+        for p in argo:
+            p[key] = bgc_levels(per.get((p['w'], p['c']), []), p['la'])
+            n += bool(np.isfinite(p[key]).any())
+        c['profiles_in_snapshot'] = n
+        counts[var] = c
+    return counts
 
 
 # ------------------------------------------------------------------ ETOPO1 and IBTrACS
@@ -723,6 +803,114 @@ def fetch_model_at_obs(F, profiles, plan_only=False):
 
 
 # ------------------------------------------------------------------ assemble
+# ------------------------------------------------------------------ any CF NetCDF model output
+CF_MODEL = {   # snapshot variable -> (CF standard names, common variable names)
+    'temp': (('sea_water_potential_temperature', 'sea_water_temperature', 'sea_water_conservative_temperature',
+              'sea_water_in_situ_temperature'), ('thetao', 'temp', 'water_temp', 'votemper', 'to', 'pottmp')),
+    'sal': (('sea_water_salinity', 'sea_water_practical_salinity', 'sea_water_absolute_salinity'),
+            ('so', 'salt', 'salinity', 'vosaline', 'sal')),
+    'u': (('eastward_sea_water_velocity', 'sea_water_x_velocity', 'baroclinic_eastward_sea_water_velocity'),
+          ('uo', 'u', 'water_u', 'vozocrtx', 'ucur')),
+    'v': (('northward_sea_water_velocity', 'sea_water_y_velocity', 'baroclinic_northward_sea_water_velocity'),
+          ('vo', 'v', 'water_v', 'vomecrty', 'vcur')),
+}
+MAX_MODEL_TIMES = 16
+
+
+def model_from_netcdf(path, log=print):
+    """Snapshot model fields from a CF NetCDF-3 file: variables found by standard_name (then by common
+    names), longitudes wrapped, axes sorted, each 0.5 deg cell the mean of the native points inside it
+    (the nearest point when the native grid is coarser), levels interpolated to DEPTHS as for HYCOM."""
+    import ncio
+    with open(path, 'rb') as f:
+        raw = f.read()
+    ds = ncio.read_bytes(raw)
+    found = {}
+    for key, (sns, names) in CF_MODEL.items():
+        nm = ncio.cf_find(ds, sns, names)
+        require(nm is not None, f'{os.path.basename(path)}: no {key} variable (standard_name one of {", ".join(sns)})')
+        found[key] = nm
+    ref = ds['vars'][found['temp']]
+    ax = {a: ncio.cf_axis(ds, a, found['temp']) for a in 'XYZT'}
+    require(ax['X'] and ax['Y'] and ax['Z'], f'{os.path.basename(path)}: longitude, latitude and depth axes are needed')
+    lon = np.mod(np.asarray(ds['vars'][ax['X']]['data'], 'f8') + 180, 360) - 180
+    lat = np.asarray(ds['vars'][ax['Y']]['data'], 'f8')
+    dep = ncio.cf_depth(ds['vars'][ax['Z']])
+    require(lon.ndim == lat.ndim == dep.ndim == 1, 'only 1-D (regular) latitude, longitude and depth axes are supported')
+    if ax['T']:
+        times = ncio.cf_times(ds['vars'][ax['T']])
+    else:
+        times = [None]
+    require(all(times), 'model times must be valid CF times')
+    nt = min(len(times), MAX_MODEL_TIMES)
+    if len(times) > nt:
+        log(f'  using the first {nt} of {len(times)} model times')
+    oy, ox, oz = np.argsort(lat), np.argsort(lon), np.argsort(dep)
+    lat, lon, dep = lat[oy], lon[ox], dep[oz]
+
+    def field(nm):
+        v = ds['vars'][nm]
+        order = [ax['T'], ax['Z'], ax['Y'], ax['X']]
+        dims = list(v['dims'])
+        missing = [d for d in dims if d not in order]
+        a = np.asarray(v['data'], 'f8')
+        for d in missing:                                        # e.g. a length-1 extra dimension
+            require(ds['dims'][d] == 1, f'{nm}: unexpected dimension {d}')
+            a = a.take(0, axis=dims.index(d)); dims.remove(d)
+        if ax['T'] is None or ax['T'] not in dims:
+            a, dims = a[None], ['T'] + dims
+            order[0] = 'T'
+        require(sorted(dims) == sorted(order), f'{nm}: dimensions {tuple(v["dims"])} are not time, depth, lat, lon')
+        a = a.transpose([dims.index(d) for d in order])[:nt][:, oz][:, :, oy][:, :, :, ox]
+        u = str(v['attrs'].get('units', '')).lower()
+        if nm == found['temp'] and u in ('k', 'kelvin', 'degrees_kelvin'):
+            a = a - 273.15
+        if nm in (found['u'], found['v']) and u in ('cm/s', 'cm s-1'):
+            a = a / 100
+        return a
+
+    half = STEP / 2 + 1e-6
+    rows = [r if len(r) else np.array([int(np.argmin(np.abs(lat - c)))]) for r in cell_members(lat, LATS, half)]
+    cols = [c if len(c) else np.array([int(np.argmin(np.abs(lon - x)))]) for c in cell_members(lon, LONS, half)]
+    require(lat[0] <= LAT0 + half and lat[-1] >= LAT1 - half and lon[0] <= LON0 + half and lon[-1] >= LON1 - half,
+            f'model grid {lat[0]:.2f}..{lat[-1]:.2f} N, {lon[0]:.2f}..{lon[-1]:.2f} E does not cover the map '
+            f'{LAT0}..{LAT1} N, {LON0}..{LON1} E')
+    # above the first model level (e.g. 0.49 m in Copernicus output) the first level stands in for the surface
+    require(dep[0] <= 12, f'the first model level is at {dep[0]:g} m; the surface layer is missing')
+    levels = [[(0, 1.0)] if d <= dep[0] else lv for d, lv in
+              zip(DEPTHS, [None if d <= dep[0] else level_weights(dep, [d])[0] for d in DEPTHS])]
+
+    def regrid(a2):
+        out = np.full((len(LATS), len(LONS)), np.nan)
+        for i, r in enumerate(rows):
+            for j, c in enumerate(cols):
+                blk = a2[np.ix_(r, c)]
+                if np.isfinite(blk).any():
+                    out[i, j] = np.nanmean(blk)
+        return out
+
+    model = np.zeros((nt, 4, len(DEPTHS), len(LATS), len(LONS)))
+    wet = np.ones((len(DEPTHS), len(LATS), len(LONS)), bool)
+    for vi, key in enumerate(CF_MODEL):
+        a = field(found[key])
+        need = sorted({k for lv in levels for k, _ in lv})
+        for t in range(nt):
+            cells = {k: regrid(a[t, k]) for k in need}
+            for di, lv in enumerate(levels):
+                g = sum(w * cells[k] for k, w in lv)
+                if t == 0:
+                    wet[di] &= np.isfinite(g)
+                model[t, vi, di] = fill_nans(g)
+    require(wet[0].any(), 'the model has no water inside the map')
+    when = [t or SNAPS[0] for t in times[:nt]]
+    info = {'file': os.path.basename(path), 'sha256': sha256(raw), 'bytes': len(raw), 'variables': found,
+            'axes': ax, 'native_levels_m': [float(dep[k]) for lv in levels for k, _ in lv],
+            'native_step_deg': [float(round(np.median(np.diff(lat)), 4)) if len(lat) > 1 else None,
+                                float(round(np.median(np.diff(lon)), 4)) if len(lon) > 1 else None],
+            'attrs': {k: str(ds['attrs'][k]) for k in ('title', 'source', 'institution', 'product_id') if k in ds['attrs']}}
+    return model, wet, when, info
+
+
 def group_hash(F, names):
     h = hashlib.sha256()
     for n in sorted(names):
@@ -746,10 +934,15 @@ def inputs_block(F):
     return out
 
 
-def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=False, log=print, allow_hosts=None):
+def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=False, log=print, allow_hosts=None,
+          model_netcdf=None):
     F = Fetcher(cache, fetch, cafile, allow_hosts=allow_hosts)
 
-    model, wet, times, hinfo = fetch_hycom(F)
+    if model_netcdf:
+        require(not model_at_obs, '--model-at-obs works with HYCOM only')
+        model, wet, times, hinfo = model_from_netcdf(model_netcdf, log)
+    else:
+        model, wet, times, hinfo = fetch_hycom(F)
     require(np.isfinite(model).all(), 'model has gaps after filling')
     t_w = model[:, 0][:, wet]; s_w = model[:, 1][:, wet]
     require(-2 < t_w.min() and t_w.max() < 40, f'model temperature {t_w.min():.2f}..{t_w.max():.2f} C is implausible')
@@ -757,19 +950,29 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
     require(np.abs(model[:, 2:]).max() < 3, 'model current above 3 m/s')
     require(1000 < wet[0].sum() < len(LATS) * len(LONS), f'{wet[0].sum()} wet surface cells is implausible')
     speed = np.hypot(model[:, 2], model[:, 3])
-    log('HYCOM analysis times:', ', '.join(f'{t:%d %b %H}Z' for t in times))
+    log(('Model' if model_netcdf else 'HYCOM') + ' analysis times:', ', '.join(f'{t:%d %b %H}Z' for t in times))
     log(f'  temperature {t_w.min():.2f}..{t_w.max():.2f} C, salinity {s_w.min():.2f}..{s_w.max():.2f}, '
         f'surface speed p99 {np.percentile(speed[:, 0][:, wet[0]], 99):.2f} m/s (model water only)')
 
-    argo, acounts, argo_url = fetch_argo(F, temperature_only)
-    per = [sum(1 for p in argo if p['s'] == s) for s in range(len(SNAPS))]
-    require(len(argo) >= MIN_PROFILES and min(per) >= MIN_PER_SNAPSHOT,
-            f'too few Argo profiles: {len(argo)} in total, per analysis {per}')
+    argo, acounts, argo_url = fetch_argo(F, temperature_only, times if model_netcdf else None)
+    per = [sum(1 for p in argo if p['s'] == s) for s in range(len(times))]
+    if model_netcdf:
+        if len(argo) < MIN_PROFILES:
+            log(f'  note: {len(argo)} Argo profiles within 1.5 days of the model times (the cache covers 3-26 May 2020)')
+    else:
+        require(len(argo) >= MIN_PROFILES and min(per) >= MIN_PER_SNAPSHOT,
+                f'too few Argo profiles: {len(argo)} in total, per analysis {per}')
     log(f'Argo: {len(argo)} profiles from {len({p["w"] for p in argo})} floats; per analysis {per}'
         + (f'; {sum(1 for p in argo if not p["sq"])} temperature-only' if temperature_only else ''))
     removed = {k: v for k, v in acounts['rtqc_samples_removed'].items() if v}
     if removed:
         log('  RTQC re-check removed samples:', removed)
+    bcounts = fetch_bgc(F, argo)
+    nC, nO = (sum(1 for p in argo if np.isfinite(p[k]).any()) for k in ('C', 'O'))
+    log(f'BGC-Argo: {nC} profiles with chlorophyll, {nO} with oxygen '
+        f'(of {bcounts["doxy"]["profiles"]} BGC profiles from {bcounts["doxy"]["floats"]} floats in the query)')
+    for p in argo:
+        require(np.nanmax(np.abs(p['C']), initial=0) < 32, f'chlorophyll above 32 mg/m3 in {p["w"]}')
 
     alt, alat0, alon0, astep, etopo_q = fetch_etopo(F)
     log(f'ETOPO1: {alt.shape[0]} x {alt.shape[1]} at {astep} deg, {100 * (alt > 0).mean():.0f}% land')
@@ -784,6 +987,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
         'T': pack(np.concatenate([p['T'] for p in argo]), 'temp'),
         'S': pack(np.concatenate([p['S'] for p in argo]), 'sal'),
         'C': pack(np.concatenate([p['C'] for p in argo]), 'chl'),
+        'O': pack(np.concatenate([p['O'] for p in argo]), 'oxy'),
     }
     obs_info = None
     if model_at_obs:
@@ -797,9 +1001,22 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
                    '3-hourly output, native levels interpolated linearly to the Argo levels'
         log(f'HYCOM at observation times: {len(cols)} columns')
 
-    model_note = ('HYCOM GOFS 3.1 analysis (GLBy0.08/expt_93.0), tds.hycom.org. Native grid sampled every '
-                  f'{hinfo["sample_step_deg"][0]} deg and averaged over the samples inside each 0.5 deg cell; 75 m and '
-                  '750 m interpolated between model levels.')
+    filled = ('model values in cells without model water are filled from neighbours; mask.wet marks the cells that '
+              'hold model water')
+    if model_netcdf:
+        model_note = (f'CF NetCDF model output {hinfo["file"]}; each 0.5 deg cell the mean of the native points inside '
+                      'it, levels interpolated linearly to the app depths.')
+        model_prov = {'file': hinfo['file'], 'sha256': hinfo['sha256'], 'variables': hinfo['variables'],
+                      'native_levels_m': hinfo['native_levels_m'], 'native_step_deg': hinfo['native_step_deg'],
+                      'attrs': hinfo['attrs'], 'filled_cells': filled}
+    else:
+        model_note = ('HYCOM GOFS 3.1 analysis (GLBy0.08/expt_93.0), tds.hycom.org. Native grid sampled every '
+                      f'{hinfo["sample_step_deg"][0]} deg and averaged over the samples inside each 0.5 deg cell; 75 m '
+                      'and 750 m interpolated between model levels.')
+        model_prov = {'url': HYCOM, 'variables': ['water_temp', 'salinity', 'water_u', 'water_v'],
+                      'time_index': hinfo['time_index'], 'native_levels_m': hinfo['native_levels_m'],
+                      'sample_step_deg': hinfo['sample_step_deg'], 'samples_per_cell': hinfo['samples_per_cell'],
+                      'filled_cells': filled}
     payload = {
         'schema': SCHEMA,
         'meta': {
@@ -812,17 +1029,16 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
                 'argo': 'Argo GDAC via erddap.ifremer.fr (ArgoFloats); adjusted values for delayed-mode and adjusted '
                         'profiles, data-centre QC flags 1, 2, 5, 8 kept, then the global-range, regional-range, spike '
                         'and stuck-value tests re-run; the closest profile to each analysis within 1.5 days',
+                'bgc': 'BGC-Argo synthetic profiles via erddap.ifremer.fr (ArgoFloats-synthetic-BGC): chlorophyll-a '
+                       '(mg/m3) and dissolved oxygen (umol/kg), adjusted values only (delayed-mode or adjusted; raw '
+                       'real-time values are not used), QC flags 1, 2, 5, 8 and range checks. The model has no '
+                       'biogeochemistry: chlorophyll and oxygen come from the floats only.',
                 'bathymetry': 'ETOPO1 via upwell.pfeg.noaa.gov ERDDAP (etopo180), sampled every 0.1 deg',
                 'track': 'IBTrACS v04r01 North Indian basin (NOAA NCEI); JTWC 1-minute and IMD 3-minute winds'},
             'citations': CITATIONS,
             'provenance': {
                 'pipeline': {'script': 'data-pipeline/build_snapshot.py', 'version': PIPELINE_VERSION},
-                'model': {'url': HYCOM, 'variables': ['water_temp', 'salinity', 'water_u', 'water_v'],
-                          'time_index': hinfo['time_index'], 'native_levels_m': hinfo['native_levels_m'],
-                          'sample_step_deg': hinfo['sample_step_deg'],
-                          'samples_per_cell': hinfo['samples_per_cell'],
-                          'filled_cells': 'model values in cells without model water are filled from neighbours; '
-                                          'mask.wet marks the cells that hold model water'},
+                'model': model_prov,
                 'model_at_obs': obs_info,
                 'argo': {'url': ARGO, 'query': argo_query(),
                          'qc': {'flags_kept': sorted(ARGO_GOOD), 'adjusted_for_modes': ['A', 'D'],
@@ -832,6 +1048,16 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
                                 'temperature_only_profiles': temperature_only,
                                 'window_days': 1.5, 'one_per_float_per_analysis': True},
                          'counts': acounts},
+                'bgc': {'url': BGC, 'queries': {v: bgc_query(v) for v in BGC_VARS},
+                        'qc': {'values': 'CHLA_ADJUSTED and DOXY_ADJUSTED only; raw CHLA and DOXY are never used',
+                               'flags_kept': sorted(ARGO_GOOD),
+                               'pressure': 'PRES_ADJUSTED where present, else PRES; flag 1, 2, 5 or 8',
+                               'range': {'chla_mg_m3': list(BGC_RANGE['chla']), 'doxy_umol_kg': list(BGC_RANGE['doxy'])},
+                               'matched_to': 'the selected core Argo profile with the same float and cycle',
+                               'levels': 'gridded onto argo.levels like temperature; gaps wider than 20/40/80 m '
+                                         'stay gaps'},
+                        'units': {'C': 'mg/m3', 'O': 'umol/kg'},
+                        'counts': bcounts},
                 'bathymetry': {'url': ETOPO, 'query': urllib.parse.unquote(etopo_q)},
                 'track': {'url': IBTRACS, 'storm': f'{STORM} {STORM_YEAR}', 'hours': ['00', '06', '12', '18']},
             },
@@ -839,7 +1065,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
         },
         # Int16, laid out [time][variable][level][lat][lon]
         'model': base64.b64encode(b''.join(
-            base64.b64decode(pack(model[t, vi], k)) for t in range(len(SNAPS))
+            base64.b64decode(pack(model[t, vi], k)) for t in range(len(times))
             for vi, k in enumerate(['temp', 'sal', 'u', 'v']))).decode('ascii'),
         # one bit per cell, [level][lat][lon], most significant bit first; 1 = the cell holds model water
         'mask': {'wet': base64.b64encode(np.packbits(wet.astype(np.uint8).ravel()).tobytes()).decode('ascii'),
@@ -877,6 +1103,9 @@ def main(argv=None):
                     help='keep Argo profiles whose salinity failed QC (temperature comparisons only)')
     ap.add_argument('--model-at-obs', action='store_true',
                     help='add HYCOM columns at each profile\'s position and time (argo.model)')
+    ap.add_argument('--model-netcdf', metavar='FILE',
+                    help='take the model fields from a CF NetCDF-3 file instead of HYCOM (Argo, bathymetry and track '
+                         'still come from the cache)')
     ap.add_argument('--plan-model-at-obs', action='store_true',
                     help='print the requests --model-at-obs would make and stop')
     args = ap.parse_args(argv)
@@ -892,7 +1121,7 @@ def main(argv=None):
                 print(' ', name, url)
             return 0
         payload, F = build(args.cache, args.fetch, args.ca_bundle, args.temperature_only, args.model_at_obs,
-                           allow_hosts=args.allow_host)
+                           allow_hosts=args.allow_host, model_netcdf=args.model_netcdf)
     except CacheMiss as e:
         print(f'error: {e} is not in the cache ({args.cache}); rerun with --fetch to download it', file=sys.stderr)
         return 2

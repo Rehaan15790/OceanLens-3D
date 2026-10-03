@@ -8,8 +8,16 @@ function computeStats(){
     return;
   }
   const vals = [];
-  if(state.variable==='tchp'){
-    tchpGrid(state.time).forEach(c=>{ if(c && c.q!==null) vals.push(c.q); });
+  if(is2D(state.variable)){
+    field2dGrid(state.variable, state.time).forEach(q=>{ if(q!==null && Number.isFinite(q)) vals.push(q); });
+  } else if(!hasModel(state.variable)){
+    // no model field (chlorophyll in real mode): the profiles on screen at the readout depth
+    const d = readoutDepth();
+    instrumentsNow().forEach(inst=>{
+      const p = observeProfile(inst, state.time), arr = obsArray(p, state.variable);
+      const v = arr && d <= inst.maxDepth ? obsInterp(p, arr)(Math.max(d, p.z[0])) : null;
+      if(v!==null && Number.isFinite(v)) vals.push(v);
+    });
   } else {
     const d = readoutDepth();
     gridPts.forEach((p,idx)=>{
@@ -30,7 +38,8 @@ function applyMode(){
 // vertical scale or the misfit colouring changes
 let markersKey = null;
 function refreshMarkers(){
-  const mk = dataMode+'|'+(dataMode==='real' || state.colorMisfit ? state.time : '')+'|'+state.exagg+'|'+state.colorMisfit;
+  const mk = dataMode+'|'+(dataMode==='real' || state.colorMisfit ? state.time : '')+'|'+state.exagg+'|'+state.colorMisfit+
+    '|'+datasetRev+'|'+state.showAllImported;
   if(mk===markersKey) return;
   markersKey = mk;
   buildMarkers();
@@ -94,14 +103,15 @@ function exposeTestSurface(){
   Object.defineProperty(ol, 'dataMode', {get: ()=>dataMode, configurable:true});
   ol.actions = Object.fromEntries(Object.entries({
     setVariable, setMode, setDepth, setIso, setTime, setPlaying, setDataMode, setOverlay, setOpacity, setExaggeration,
-    setRange, setPalette, resetRange: ()=>{ resetRange(); requestUpdate('full'); },
+    setRange, setPalette, setScale, setShowAllImported, resetRange: ()=>{ resetRange(); requestUpdate('full'); },
     openPanel, closePanels, openProfile, openWorstFloat, startTour, stopTour, goToTourStep, nextTourStep, setTourAutoplay,
     showSectionPreset, clearSection
   }).map(([k, f])=>[k, now(f)]));
   ol.flush = flushUpdate;
+  ol.plugins = OceanLens;
   ol.facts = facts;
   ol.fn = {seawaterDensity, sigmaT, tchpColumn, firstCrossing, contourSegments, summarize, misfit, realAt, obsInterp,
-           modelTchp, b64Int16, fmt};
+           modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow};
   ol.render = Render.test;
   ol.renderNow = Render.test.renderNow;
   ol.renderInfo = Render.test.renderInfo;

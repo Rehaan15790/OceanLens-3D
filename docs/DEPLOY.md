@@ -1,10 +1,12 @@
 # Deploying OceanLens 3D
 
-One build produces two things:
+One build produces two things, and a small server adds a third:
 
 1. **The single file**, `OceanLens3D.html`. It is for USB drives, email and the hackathon submission, and it must
    keep opening by double-click over `file://` with no network.
 2. **A static site**: the same file served as `index.html`, with security headers.
+3. **The data server** (`server/serve.py`): the same file plus a REST API, OGC WMS 1.3.0 and WCS 2.0.1, for an
+   institution's own machines (section 4).
 
 The repository is private and has no remote. Everything below assumes a **private** GitHub repository that the owner
 may connect later. Connecting any host, or creating any account, is the owner's decision.
@@ -74,7 +76,7 @@ gzip. Publish `dist/site/` either from a branch, or with an Actions workflow; th
 
 ## 3. Continuous integration
 
-`.github/workflows/ci.yml` runs `python tools/check.py --quick` on pull requests and on pushes to `main`. It is
+`.github/workflows/ci.yml` runs `python tools/check.py --quick` (unit, server and smoke suites) on pull requests and on pushes to `main`. It is
 written but not pushed. It is kept lean because Actions minutes and artifact storage are metered on private
 repositories:
 
@@ -84,7 +86,65 @@ repositories:
 - test output and the built file are kept for 7 days;
 - the full suite runs only on demand (`workflow_dispatch` with `full: true`).
 
-## 4. What never goes into the repository
+## 4. The data server on institutional infrastructure (e.g. INCOIS)
+
+`server/serve.py` uses only the Python standard library and numpy. It needs no database, no container and no
+internet access. It serves the single file at `/`, the API at `/api/v1`, WMS at `/wms` and WCS at `/wcs`
+(`docs/API.md`). The page detects that it is served over HTTP and lists the server's datasets; opened from a file it
+behaves exactly as before.
+
+```
+python build.py --out dist/OceanLens3D.html
+python server/serve.py --host 127.0.0.1 --port 8080 --netcdf <path-to-model.nc> --quiet
+```
+
+**Run it as a service** (systemd; adjust paths and the user):
+
+```
+# /etc/systemd/system/oceanlens.service
+[Unit]
+Description=OceanLens 3D data server
+After=network.target
+
+[Service]
+User=oceanlens
+WorkingDirectory=/opt/oceanlens
+ExecStart=/usr/bin/python3 server/serve.py --host 127.0.0.1 --port 8080 --public-url https://<host>/oceanlens --quiet
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Put the institution's web server in front.** The server listens on 127.0.0.1 only. TLS, authentication, access
+logs and rate limits belong to the reverse proxy. With nginx:
+
+```
+location /oceanlens/ {
+    proxy_pass http://127.0.0.1:8080/;
+    proxy_set_header Host $host;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+}
+```
+
+Notes:
+
+- `--public-url` must match the address users see, so WMS/WCS capabilities documents point at the proxy rather than
+  at 127.0.0.1.
+- `--cors` is off by default. Turn it on only for the origins that embed the API (e.g. an existing INCOIS portal
+  calling WMS from its own pages).
+- Model data: CF NetCDF-3 files given with `--netcdf`, e.g. a Copernicus or INCOIS model subset saved as NetCDF-3.
+  `data-pipeline/build_snapshot.py --model-netcdf` makes an app snapshot from the same file, for `data/`.
+- Health check: `GET /healthz` returns `{"status": "ok", ...}`.
+- The server reads its datasets at start-up. Restart it after changing files.
+- It refuses requests above 2048 × 2048 pixels (WMS) or 5 million cells (WCS). It serves only GET, HEAD and OPTIONS,
+  and only fixed routes, so it never serves files from disk by path.
+- The single file keeps working with no server at all. The server adds data access; the page does not depend on it.
+
+## 5. What never goes into the repository
 
 - The raw pipeline cache (`data-pipeline/cache/`, where a rebuild looks by default; tens of MB). It is gitignored. Its SHA-256 manifest can be
   committed; the archive itself stays with the owner.

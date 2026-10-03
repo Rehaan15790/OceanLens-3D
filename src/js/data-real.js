@@ -50,25 +50,26 @@ function realDryWeight(lat, lon, depth){
 
 /* ---- real Argo profiles (REAL_DATA.argo), one set per analysis ----
    Each carries HYCOM at its own position and time when the snapshot has argo.model. A profile whose
-   salinity failed delayed-mode QC (sq 0) keeps its temperature; density then uses model salinity. */
+   salinity failed delayed-mode QC (sq 0) keeps its temperature; density then uses model salinity.
+   C (chlorophyll, mg/m³) and O (oxygen, µmol/kg) come from BGC-Argo adjusted values; NaN = no sensor or failed QC. */
 const ARGO_MODE = {D:'delayed mode (QC\'d)', A:'adjusted', R:'real time'};
 const realProfiles = (()=>{
   const A = REAL_DATA.argo, nL = A.levels.length, miss = REAL_DATA.meta.missing, Q = REAL_DATA.meta.quant;
   const dec = (b64, key)=>{ const q = b64Int16(b64), [off, sc] = Q[key]; return Array.from(q, v=>v===miss ? NaN : off+v*sc); };
-  const T = dec(A.T, 'temp'), S = dec(A.S, 'sal'), C = A.C ? dec(A.C, 'chl') : [];
+  const T = dec(A.T, 'temp'), S = dec(A.S, 'sal'), C = A.C ? dec(A.C, 'chl') : [], O = A.O && Q.oxy ? dec(A.O, 'oxy') : [];
   const MT = A.model ? dec(A.model.T, 'temp') : null, MS = A.model ? dec(A.model.S, 'sal') : null;
   return A.profiles.map((p,n)=>{
     const cut = arr=>arr.length ? arr.slice(n*nL, (n+1)*nL) : new Array(nL).fill(NaN);
-    const Tn = cut(T), Sn = cut(S), Cn = cut(C), salOk = p.sq!==0;
+    const Tn = cut(T), Sn = cut(S), Cn = cut(C), On = cut(O), salOk = p.sq!==0;
     const ok = Tn.map((v,k)=>Number.isFinite(v) && (Number.isFinite(Sn[k]) || !salOk));
     const first = ok.indexOf(true), last = ok.lastIndexOf(true);
     const inst = {id:'ARGO-'+p.w, kind:'argo', real:true, lat:p.la, lon:p.lo, snap:p.s, time:p.t, mode:p.m,
-      cycle:p.c, levels:A.levels, maxDepth:A.levels[last], bgc:Cn.some(Number.isFinite), salOk};
+      cycle:p.c, levels:A.levels, maxDepth:A.levels[last], bgc:Cn.some(Number.isFinite), hasOxy:On.some(Number.isFinite), salOk};
     if(MT) inst.model = {T:cut(MT), S:cut(MS), time:A.model.times[n]};
     const D = Tn.map((v,k)=>ok[k] && Number.isFinite(Sn[k]) ? sigmaT(Sn[k], v) : NaN);
     const missing = new Uint8Array(nL);
     for(let k=first;k<=last;k++) if(!ok[k]) missing[k] = 1;
-    inst.obs = {z:A.levels, T:Tn.map((v,k)=>ok[k]?v:NaN), S:Sn.map((v,k)=>ok[k]?v:NaN), C:Cn, D,
+    inst.obs = {z:A.levels, T:Tn.map((v,k)=>ok[k]?v:NaN), S:Sn.map((v,k)=>ok[k]?v:NaN), C:Cn, O:On, D,
       flag:inversionFlags(D), missing};
     inst.userData = {type:'argo', data:{id:inst.id, cycle:p.c, lastSurfacing:p.t, inst}};
     return inst;
