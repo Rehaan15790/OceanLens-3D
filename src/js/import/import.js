@@ -49,7 +49,9 @@ async function readData(name, data){
       if(j && j.schema!==undefined && j.meta && j.model) throw new Error('This is an OceanLens snapshot (model data). It is built into the app with build.py, not imported.');
       const profiles = Array.isArray(j) ? j : j && j.profiles;
       if(!Array.isArray(profiles)) throw new Error('This JSON file has no "profiles" list.');
-      return finishParsed(out, 'json', 'OceanLens dataset (JSON)', Object.assign({type:'other'}, Array.isArray(j) ? {} : j, {profiles}));
+      const meta = Array.isArray(j) ? {} : j;
+      return finishParsed(out, 'json', 'OceanLens dataset (JSON)', {profiles, type:typeof meta.type==='string' ? meta.type : 'other',
+        name:typeof meta.name==='string' ? meta.name : undefined, notes:Array.isArray(meta.notes) ? meta.notes.map(String) : []});
     }
     const table = parseDelimited(text);
     const f = bestFormat('csv', table, name);

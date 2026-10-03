@@ -8,7 +8,7 @@ Python standard library and numpy only; NetCDF through data-pipeline/ncio.py.
 
 Routes: / (the app), /api/v1/..., /wms, /wcs, /ows, /healthz. docs/API.md has the details and example URLs.
 """
-import argparse, base64, gzip, json, math, re, socket, struct, sys, time, zlib
+import argparse, base64, contextlib, gzip, json, math, re, socket, struct, sys, threading, time, zlib
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +26,9 @@ except ImportError:          # WCS NetCDF output and --netcdf input need it; eve
 
 VERSION = (REPO / 'VERSION').read_text().strip() if (REPO / 'VERSION').exists() else 'dev'
 MAX_PIXELS, MAX_SIDE, MAX_CELLS = 4_194_304, 2048, 5_000_000
+HEAVY_SLOTS = 4                   # GetMap and GetCoverage requests served at once; more get 503
+MAP_BLOCK_ROWS = 256              # GetMap samples this many rows at a time, to bound memory
+LOOPBACK = ('127.0.0.1', '::1', 'localhost')
 DAY = 86400.0
 
 # Known variables. Keys match the app; units are CF/UDUNITS strings, `uom` is the UCUM code WCS wants.
@@ -137,6 +140,11 @@ class Dataset:
                 'range': [num(x) for x in i['range']], 'scale': i.get('scale', 'linear'),
                 'palette': palette_name(i), 'layer': f'{self.id}.{key}'}
 
+    @property
+    def time_tolerance(self):
+        """How far (s) a requested time may be from the nearest analysis: 1.5 days, or half the step if larger."""
+        return max(1.5 * DAY, float(np.median(np.diff(self.tsec))) / 2 if len(self.tsec) > 1 else 0)
+
     def time_index(self, value):
         if value is None or str(value).strip().lower() in ('', 'current', 'default'):
             return 0
@@ -151,7 +159,7 @@ class Dataset:
         except ValueError as e:
             raise ApiError(400, 'InvalidDimensionValue', str(e), 'time')
         i = int(np.argmin(np.abs(self.tsec - sec)))
-        tol = max(1.5 * DAY, float(np.median(np.diff(self.tsec))) / 2 if len(self.tsec) > 1 else 0)
+        tol = self.time_tolerance
         if abs(self.tsec[i] - sec) > tol:
             raise ApiError(400, 'InvalidDimensionValue', f'no time within {tol / DAY:.1f} days of {value}; '
                            f'times run {self.times[0]} to {self.times[-1]}', 'time')
@@ -400,7 +408,11 @@ class OceanServer(ThreadingHTTPServer):
         self.datasets = {d.id: d for d in datasets}
         self.app, self.cors, self.public_url, self.quiet = app, tuple(cors), public_url, quiet
         self.gz_cache, self.pages = {}, {}
-        self.default_id = embedded_id(self.datasets)
+        self.default_id = embedded_id(self.datasets, app)
+        self.heavy = threading.BoundedSemaphore(HEAVY_SLOTS)
+        # on a loopback bind, only loopback Host names: a page on another site cannot reach the API through a
+        # DNS name rebound to 127.0.0.1
+        self.check_host = addr[0] in LOOPBACK and not public_url
 
     def shutdown_request(self, request):
         # Lingering close: send FIN, then wait (up to 5 s) for the client to finish reading and close. Closing at
@@ -441,6 +453,8 @@ class Handler(BaseHTTPRequestHandler):
         self.do_GET(head=True)
 
     def do_OPTIONS(self):
+        if not self.host_ok():
+            return self.misdirected()
         self.send_response(204)
         self._common_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
@@ -503,9 +517,32 @@ class Handler(BaseHTTPRequestHandler):
             host = '%s:%d' % self.server.server_address[:2]
         return f'http://{host}'
 
+    def host_ok(self):
+        if not self.server.check_host:
+            return True
+        host = (self.headers.get('Host') or '').lower()
+        name = host[1:host.index(']')] if host.startswith('[') and ']' in host else host.rsplit(':', 1)[0]
+        return name in LOOPBACK
+
+    def misdirected(self):
+        self.send_json({'error': {'code': 'MisdirectedRequest',
+                                  'message': 'this server answers only to localhost, 127.0.0.1 or [::1]'}}, 421)
+
+    @contextlib.contextmanager
+    def busy(self):
+        """Hold a slot for a memory-heavy request; ApiError 503 when all are taken."""
+        if not self.server.heavy.acquire(blocking=False):
+            raise ApiError(503, 'ServerBusy', f'{HEAVY_SLOTS} map or coverage requests are already running; retry shortly')
+        try:
+            yield
+        finally:
+            self.server.heavy.release()
+
     # -- routing
     def do_GET(self, head=False):
         self._head = head
+        if not self.host_ok():
+            return self.misdirected()
         url = urlsplit(self.path)
         path = re.sub(r'/+', '/', url.path).rstrip('/') or '/'
         try:
@@ -673,8 +710,10 @@ class Handler(BaseHTTPRequestHandler):
         if bbox:
             try:
                 w, s, e, n = (float(x) for x in bbox.split(','))
-            except ValueError:
-                raise ApiError(400, 'InvalidParameterValue', 'bbox must be west,south,east,north in degrees', 'bbox')
+                assert all(map(math.isfinite, (w, s, e, n))) and w <= e and s <= n
+            except (ValueError, AssertionError):
+                raise ApiError(400, 'InvalidParameterValue', 'bbox must be west,south,east,north in degrees, '
+                               'finite, with west <= east and south <= north', 'bbox')
         try:
             start = parse_iso(self.param(q, 'start')) if self.param(q, 'start') else -math.inf
             end = parse_iso(self.param(q, 'end')) if self.param(q, 'end') else math.inf
@@ -747,7 +786,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(400, 'InvalidDimensionValue', 'ELEVATION must be a number of metres', 'elevation')
             if req == 'getmap':
                 return self.wms_map(q, ds, layers[0][1], box, w, h, ti, depth)
-            return self.wms_info(q, layers, box, w, h, ti, depth, ver)
+            return self.wms_info(q, layers, box, w, h, depth, ver)
         raise ApiError(400, 'OperationNotSupported', f'REQUEST {req} is not served', 'request')
 
     def wms_map(self, q, ds, key, box, w, h, ti, depth):
@@ -768,24 +807,31 @@ class Handler(BaseHTTPRequestHandler):
         if not (hi > lo) or (log and lo <= 0):
             raise ApiError(400, 'InvalidParameterValue', 'COLORSCALERANGE needs min < max, and min > 0 for a log scale',
                            'colorscalerange')
-        lons = box[0] + (np.arange(w) + 0.5) * (box[2] - box[0]) / w
-        lats = box[3] - (np.arange(h) + 0.5) * (box[3] - box[1]) / h
-        LON, LAT = np.meshgrid(lons, lats)
-        vals = ds.sample(ds.layer(key, ti, depth), LAT, LON)
-        rgba = np.zeros((h, w, 4), np.uint8)
-        rgba[..., :3] = PALETTES[style][colour_index(vals, lo, hi, log)]
-        rgba[..., 3] = np.where(np.isfinite(vals), 255, 0)
+        rgb = None
         if (self.param(q, 'transparent') or 'false').lower() != 'true':
             bg = (self.param(q, 'bgcolor') or '0xFFFFFF').lower().replace('0x', '').replace('#', '')
             try:
                 rgb = np.frombuffer(bytes.fromhex(bg[-6:].rjust(6, 'f')), np.uint8)
             except ValueError:
                 raise ApiError(400, 'InvalidParameterValue', 'BGCOLOR must be 0xRRGGBB', 'bgcolor')
-            dry = rgba[..., 3] == 0
-            rgba[dry, :3], rgba[..., 3] = rgb, 255
-        self.send(png_rgba(rgba), 'image/png', headers={'X-OceanLens-Time': ds.times[ti], 'X-OceanLens-Depth': f'{depth:g}'})
+        lons = box[0] + (np.arange(w) + 0.5) * (box[2] - box[0]) / w
+        lats = box[3] - (np.arange(h) + 0.5) * (box[3] - box[1]) / h
+        with self.busy():
+            grid = ds.layer(key, ti, depth)
+            rgba = np.zeros((h, w, 4), np.uint8)
+            for r0 in range(0, h, MAP_BLOCK_ROWS):          # in blocks: the float temporaries stay a few MB
+                LON, LAT = np.meshgrid(lons, lats[r0:r0 + MAP_BLOCK_ROWS])
+                vals = ds.sample(grid, LAT, LON)
+                block = rgba[r0:r0 + MAP_BLOCK_ROWS]
+                block[..., :3] = PALETTES[style][colour_index(vals, lo, hi, log)]
+                block[..., 3] = np.where(np.isfinite(vals), 255, 0)
+                if rgb is not None:
+                    dry = block[..., 3] == 0
+                    block[dry, :3], block[..., 3] = rgb, 255
+            png = png_rgba(rgba)
+        self.send(png, 'image/png', headers={'X-OceanLens-Time': ds.times[ti], 'X-OceanLens-Depth': f'{depth:g}'})
 
-    def wms_info(self, q, layers, box, w, h, ti, depth, ver):
+    def wms_info(self, q, layers, box, w, h, depth, ver):
         try:
             i = int(self.param(q, 'i' if ver == '1.3.0' else 'x', True))
             j = int(self.param(q, 'j' if ver == '1.3.0' else 'y', True))
@@ -796,17 +842,18 @@ class Handler(BaseHTTPRequestHandler):
         lon = box[0] + (i + 0.5) * (box[2] - box[0]) / w
         lat = box[3] - (j + 0.5) * (box[3] - box[1]) / h
         rows = []
-        for ds, key in layers:
-            v = ds.sample(ds.layer(key, min(ti, len(ds.times) - 1), depth), [lat], [lon])[0]
+        for ds, key in layers:                       # each dataset has its own times
+            t = ds.time_index(self.param(q, 'time'))
+            v = ds.sample(ds.layer(key, t, depth), [lat], [lon])[0]
             rows.append({'layer': f'{ds.id}.{key}', 'label': ds.info[key]['label'], 'value': num(v),
-                         'units': ds.info[key]['units']})
+                         'units': ds.info[key]['units'], 'time': ds.times[t]})
         fmt = (self.param(q, 'info_format') or 'application/json').lower()
         if fmt == 'application/json':
-            return self.send_json({'lat': round(lat, 5), 'lon': round(lon, 5), 'time': layers[0][0].times[ti],
+            return self.send_json({'lat': round(lat, 5), 'lon': round(lon, 5), 'time': rows[0]['time'],
                                    'depth': depth, 'features': rows})
         if fmt == 'text/plain':
-            lines = [f'lat {lat:.4f}  lon {lon:.4f}  time {layers[0][0].times[ti]}  depth {depth:g} m'] + \
-                    [f"{r['layer']}: {'no data' if r['value'] is None else r['value']} {r['units']}" for r in rows]
+            lines = [f'lat {lat:.4f}  lon {lon:.4f}  depth {depth:g} m'] + \
+                    [f"{r['layer']}: {'no data' if r['value'] is None else r['value']} {r['units']} at {r['time']}" for r in rows]
             return self.send('\n'.join(lines) + '\n', 'text/plain; charset=utf-8')
         raise ApiError(400, 'InvalidFormat', 'INFO_FORMAT must be application/json or text/plain', 'info_format')
 
@@ -963,7 +1010,16 @@ class Handler(BaseHTTPRequestHandler):
                 v = val(m.group(2))
                 if v is None:
                     continue
-                sel[axis] = np.array([int(np.argmin(np.abs(c - v)))])
+                i = int(np.argmin(np.abs(c - v)))
+                if axis == 'time':                              # as close as TIME must be in WMS and REST
+                    ok = abs(c[i] - v) <= ds.time_tolerance
+                else:                                           # inside the axis, or within half a step of an end
+                    half = abs(c[-1] - c[0]) / (len(c) - 1) / 2 if len(c) > 1 else 0
+                    ok = c.min() - half - 1e-9 <= v <= c.max() + half + 1e-9
+                if not ok:
+                    raise ApiError(400, 'InvalidSubsetting', f'subset {s!r} is outside the coverage '
+                                   f'({axis} runs {fmt_axis(axis, c[0])} to {fmt_axis(axis, c[-1])})', 'subset')
+                sel[axis] = np.array([i])
             else:
                 lo, hi = val(m.group(2)), val(m.group(3))
                 if sign < 0:
@@ -979,6 +1035,10 @@ class Handler(BaseHTTPRequestHandler):
         cells = len(it) * len(ik) * len(iy) * len(ix)
         if cells > MAX_CELLS:
             raise ApiError(400, 'InvalidSubsetting', f'{cells} cells requested; the limit is {MAX_CELLS}', 'subset')
+        with self.busy():
+            return self.coverage_out(q, ds, key, it, ik, iy, ix, cells)
+
+    def coverage_out(self, q, ds, key, it, ik, iy, ix, cells):
         data = ds.fields[key][np.ix_(it, ik, iy, ix)]
         fmt = (self.param(q, 'format') or 'application/netcdf').lower()
         name = f'{ds.id}.{key}'
@@ -1006,6 +1066,10 @@ class Handler(BaseHTTPRequestHandler):
                 f'version="2.0.1"><ows:Exception exceptionCode={quoteattr(e.code)}{loc}>'
                 f'<ows:ExceptionText>{escape(e.message)}</ows:ExceptionText></ows:Exception></ows:ExceptionReport>')
         self.send(body, 'application/xml; charset=utf-8', e.status)
+
+
+def fmt_axis(axis, v):
+    return iso(v) if axis == 'time' else f'{v:g}'
 
 
 def geo_box(w, s, e, n):
@@ -1053,15 +1117,34 @@ def default_app():
     return None
 
 
-def embedded_id(datasets):
-    """The dataset the built page embeds (src/index.html names it), else the first snapshot."""
+def embedded_id(datasets, app=None):
+    """The dataset whose snapshot the served page embeds; else the one src/index.html names; else the first snapshot."""
+    snaps = {i: d for i, d in datasets.items() if d.raw is not None}
+    try:
+        html = Path(app).read_text(encoding='utf-8') if app else ''
+    except OSError:
+        html = ''
+    tag = '<script type="application/json" id="snapshot">'
+    a = html.find(tag)
+    if a >= 0:
+        text = html[a + len(tag):html.find('</script>', a)].replace('\\u003c', '<')   # build.py escapes "<"
+        for i, d in snaps.items():          # build.py embeds the file stripped; compare by content
+            if d.raw.decode('utf-8').strip() == text:
+                return i
+        try:
+            obj = json.loads(text)
+            match = next((i for i, d in snaps.items() if json.loads(d.raw) == obj), None)
+        except ValueError:
+            match = None
+        if match:
+            return match
     try:
         m = re.search(r'id="snapshot" src="[^"]*?([\w-]+)\.json"', (REPO / 'src' / 'index.html').read_text(encoding='utf-8'))
     except OSError:
         m = None
-    if m and safe_id(m.group(1)) in datasets:
+    if m and safe_id(m.group(1)) in snaps:
         return safe_id(m.group(1))
-    return next((i for i, d in datasets.items() if d.raw is not None), None)
+    return next(iter(snaps), None)
 
 
 def load_datasets(snapshots=(), netcdfs=()):

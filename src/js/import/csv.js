@@ -40,13 +40,16 @@ function parseDelimited(text){
   // the delimiter that splits the first lines into the same number (> 1) of cells
   let delimiter = null, best = 1;
   [',', '\t', ';'].forEach(d=>{
-    const n = lines.slice(0, 10).map(l=>splitLine(l, d).length);
-    if(n[0] > best && n.every(k=>k===n[0])){ best = n[0]; delimiter = d; }
+    // most of the first lines (a stray ragged row is skipped later) split like the header
+    const n = lines.slice(0, 20).map(l=>splitLine(l, d).length), same = n.filter(k=>k===n[0]).length;
+    if(n[0] > best && same >= Math.max(2, 0.7*n.length)){ best = n[0]; delimiter = d; }
   });
   if(!delimiter) throw new Error('No consistent comma, tab or semicolon columns found.');
   let rows = lines.map(l=>splitLine(l, delimiter));
   const width = rows[0].length;
+  const all = rows.length;
   rows = rows.filter(r=>r.length===width);
+  const ragged = all - rows.length;
   // a header row has a text cell above a number
   const headerDetected = rows[0].some((c, j)=>!isNumCell(c) && isNumCell(rows[1][j]));
   const header = headerDetected ? rows.shift() : rows[0].map((_, j)=>`Column ${j+1}`);
@@ -68,7 +71,7 @@ function parseDelimited(text){
     units[j] = unit || '';
     return name.trim().toLowerCase().replace(/[\s-]+/g, '_');
   });
-  return {delimiter, headerDetected, header, names, units, rows};
+  return {delimiter, headerDetected, header, names, units, rows, ragged};
 }
 
 function guessMapping(table){
@@ -89,7 +92,10 @@ function guessMapping(table){
 function parseTimeCell(s){
   const m = String(s).trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?)?\s*(Z|UTC|GMT|[+-]\d{2}:?\d{2})?$/i);
   if(!m) return NaN;
-  let ms = Date.UTC(+m[1], +m[2]-1, +m[3], +(m[4] || 0), +(m[5] || 0), 0) + Math.round(+(m[6] || 0)*1000);
+  const [y, mo, d, h, mi, sec] = [+m[1], +m[2], +m[3], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)];
+  if(mo < 1 || mo > 12 || d < 1 || h > 23 || mi > 59 || sec >= 61) return NaN;
+  if(new Date(Date.UTC(y, mo-1, d)).getUTCDate() !== d) return NaN;   // 31 April and the like
+  let ms = Date.UTC(y, mo-1, d, h, mi, 0) + Math.round(sec*1000);
   const tz = m[7] && m[7].match(/^([+-])(\d{2}):?(\d{2})$/);
   if(tz) ms -= (tz[1]==='+' ? 1 : -1)*(+tz[2]*60 + +tz[3])*6e4;
   return ms;
@@ -127,7 +133,8 @@ function tableToDataset(table, mapping, opts = {}){
   if(!zf) throw new Error('Choose the column that holds depth or pressure.');
   const vars = ['temp', 'sal', 'chl', 'oxy'].filter(f=>col(f) >= 0);
   if(!vars.length) throw new Error('Choose at least one measured column (temperature, salinity, chlorophyll or oxygen).');
-  const warnings = [], conv = {};
+  const warnings = table.ragged ? [`${table.ragged} ${table.ragged===1 ? 'row has' : 'rows have'} a different number of columns from the header; skipped.`] : [];
+  const conv = {};
   [zf, ...vars].forEach(f=>{
     const unit = table.units[col(f)], c = unitConverter(f, unit);
     if(c) conv[f] = c;

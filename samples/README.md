@@ -1,6 +1,6 @@
 # Sample files for "Add data"
 
-Drop any of these on the viewport (or use "Add data") in real-data mode. All three fall inside the map
+Drop any of these on the 3D view (or use "Add data") in real-data mode. All three fall inside the map
 (6–22° N, 61–92° E) and the analysis window (4–25 May 2020).
 
 | File | Real or synthetic | What it is |

@@ -39,6 +39,11 @@ Examples below use `http://localhost:8080` and the dataset `amphan-2020`.
 - **Errors**: REST answers `{"error": {"code": "...", "message": "..."}}` with a 4xx/5xx status. WMS answers a
   `ServiceExceptionReport`, WCS an `ows:ExceptionReport`.
 - Responses over 1.4 kB are gzipped when the client accepts it. Only `GET`, `HEAD` and `OPTIONS` are served.
+- **Busy**: at most 4 GetMap or GetCoverage requests run at once. A fifth gets HTTP 503 (`ServerBusy`) and should
+  retry.
+- **Host check**: on a loopback address (`127.0.0.1`, `::1`, `localhost`) without `--public-url`, only requests
+  whose `Host` is `localhost`, `127.0.0.1` or `[::1]` are answered; others get HTTP 421. This stops a web page on
+  another site from reaching the API through a DNS name pointed at 127.0.0.1.
 
 ## REST
 
@@ -73,7 +78,7 @@ curl "http://localhost:8080/api/v1/datasets/amphan-2020/profiles?bbox=80,10,92,2
     to the end colours. `LOGSCALE=true` places values by log10 (min must be above 0).
   - `EPSG:4326` in WMS 1.3.0 takes `BBOX=minLat,minLon,maxLat,maxLon`; `CRS:84` takes longitude first.
 - **GetFeatureInfo** returns the values under pixel `I,J` for each of `QUERY_LAYERS`, as `application/json` or
-  `text/plain`.
+  `text/plain`. Each layer reports the time it used, found among its own dataset's times.
 
 ```
 http://localhost:8080/wms?SERVICE=WMS&REQUEST=GetCapabilities
@@ -93,7 +98,8 @@ dimension shows in the layer's temporal settings.
   - `SUBSET=Lat(10,15)`, `SUBSET=Long(80,90)`, `SUBSET=depth(0,200)`, `SUBSET=time("2020-05-16T12:00Z","2020-05-22T12:00Z")`;
     `*` leaves an end open. Axis names are case-insensitive (`lat`, `lon`, `latitude`, `longitude` also work).
   - A single value (`SUBSET=time("2020-05-16T12:00Z")`) takes the nearest grid value and keeps that axis with
-    length 1, rather than dropping it.
+    length 1, rather than dropping it. A time must be as close as for `TIME` (1.5 days); other values must lie on the
+    axis or within half a grid step of its ends. Anything further is an `InvalidSubsetting` error.
   - `FORMAT=application/netcdf` (default): CF-1.8 NetCDF-3 with `time` (hours since 1970-01-01), `depth`
     (positive down), `lat`, `lon` and the variable as float32 with `standard_name`, `units` and `_FillValue`.
     `FORMAT=text/csv`: one row per cell, `time,depth_m,lat,lon,<var>_<units>`.

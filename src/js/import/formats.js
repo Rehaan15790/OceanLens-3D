@@ -8,8 +8,16 @@
   const GOOD = new Set(['1', '2', '5', '8']);
   const RANGE = {temp:[-2.5, 40], sal:[2, 41], chl:[-0.1, 50], oxy:[-5, 600]};
   const VARS = ['temp', 'sal', 'chl', 'oxy'];
-  const NOTE = 'QC: flags 1, 2, 5, 8 kept; adjusted values where the file has them; chlorophyll and oxygen '
-    + 'adjusted only when adjusted values exist; range checks (°C −2.5–40, PSU 2–41, mg/m³ −0.1–50, µmol/kg −5–600)';
+  const NOTE = 'QC: flags 1, 2, 5, 8 kept; adjusted values where the file has them, otherwise the sensor values '
+    + '(chlorophyll and oxygen then carry a warning); range checks (°C −2.5–40, PSU 2–41, mg/m³ −0.1–50, µmol/kg −5–600)';
+  const LABEL = {chl:'Chlorophyll', oxy:'Oxygen'};
+  // warnings for chlorophyll or oxygen read from unadjusted sensor values (vals: key -> per-sample arrays used)
+  function rawWarnings(used){
+    return Object.keys(LABEL).filter(k=>used[k]).map(k=>`${LABEL[k]} values are unadjusted sensor values (the file has `
+      + 'no adjusted column); treat them as approximate.');
+  }
+  const anyFinite = a=>!!a && Array.prototype.some.call(a, Number.isFinite);
+  const left = (n, one, many, why)=>`${n} ${n===1 ? one+' was' : many+' were'} left out: ${why}.`;
   // CF standard names, then common variable names (lower case), per quantity
   const CF = {
     temp:[['sea_water_temperature', 'sea_water_potential_temperature', 'sea_water_conservative_temperature'],
@@ -55,7 +63,7 @@
     const u = String(nc.vars[n].attrs.units || '');
     const m = u.match(/^\s*(\w+?)s?\s+since\s+(\d{1,4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}(?:\.\d*)?))?)?/i);
     const unit = m && {second:1e3, sec:1e3, s:1e3, minute:6e4, min:6e4, hour:36e5, hr:36e5, h:36e5, day:864e5, d:864e5}[m[1].toLowerCase()];
-    if(!unit) throw new Error(`Time variable ${n} has units "${u}"; expected "<unit> since <date>".`);
+    if(!unit) throw new Error(`Can't read the times: ${n} has units "${u}". Expected something like "days since 1950-01-01".`);
     const base = Date.UTC(+m[2], +m[3]-1, +m[4], +(m[5]||0), +(m[6]||0), 0) + 1000*(+(m[7]||0));
     return Array.from(v, x=>Number.isFinite(x) ? base + x*unit : NaN);
   }
@@ -96,7 +104,7 @@
         A[n] = num(nc, n); A[n+'_A'] = num(nc, n+'_ADJUSTED');
         Q[n] = flags(nc, n+'_QC', nP*nL); Q[n+'_A'] = flags(nc, n+'_ADJUSTED_QC', nP*nL);
       });
-      const profiles = [], warnings = []; let dropped = 0;
+      const profiles = [], warnings = [], raw = {}; let dropped = 0;
       for(let p=0;p<nP;p++){
         if((posQc && !GOOD.has(posQc[p])) || (tQc && !GOOD.has(tQc[p])) || !Number.isFinite(t[p])
           || !Number.isFinite(lat[p]) || !Number.isFinite(lon[p])){ dropped++; continue; }
@@ -109,13 +117,15 @@
         const pres = col(null, 'PRES', delayed), vals = {};
         for(const [key, n] of Object.entries(ARGO_NAMES)){
           if(A[n] || A[n+'_A']) vals[key] = col(key, n, key==='chl' || key==='oxy' || delayed);
+          if(LABEL[key] && !A[n+'_A'] && anyFinite(vals[key])) raw[key] = true;
         }
         const z = pres.map(x=>Number.isFinite(x) ? depthFromPressure(x, lat[p]) : NaN);
         const pr = profile({id:'ARGO-'+wmo[p], lat:lat[p], lon:lon[p], time:iso(t[p]),
           meta:{platform:wmo[p], cycle:cyc ? cyc[p] : null, mode:m, direction:dir ? dir[p] : 'A'}}, z, vals);
         if(pr) profiles.push(pr); else dropped++;
       }
-      if(dropped) warnings.push(`${dropped} profile(s) without good position, time or samples were left out.`);
+      if(dropped) warnings.push(left(dropped, 'profile', 'profiles', 'no good position, time or samples'));
+      warnings.push(...rawWarnings(raw));
       return {type:'argo', format:'argo_profile', profiles, warnings, notes:[NOTE]};
     }});
 
@@ -137,6 +147,7 @@
         const M = Array.from({length:n}, (_,k)=>v('MOLAR_DOXY', 'oxy')(k, false));
         O = M.map((x,k)=>Number.isFinite(x) && Number.isFinite(T[k]) && Number.isFinite(S[k]) ? x/(1+sigmaT(S[k], T[k])/1000) : NaN);
       }
+      const raw = {chl:!has(nc, 'CHLA_ADJUSTED') && anyFinite(C), oxy:!has(nc, 'DOXY_ADJUSTED') && anyFinite(O)};
       // segments: PHASE_NUMBER when present, else reversals of the pressure direction (5 dbar hysteresis)
       const seg = new Array(n).fill(-1), phaseNo = num(nc, 'PHASE_NUMBER'), phase = num(nc, 'PHASE');
       if(phaseNo) for(let k=0;k<n;k++) seg[k] = phase && ![1, 4].includes(phase[k]) ? -1 : phaseNo[k];
@@ -172,7 +183,8 @@
         const pr = profile({id:name, lat:la, lon:lo, time:iso(times[times.length>>1]), meta:{platform:name, cycle:s}}, zs, vals);
         if(pr) profiles.push(pr); else dropped++;
       }
-      const warnings = dropped ? [`${dropped} short or unlocated segment(s) were left out.`] : [];
+      const warnings = dropped ? [left(dropped, 'segment', 'segments', 'too short or without a position')] : [];
+      warnings.push(...rawWarnings(raw));
       return {type:'glider', format:'ego_glider', profiles, warnings, notes:[NOTE]};
     }});
 
@@ -202,7 +214,7 @@
       const key = (ids ? ids[k] : '') + '|' + (cyc ? cyc[k] : '') + '|' + t[k];
       if(!groups.has(key)) groups.set(key, []); groups.get(key).push(k);
     }
-    const profiles = []; let dropped = 0;
+    const profiles = [], raw = {}; let dropped = 0;
     for(const ks of groups.values()){
       const k0 = ks[0];
       if(!Number.isFinite(lat[k0]) || !Number.isFinite(lon[k0]) || !Number.isFinite(t[k0])){ dropped++; continue; }
@@ -213,6 +225,7 @@
       for(const [key, c] of Object.entries(C)){
         const bgc = key==='chl' || key==='oxy';
         vals[key] = ks.map(k=>pick(key, c.raw, c.rawQc, c.adj, c.adjQc, k, bgc && c.adjExists));
+        if(bgc && !c.adjExists && anyFinite(vals[key])) raw[key] = true;
       }
       const id = ids ? (/^\d{5,7}$/.test(ids[k0]) ? 'ARGO-'+ids[k0] : ids[k0]) : 'P'+(profiles.length+1);
       const pr = profile({id, lat:lat[k0], lon:lon[k0], time:iso(t[k0]), meta:{platform:ids ? ids[k0] : null,
@@ -221,7 +234,8 @@
     }
     const cdm = String(nc.attrs.cdm_data_type || nc.attrs.featureType || '').toLowerCase();
     const type = low.platform_number ? 'argo' : /trajectory/.test(cdm) ? 'glider' : 'other';
-    const warnings = dropped ? [`${dropped} profile(s) without good position, time or samples were left out.`] : [];
+    const warnings = dropped ? [left(dropped, 'profile', 'profiles', 'no good position, time or samples')] : [];
+    warnings.push(...rawWarnings(raw));
     return {type, format:fmt, profiles, warnings, notes:[NOTE]};
   }
   OceanLens.registerFormat('erddap_table', {label:'ERDDAP tabledap NetCDF', kind:'netcdf',
@@ -235,7 +249,8 @@
       const latN = find(nc, 'lat'), lonN = find(nc, 'lon'), timeN = find(nc, 'time');
       const zN = find(nc, 'pres') || find(nc, 'depth');
       const dataN = VARS.map(k=>find(nc, k)).find(Boolean);
-      if(!zN || !dataN) throw new Error('No depth or pressure variable, or no temperature, salinity, chlorophyll or oxygen variable, was found.');
+      if(!zN) throw new Error('No depth or pressure variable was found.');
+      if(!dataN) throw new Error('No temperature, salinity, chlorophyll or oxygen variable was found.');
       const dv = nc.vars[dataN], lv = nc.vars[latN];
       if(lv.dims.length && dv.dims.length >= 3) throw new Error('This looks like gridded model output. Build a snapshot from it with data-pipeline/build_snapshot.py --model-netcdf.');
       if(lv.dims.length===1 && dv.dims.length===1 && lv.dims[0]===dv.dims[0]) return readTable(nc, 'cf_generic');
@@ -246,7 +261,7 @@
       const zA = num(nc, zN), zPer = zA.length===nL ? (p=>zA) : (p=>zA.slice(p*nL, (p+1)*nL));
       const cols = {}; VARS.forEach(k=>{ const nm = find(nc, k); if(nm) cols[k] = {a:num(nc, nm), q:flags(nc, lowerMap(nc)[nm.toLowerCase()+'_qc'], nP*nL)}; });
       const per = (a, p)=>a && a.length===nP*nL && nP > 1 ? a.slice(p*nL, (p+1)*nL) : a;
-      const profiles = [];
+      const profiles = [], raw = {};
       for(let p=0;p<nP;p++){
         const la = lat[Math.min(p, lat.length-1)], lo = lon[Math.min(p, lon.length-1)], tm = t[Math.min(p, t.length-1)];
         if(!Number.isFinite(la) || !Number.isFinite(lo) || !Number.isFinite(tm)) continue;
@@ -254,12 +269,13 @@
         for(const [k, c] of Object.entries(cols)){
           const a = per(c.a, p), q = per(c.q, p);
           vals[k] = Array.from({length:nL}, (_,i)=>pick(k, a, q, null, null, i, false));
+          if(LABEL[k] && anyFinite(vals[k])) raw[k] = true;
         }
         const pr = profile({id:String(nc.attrs.id || nc.attrs.station || 'CF')+(nP > 1 ? '-'+(p+1) : ''), lat:la, lon:lo,
           time:iso(tm), meta:{}}, z, vals);
         if(pr) profiles.push(pr);
       }
-      return {type:'other', format:'cf_generic', profiles, warnings:[], notes:[NOTE]};
+      return {type:'other', format:'cf_generic', profiles, warnings:rawWarnings(raw), notes:[NOTE]};
     }});
 
   function mean(a){ let s = 0, c = 0; a.forEach(x=>{ if(Number.isFinite(x)){ s += x; c++; } }); return c ? s/c : NaN; }

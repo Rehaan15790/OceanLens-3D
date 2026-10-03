@@ -42,7 +42,7 @@ a:hover{color:var(--accent);}
 #app.right-collapsed #body{grid-template-columns:var(--left-w) minmax(0,1fr) 0;}
 #app.left-collapsed.right-collapsed #body{grid-template-columns:0 minmax(0,1fr) 0;}
 #app.left-collapsed #left,#app.right-collapsed #right{visibility:hidden;}
-#left,#right{background:var(--panel);overflow-y:auto;overscroll-behavior:contain;min-width:0;}
+#left,#right{position:relative;background:var(--panel);overflow-y:auto;overscroll-behavior:contain;min-width:0;}
 #left{border-right:1px solid var(--border);padding:var(--s-4) var(--s-4) var(--s-5);}
 #right{border-left:1px solid var(--border);padding:var(--s-4);}
 #left::-webkit-scrollbar,#right::-webkit-scrollbar{width:10px;}

@@ -188,7 +188,7 @@ function drawSectionPanel(){
   document.getElementById('sectionFoot').innerHTML =
     (near.length
       ? `<h3 class="grp-label">${real ? 'Argo profiles' : 'Profiles'} within 40 km</h3>` +
-        argoNear.map(o=>`<button type="button" class="misfit" data-k="${near.indexOf(o)}">${o.inst.id}` +
+        argoNear.map(o=>`<button type="button" class="misfit" data-k="${near.indexOf(o)}">${escapeHtml(o.inst.id)}` +
           `<span>${Math.round(o.f*km)} km along</span></button>`).join('') +
         (glNear ? `<p>${glNear} glider profile${glNear>1 ? 's' : ''} (circles on the plot).</p>` : '')
       : `<p>${real ? 'No Argo profiles' : 'No floats or gliders'} within 40 km of this line.</p>`) +

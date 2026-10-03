@@ -95,6 +95,9 @@ function depthFromPressure(p, lat){
   return (1-c1)*p - 2.21e-6*p*p;
 }
 const asNum = v => v===null || v===undefined || v==='' ? NaN : +v;
+// text from a file shown in the UI: no control characters, bounded length
+const cleanText = (v, max) => String(v).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, max);
+const MAX_PROFILES = 20000;
 function nearestAnalysis(ms){
   let best = 0, bestD = Infinity;
   META.times.forEach((iso, t)=>{ const d = Math.abs(Date.parse(iso) - ms); if(d < bestD){ bestD = d; best = t; } });
@@ -131,7 +134,7 @@ function datasetInstrument(raw, ds, n){
   for(let k=first; k<=last; k++) if(!has[k]) missing[k] = 1;
   const kind = INSTRUMENT_TYPES[p.type || type0] ? (p.type || type0) : 'other', meta = p.meta || {};
   const snap = nearestAnalysis(ms);
-  const inst = {id:String(p.id ?? `${ds.name} ${n+1}`), key:`${ds.id}:${n}`, kind, imported:true, dataset:ds.id,
+  const inst = {id:cleanText(p.id ?? `${ds.name} ${n+1}`, 64) || `${ds.name} ${n+1}`, key:`${ds.id}:${n}`, kind, imported:true, dataset:ds.id,
     datasetName:ds.name, real:true, snap, gapH:(ms - Date.parse(META.times[snap]))/3.6e6, ms,
     time:new Date(ms).toISOString().slice(0, 16)+'Z', lat, lon, levels, maxDepth:levels[last],
     bgc:C.some(Number.isFinite), hasOxy:O.some(Number.isFinite), salOk:S.some(Number.isFinite),
@@ -143,10 +146,11 @@ function datasetInstrument(raw, ds, n){
 function datasetSummary(id){
   const e = DATASETS.get(id);
   if(!e) return null;
-  const d = e.dataset, ms = e.insts.map(i=>i.ms), types = {};
-  e.insts.forEach(i=>{ types[i.kind] = (types[i.kind] || 0) + 1; });
+  const d = e.dataset, types = {};
+  let t0 = Infinity, t1 = -Infinity;
+  e.insts.forEach(i=>{ types[i.kind] = (types[i.kind] || 0) + 1; if(i.ms < t0) t0 = i.ms; if(i.ms > t1) t1 = i.ms; });
   return {id, name:d.name, source:d.source, format:d.format, type:d.type, profiles:e.insts.length, skipped:e.skipped,
-          start:new Date(Math.min(...ms)).toISOString(), end:new Date(Math.max(...ms)).toISOString(), types,
+          start:new Date(t0).toISOString(), end:new Date(t1).toISOString(), types,
           notes:d.notes || []};
 }
 function datasetsChanged(){
@@ -157,10 +161,12 @@ function datasetsChanged(){
 function addDataset(ds){
   if(!ds || !Array.isArray(ds.profiles)) throw new Error('A dataset needs a list of profiles.');
   const id = String(ds.id || `data-${++datasetSeq}`);
-  const d = Object.assign({name:id, source:'import', type:'other'}, ds, {id});
+  const d = Object.assign({source:'import', type:'other'}, ds, {id});
+  d.name = cleanText(ds.name || id, 120) || id;
   const insts = [], why = {};
   d.profiles.forEach((p, n)=>{
-    const r = p && typeof p === 'object' ? datasetInstrument(p, d, n) : 'not a profile';
+    const r = insts.length >= MAX_PROFILES ? 'more than the 20 000 a dataset can hold'
+      : p && typeof p === 'object' ? datasetInstrument(p, d, n) : 'not a profile';
     if(typeof r === 'string') why[r] = (why[r] || 0) + 1; else insts.push(r);
   });
   const warnings = Object.entries(why).map(([r, k])=>`${k} ${k===1 ? 'profile' : 'profiles'} skipped: ${r}`);

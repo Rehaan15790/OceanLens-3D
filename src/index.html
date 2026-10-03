@@ -175,6 +175,7 @@
         <p id="userDataEmpty" class="note">None added. Use Add data, or drop a CSV or NetCDF file on the 3D view.</p>
         <p id="userDataMode" class="note" hidden>Your data is shown in Real data mode only.</p>
         <p id="importAnnounce" class="note import-done" aria-live="polite"></p>
+        <p id="importAnnounceSr" class="sr-only" aria-live="polite"></p>
         <ul class="switch-list" id="userDataOpts" hidden>
           <li id="rowAllImported"><span id="lblAllTimes">Show all times</span>
             <button type="button" class="switch" id="swAllImported" role="switch" aria-checked="false" aria-labelledby="lblAllTimes" aria-describedby="hintAllTimes"><span class="knob"></span></button>
@@ -547,7 +548,7 @@
       <button type="button" id="importAdd" class="btn btn-primary" hidden>Add to map</button>
     </div>
   </div>
-  <input type="file" id="importInput" accept=".csv,.tsv,.txt,.nc,.cdf" hidden>
+  <input type="file" id="importInput" accept=".csv,.tsv,.txt,.nc,.cdf,.json" hidden>
 </div>
 
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>

@@ -36,6 +36,7 @@ const importUI = (()=>{
   function open(){
     if(isOpen) return;
     reset();
+    $('importAnnounce').textContent = '';
     ov.classList.add('show'); isOpen = true;
     shell.openDialog(card, ()=>{ ov.classList.remove('show'); isOpen = false; reset(); });
     $('importChoose').focus();                 // the step's main action, not the close button
@@ -43,6 +44,7 @@ const importUI = (()=>{
   const close = ()=>shell.closeDialog();
 
   async function readFile(file){
+    if(busy) return;
     if(!api() || !api().readFile){ setError('The import module did not load, so files cannot be read.'); return; }
     busy = true; setError(''); showStep('read');
     setStatus(`Reading ${file.name}…`);
@@ -80,9 +82,12 @@ const importUI = (()=>{
       dl.append(dt, dd);
     });
     renderMapping();
-    const sel = $('importType'); sel.textContent = '';
-    TYPES.forEach(t=>sel.add(new Option(typeLabel(t), t)));
-    sel.value = TYPES.includes(p.type) ? p.type : 'other';
+    // built-ins first, then any type a plugin registered at runtime
+    const sel = $('importType'), reg = api() && api().instruments ? api().instruments() : [];
+    const types = TYPES.concat(reg.filter(t=>!TYPES.includes(t)));
+    sel.textContent = '';
+    types.forEach(t=>sel.add(new Option(typeLabel(t), t)));
+    sel.value = types.includes(p.type) ? p.type : 'other';
     $('importName').value = p.name;
   }
 
@@ -145,7 +150,7 @@ const importUI = (()=>{
     catch(err){ setError(err && err.message ? err.message : 'This file could not be added.'); return; }
     const msg = addedMessage(opts.name, res);
     close();
-    announce(msg);
+    announce(msg, true);
   }
   function addedMessage(name, res){
     let s = `Added ${plural(res.profiles, 'profile', 'profiles')} from ${name}.`;
@@ -154,9 +159,10 @@ const importUI = (()=>{
     else if(typeof state!=='undefined' && !state.showAllImported) s += ' Profiles within 1.5 days of the analysis time are shown; turn on Show all times to see every one.';
     return s;
   }
-  function announce(text){
-    const el = $('importAnnounce');
-    el.textContent = '';
+  // "Added" stays on screen (it says how to see every profile); other notices are for screen readers only
+  function announce(text, visible){
+    const vis = $('importAnnounce'), sr = $('importAnnounceSr'), el = visible ? vis : sr;
+    vis.textContent = ''; sr.textContent = '';
     setTimeout(()=>{ el.textContent = text; }, 50);
   }
   // charts.js updateLegend() calls this on every update: the "Real data only" note follows the data mode

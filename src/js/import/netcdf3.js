@@ -20,7 +20,7 @@ const NetCDF3 = (()=>{
     try {
       const u32 = ()=>{ const v = dv.getUint32(pos); pos += 4; return v; };
       const u64 = ()=>{ const v = Number(dv.getBigUint64(pos)); pos += 8; return v; };
-      const count = version===5 ? u64 : u32;                  // NON_NEG and nelems
+      const count = ()=>{ const n = version===5 ? u64() : u32(); if(n > u8.length) throw new Error('a count in the header is larger than the file'); return n; };
       const offset = version===1 ? u32 : u64;                  // begin
       const pad = n=>{ pos += (4 - n%4)%4; };
       const name = ()=>{ const n = count(); const s = new TextDecoder('utf-8').decode(u8.subarray(pos, pos+n)); pos += n; pad(n); return s; };
@@ -41,6 +41,7 @@ const NetCDF3 = (()=>{
         return out;
       };
       let numrecs = version===5 ? u64() : u32();
+      if(numrecs > u8.length && numrecs < 0xFFFFFFFF) throw new Error('the record count is larger than the file');
       // dimensions
       const dims = [];
       let tag = u32(), n = count();
@@ -71,6 +72,13 @@ const NetCDF3 = (()=>{
         numrecs = recsize ? Math.floor((u8.length - first)/recsize) : 0;
       }
       recVars.forEach(v=>{ v.shape[0] = numrecs; });
+      // every variable's data must lie inside the file
+      Object.values(vars).forEach(v=>{
+        const per = v.shape.slice(v.record ? 1 : 0).reduce((a, b)=>a*b, 1)*v.size;
+        const end = v.record ? (numrecs ? v.begin + (numrecs-1)*recsize + per : v.begin) : v.begin + per;
+        if(!(v.begin >= pos) || end > u8.length) throw new Error(`variable ${v.name} points past the end of the file (truncated?)`);
+        if(per/v.size*(v.record ? Math.max(1, numrecs) : 1) > 5e7) throw new Error(`variable ${v.name} is too large for the browser`);
+      });
       return makeFile(u8, dv, version, numrecs, dims, attrs, vars, recsize);
     } catch(err){
       if(err instanceof RangeError) throw new Error('The NetCDF file ends early (truncated or not NetCDF).');

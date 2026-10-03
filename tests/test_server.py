@@ -211,11 +211,30 @@ class ServerTest(unittest.TestCase):
                                    ('/api/v1/datasets/amphan-2020/field?var=temp&time=2021-01-01', 400, 'InvalidDimensionValue'),
                                    ('/api/v1/datasets/amphan-2020/column?lat=40&lon=80', 400, 'InvalidParameterValue'),
                                    ('/api/v1/datasets/cf-model/snapshot', 404, 'NoSnapshot'),
+                                   ('/api/v1/datasets/amphan-2020/profiles?bbox=nan,6,92,22', 400, 'InvalidParameterValue'),
+                                   ('/api/v1/datasets/amphan-2020/profiles?bbox=92,6,61,22', 400, 'InvalidParameterValue'),
                                    ('/nothing', 404, 'NotFound')]:
             e = self.json(path, status)['error']
             self.assertEqual(e['code'], code, path)
             self.assertTrue(e['message'])
         self.assertEqual(self.get('/api/v1/datasets', method='POST')[0], 405)
+        # DNS rebinding: on a loopback bind only loopback Host names are answered
+        self.assertEqual(self.get('/api/v1/datasets', {'Host': 'attacker.example:80'})[0], 421)
+        self.assertEqual(self.get('/api/v1/datasets', {'Host': f'localhost:{self.srv.server_address[1]}'})[0], 200)
+
+    def test_heavy_requests_are_capped(self):
+        held = 0
+        while self.srv.heavy.acquire(blocking=False):
+            held += 1
+        try:
+            s, h, b = self.get('/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=amphan-2020.temp&STYLES=&CRS=CRS:84'
+                               '&BBOX=61,6,92,22&WIDTH=10&HEIGHT=10&FORMAT=image/png')
+            self.assertEqual(s, 503)
+            self.assertEqual(ET.fromstring(b).find('ogc:ServiceException', NS).get('code'), 'ServerBusy')
+        finally:
+            for _ in range(held):
+                self.srv.heavy.release()
+        self.assertEqual(held, serve.HEAVY_SLOTS)
 
     def test_snapshot_and_page(self):
         s, h, b = self.get('/api/v1/datasets/amphan-2020/snapshot')
@@ -304,6 +323,11 @@ class ServerTest(unittest.TestCase):
         f = json.loads(b)['features']
         self.assertAlmostEqual(f[0]['value'], self.value('temp', 0, 0, i, j), places=3)
         self.assertAlmostEqual(f[1]['value'], self.value('sal', 0, 0, i, j), places=3)
+        # each dataset resolves TIME against its own times
+        b = self.get('/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo&LAYERS=amphan-2020.temp'
+                     '&QUERY_LAYERS=amphan-2020.temp,cf-model.temp&STYLES=&CRS=CRS:84&BBOX=80,9,84,12&WIDTH=4&HEIGHT=3'
+                     '&I=1&J=1&INFO_FORMAT=application/json&TIME=2020-05-17T12:00Z')[2]
+        self.assertEqual([r['time'] for r in json.loads(b)['features']], ['2020-05-16T12:00:00Z', '2020-05-17T12:00:00Z'])
 
     def test_wms_exceptions(self):
         for query, code in [('LAYERS=nope.temp', 'LayerNotDefined'), ('LAYERS=amphan-2020.temp&CRS=EPSG:3857', 'InvalidCRS'),
@@ -359,8 +383,10 @@ class ServerTest(unittest.TestCase):
         s, h, b = self.get('/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=nope')
         self.assertEqual(s, 404)
         self.assertEqual(ET.fromstring(b).find('ows:Exception', NS).get('exceptionCode'), 'NoSuchCoverage')
-        s, h, b = self.get('/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=amphan-2020.sal&SUBSET=Lat(40,50)')
-        self.assertEqual(s, 400)
+        for sub in ('Lat(40,50)', 'time("1999-01-01")', 'depth(5000)', 'Long(100)'):
+            s, h, b = self.get(f'/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=amphan-2020.sal&SUBSET={sub}')
+            self.assertEqual(s, 400, sub)
+            self.assertEqual(ET.fromstring(b).find('ows:Exception', NS).get('exceptionCode'), 'InvalidSubsetting', sub)
 
     # ---- a CF NetCDF model file as a dataset
     def test_netcdf_dataset(self):

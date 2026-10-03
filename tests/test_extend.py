@@ -11,6 +11,7 @@ from pathlib import Path
 from helpers import REPO, STATE, AppTestCase, CDPError, pending
 
 sys.path.insert(0, str(REPO / 'server'))
+sys.path.insert(0, str(REPO / 'data-pipeline'))
 
 API = '!window.OceanLens'
 IMPORT = '!(window.OceanLens && OceanLens.readData && OceanLens.importParsed)'
@@ -123,6 +124,49 @@ class ImportSamples(AppTestCase):
                 self.js(f"OceanLens.removeDataset({json.dumps(r['id'])})")
         self.assertNoProblems()
 
+    @pending('import plumbing (architect import.js, science formats.js)', probe=IMPORT)
+    def test_argo_netcdf_in_cdf2_and_cdf5(self):
+        """netcdf3.js on the 64-bit-offset and 64-bit-data variants, through the Argo profile mapping."""
+        import numpy as np
+        import ncio
+        nl = 4
+        dims = {'N_PROF': 1, 'N_LEVELS': nl, 'STRING8': 8}
+        f4 = lambda a: np.array(a, np.float32).reshape(1, nl)
+        vars_ = {
+            'PLATFORM_NUMBER': {'dims': ('N_PROF', 'STRING8'), 'data': np.array([list('9999001 ')], 'S1')},
+            'CYCLE_NUMBER': {'dims': ('N_PROF',), 'data': np.array([12], np.int32)},
+            'DATA_MODE': {'dims': ('N_PROF',), 'data': np.array([b'D'], 'S1')},
+            'JULD': {'dims': ('N_PROF',), 'data': np.array([25704.5]),
+                     'attrs': {'units': 'days since 1950-01-01 00:00:00 UTC', '_FillValue': 999999.0}},
+            'JULD_QC': {'dims': ('N_PROF',), 'data': np.array([b'1'], 'S1')},
+            'LATITUDE': {'dims': ('N_PROF',), 'data': np.array([15.5])},
+            'LONGITUDE': {'dims': ('N_PROF',), 'data': np.array([88.5])},
+            'POSITION_QC': {'dims': ('N_PROF',), 'data': np.array([b'1'], 'S1')},
+        }
+        for name, vals in (('PRES', [5, 50, 100, 200]), ('TEMP', [29.5, 28.9, 25.0, 17.0]), ('PSAL', [33.2, 33.9, 34.6, 35.0])):
+            for suffix in ('', '_ADJUSTED'):
+                vars_[name + suffix] = {'dims': ('N_PROF', 'N_LEVELS'), 'data': f4(vals), 'attrs': {'_FillValue': np.float32(99999)}}
+                vars_[name + suffix + '_QC'] = {'dims': ('N_PROF', 'N_LEVELS'), 'data': np.array([list('1111')], 'S1')}
+        for fmt in ('CDF-2', 'CDF-5'):
+            with self.subTest(fmt=fmt):
+                b64 = base64.b64encode(ncio.write_bytes(dims, vars_, {'Conventions': 'Argo-3.1 CF-1.6'}, fmt)).decode()
+                r = self.js(f"""(async()=>{{ const bin=atob('{b64}'), u8=new Uint8Array(bin.length);
+                    for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+                    const nc = NetCDF3.parse(u8.buffer.slice(0));
+                    const p = await OceanLens.readData('R9999001_012.nc', u8.buffer);
+                    if (p.error) return {{error:p.error, version:nc.version}};
+                    const r = OceanLens.importParsed(p); __ol.actions.setShowAllImported(true);
+                    const i = instrumentsNow().find(x=>x.imported && x.dataset===r.id);
+                    OceanLens.removeDataset(r.id);
+                    return {{version:nc.version, format:p.formatLabel, profiles:r.profiles, T:i && i.obs.T}}; }})()""",
+                            await_promise=True)
+                self.assertNotIn('error', r, f"{fmt}: {r.get('error')}")
+                self.assertEqual(r['version'], {'CDF-2': 2, 'CDF-5': 5}[fmt])
+                self.assertEqual(r['profiles'], 1)
+                self.assertIn('Argo', r['format'])
+                np.testing.assert_allclose(r['T'], [29.5, 28.9, 25.0, 17.0], atol=1e-4)
+        self.assertNoProblems()
+
     @pending('import dialog (ux import-ui.js)', probe="typeof importUI === 'undefined'")
     def test_import_dialog_adds_and_removes(self):
         path = next(p for p in SAMPLES if p.suffix == '.csv')
@@ -158,7 +202,14 @@ class LogScaleAndIsosurface(AppTestCase):
         res = self.js(slice_mismatches("(lat, lon)=>fieldTemp(lat, lon, 100, __ol.state.time)", 'log'))
         self.assertGreaterEqual(res['n'], 15, f"only {res['n']} test points on screen")
         self.assertFalse(res['bad'], 'log-scale colours off the bar by more than 2/255:\n' + '\n'.join(res['bad'][:8]))
-        self.js("__ol.actions.setScale('linear')")
+        # values at or below zero: no log range starting at or below 0, and they take the bottom colour
+        g = self.js("(()=>{ const a=__ol.actions; a.setScale('linear'); a.setRange(-1, 40); a.setScale('log');"
+                    " const min=colorbarSpec().min, refused=a.setRange(-1, 40);"
+                    " return [min, refused, Render.rampPos(-5, 0.1, 10, 'log'), Render.rampPos(0, 0.1, 10, 'log')]; })()")
+        self.assertGreater(g[0], 0, 'switching to log kept a minimum at or below 0')
+        self.assertFalse(g[1], 'a log range starting below 0 was accepted')
+        self.assertEqual(g[2:], [0, 0], 'values <= 0 must sit at the bottom of a log ramp')
+        self.js("__ol.actions.setScale('linear'); __ol.actions.resetRange()")
         self.assertNoProblems()
 
     @pending('3D isosurface (graphics isosurface.js)', probe=ISO3D)

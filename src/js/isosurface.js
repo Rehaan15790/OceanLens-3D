@@ -5,7 +5,8 @@
    cuts off the corners at or above the value is always taken, from both cubes that share the
    face, so the surface has no cracks.
    Masks: cells touching land are skipped; model values below the sea floor still steer the
-   interpolation, but triangles whose centre lies below the sea floor are dropped. A missing value
+   interpolation, but triangles whose centre lies below the sea floor (the grid's or the drawn
+   terrain's, whichever is shallower) are dropped. A missing value
    (below the model's deepest level) repeats the one above it.
    Vertical exaggeration is the mesh's y scale (the normal matrix keeps the shading right), so the
    slider costs nothing; value, time and variable changes rebuild the mesh.
@@ -87,14 +88,19 @@ function buildIso3d(target){
   const vertOf = new Int32Array(plane*NK*3).fill(-1);
   const pos = [], depth = [], floor = [], index = [], corner = new Int32Array(8), tri = [0, 0, 0];
   const step = [1, NJ, plane];
+  // log-scale variables (chlorophyll) vary roughly exponentially, so the crossing is found in log10
+  const logVar = VAR_META[state.variable] && VAR_META[state.variable].scale === 'log' && target > 0;
+  const tv = v => logVar ? Math.log10(Math.max(v, target*1e-6)) : v, tt = tv(target);
   const vertex = (e) => {
     const [a, , axis] = MC.edges[e], na = corner[a], key = na*3 + axis;
     if(vertOf[key] >= 0) return vertOf[key];
-    const nb = na + step[axis], f = (target - V[na])/(V[nb] - V[na]);
+    const nb = na + step[axis], va = tv(V[na]), f = (tt - va)/(tv(V[nb]) - va);
     const ca = na % plane, cb = nb % plane, ka = (na - ca)/plane, kb = (nb - cb)/plane;
     const d = lerp(DEPTHS[ka], DEPTHS[kb], f);
     pos.push(lerp(X[ca], X[cb], f), -d*DEPTH_SCALE, lerp(Z[ca], Z[cb], f));
-    depth.push(d); floor.push(lerp(gridSeabed[ca], gridSeabed[cb], f));
+    // the drawn terrain comes from ETOPO at full resolution: never go below it either
+    const lat = lerp(gridPts[ca].lat, gridPts[cb].lat, f), lon = lerp(gridPts[ca].lon, gridPts[cb].lon, f);
+    depth.push(d); floor.push(Math.min(lerp(gridSeabed[ca], gridSeabed[cb], f), bathyDepth(lat, lon)));
     return (vertOf[key] = depth.length - 1);
   };
   for(let k=0; k<NK-1; k++) for(let i=0; i<NI-1; i++) for(let j=0; j<NJ-1; j++){
