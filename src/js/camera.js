@@ -30,6 +30,8 @@ function updateCamera(){
   camera.position.set(camTarget.x + camR*Math.cos(camEl)*Math.sin(camAz),
     camTarget.y + camR*Math.sin(camEl), camTarget.z + camR*Math.cos(camEl)*Math.cos(camAz));
   camera.lookAt(camTarget);
+  // the terrain's fog follows the camera, so at any zoom or exaggeration only the far side of the model fades
+  scene.fog.near = camR - 4; scene.fog.far = camR + 38;
   Render.invalidate();
 }
 updateCamera();

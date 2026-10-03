@@ -34,8 +34,9 @@ function positionBox(){
   boxLines.position.y = -3*k;
 }
 
+const FLOOR_NX = 124, FLOOR_NZ = 64;
 const floorGeo = new THREE.PlaneGeometry(          // 0.25° facets: real ridges and the shelf break show
-  (LON1-LON0)*SCALE_XZ, (LAT1-LAT0)*SCALE_XZ, 124, 64);
+  (LON1-LON0)*SCALE_XZ, (LAT1-LAT0)*SCALE_XZ, FLOOR_NX, FLOOR_NZ);
 floorGeo.rotateX(-Math.PI/2);
 const floorPos = floorGeo.attributes.position;
 const floorLatLon = [];
@@ -58,6 +59,24 @@ function shadeFloor(){
 shadeFloor();
 const floorMesh = new THREE.Mesh(floorGeo, Render.terrain({vertexColors:true, roughness:0.97, metalness:0.03}));
 scene.add(Render.register('floor', floorMesh));
+// the seabed's four sides, from its edge down to a common base: without them the shallow edges (south of
+// Sri Lanka, the shelves) open onto empty space and the floor reads as a hanging sheet
+const skirtIdx = [], skirtNrm = [], skirtTri = [];   // floor vertices round the edge: each gives a top and a bottom vertex
+[[0, 1, FLOOR_NX, [0,0,-1]], [FLOOR_NX, FLOOR_NX+1, FLOOR_NZ, [1,0,0]],               // north, east,
+ [FLOOR_NZ*(FLOOR_NX+1)+FLOOR_NX, -1, FLOOR_NX, [0,0,1]], [FLOOR_NZ*(FLOOR_NX+1), -(FLOOR_NX+1), FLOOR_NZ, [-1,0,0]]]   // south, west
+  .forEach(([i0, step, n, nrm])=>{
+    for(let k=0;k<=n;k++){
+      const v = skirtIdx.length*2;
+      if(k) skirtTri.push(v-2, v, v-1, v-1, v, v+1);       // front faces outwards
+      skirtIdx.push(i0 + k*step); skirtNrm.push(...nrm, ...nrm);
+    }
+  });
+const skirtGeo = new THREE.BufferGeometry();
+skirtGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(skirtIdx.length*6), 3));
+skirtGeo.setAttribute('normal', new THREE.Float32BufferAttribute(skirtNrm, 3));
+skirtGeo.setIndex(skirtTri);
+const skirtBase = Math.max(...floorLatLon.map(f=>displayDepth(f[2])));
+floorMesh.add(new THREE.Mesh(skirtGeo, Render.terrain({color:0x161d26, side:THREE.DoubleSide})));
 // called from updateDepthGeometry() when the vertical exaggeration changes
 function positionFloor(){
   for(let i=0;i<floorPos.count;i++){
@@ -65,6 +84,10 @@ function positionFloor(){
   }
   floorPos.needsUpdate = true;
   floorGeo.computeVertexNormals();
+  const sp = skirtGeo.attributes.position, base = -skirtBase*DEPTH_SCALE*state.exagg - 0.05;
+  skirtIdx.forEach((i, k)=>{ sp.setXYZ(2*k, floorPos.getX(i), floorPos.getY(i), floorPos.getZ(i)); sp.setXYZ(2*k+1, floorPos.getX(i), base, floorPos.getZ(i)); });
+  sp.needsUpdate = true;
+  skirtGeo.computeBoundingSphere();
 }
 
 /* ---- land from ETOPO1: marching squares at sea level, so the coast is smooth ----
@@ -86,9 +109,10 @@ const occluders = [];   // meshes that can hide screen-space labels
   const top = [], topCol = [], wall = [], coast = [];
   const tri = (p,q,r)=>[p,q,r].forEach(v=>{ top.push(v.x, v.y, v.z); topCol.push(...shade(v.h)); });
   const poly = P=>{ for(let k=1;k<P.length-1;k++) tri(P[0], P[k], P[k+1]); };
+  const side = (p,q)=>wall.push(p.x,-0.05,p.z, q.x,-0.05,q.z, q.x,q.y,q.z,  p.x,-0.05,p.z, q.x,q.y,q.z, p.x,p.y,p.z);
   const edge = (p,q)=>{
     coast.push(p.x, p.y+0.002, p.z, q.x, q.y+0.002, q.z);
-    wall.push(p.x,-0.05,p.z, q.x,-0.05,q.z, q.x,q.y,q.z,  p.x,-0.05,p.z, q.x,q.y,q.z, p.x,p.y,p.z);
+    side(p,q);
   };
   for(let i=0;i<N-1;i++){
     for(let j=0;j<M-1;j++){
@@ -122,6 +146,16 @@ const occluders = [];   // meshes that can hide screen-space labels
       if(X.length===2) edge(X[0], X[1]);
     }
   }
+  // the same wall where the land meets the sides of the domain, just outside the seabed's skirt
+  const rim = (C, dx, dz)=>{
+    const out = v=>({x:v.x + dx*0.004, y:v.y, z:v.z + dz*0.004});
+    for(let k=0;k<C.length-1;k++){
+      const la = alt(...C[k]) > 0, lb = alt(...C[k+1]) > 0;
+      if(la || lb) side(out(la ? corner(...C[k]) : cross(...C[k], ...C[k+1])), out(lb ? corner(...C[k+1]) : cross(...C[k], ...C[k+1])));
+    }
+  };
+  rim(Array.from({length:M}, (_, j)=>[N-1, j]), 0, -1); rim(Array.from({length:M}, (_, j)=>[0, j]), 0, 1);
+  rim(Array.from({length:N}, (_, i)=>[i, 0]), -1, 0); rim(Array.from({length:N}, (_, i)=>[i, M-1]), 1, 0);
   const geom = (arr, cols)=>{
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));

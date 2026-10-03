@@ -245,23 +245,50 @@ const Render = (() => {
     t.encoding = THREE.sRGBEncoding;
     return (markTextures[key] = t);
   }
+  // A point sprite takes its centre's depth, so a level surface just under a mark (the sea, a map at y = 0) would cut
+  // off its lower half. Each fragment of a mark above the sea takes instead the nearer of the mark's depth and the
+  // depth where the fragment's own view ray meets y = 0: the whole sprite clears the surfaces it sits on at any
+  // angle, and land in front of it still hides it. (gl_FragDepth: WebGL 2, or WebGL 1 with EXT_frag_depth.)
+  const _markUp = new THREE.Vector3();
+  function liftMarks(shader){
+    // three sets viewMatrix and cameraPosition for few material types, so the camera comes in uniforms of its own
+    shader.uniforms.olSize = {value:this.size};
+    shader.uniforms.olUp = {get value(){ return _markUp.set(0, 1, 0).transformDirection(ctx.camera.matrixWorldInverse); }};
+    shader.uniforms.olSea = {get value(){ return -ctx.camera.matrixWorld.elements[13]; }};
+    shader.vertexShader = 'uniform float olSize;\nuniform vec3 olUp;\nuniform float olSea;\nvarying vec4 vOlRay;\nvarying vec4 vOlDepth;\n' +
+      shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+	// heights relative to the camera are dot(v, olUp) in view space, olSea that of y = 0. The view ray through a point of
+	// the sprite is the centre's plus olT*(gl_PointCoord - 0.5), y flipped; each fragment uses the ray a pixel lower, so
+	// all of its samples clear the sea even where the sea's depth changes fast down the screen (grazing views)
+	float olPx = 1.0/(scale*projectionMatrix[1][1]), olT = olSize*olPx;
+	vOlRay = vec4(dot(vec3(mvPosition.xy/-mvPosition.z - vec2(0.0, olPx), -1.0), olUp), olT*olUp.x, -olT*olUp.y, olSea);
+	vOlDepth = vec4(-mvPosition.z, projectionMatrix[2][2], projectionMatrix[3][2], dot(mvPosition.xyz, olUp) > olSea ? 1.0 : 0.0);`);
+    shader.fragmentShader = 'varying vec4 vOlRay;\nvarying vec4 vOlDepth;\n' + shader.fragmentShader.replace('#include <logdepthbuf_fragment>', `#include <logdepthbuf_fragment>
+#if defined(GL_EXT_frag_depth) || __VERSION__ >= 300
+	float olDown = vOlRay.x + (gl_PointCoord.x - 0.5)*vOlRay.y + (gl_PointCoord.y - 0.5)*vOlRay.z;
+	float olD = olDown < 0.0 ? min(vOlDepth.x, 0.999*vOlRay.w/olDown) : vOlDepth.x;
+	gl_FragDepthEXT = vOlDepth.w > 0.5 ? 0.5 + 0.5*(vOlDepth.z/olD - vOlDepth.y) : gl_FragCoord.z;
+#endif`);
+  }
   function marks(opts){
     const o = Object.assign({shape:'diamond', sizePx:13, outline:'dark'}, opts);
     const m = new THREE.PointsMaterial(Object.assign({}, common, {map:markTexture(o.shape, o.outline), size:o.sizePx,
       sizeAttenuation:false, vertexColors:true, transparent:true, depthWrite:false, alphaTest:0.1}));
     m.userData.kind = 'marks';
+    m.extensions = {fragDepth:true};
+    m.onBeforeCompile = liftMarks;
     return m;
   }
-  // The 3D isosurface: one colour (sRGB 0-1, from paletteColor), lightly shaded by a light just above the
-  // camera so its shape reads. Faces turned to that light show the key's colour exactly; the rest darken to 70 %.
+  // The 3D isosurface: one colour (sRGB 0-1, from paletteColor), shaded by a light fixed in the world (high, from the
+  // north-west) so its relief reads from any side. Faces turned to that light show the key's colour; the rest darken to 45 %.
   // Written straight to the screen like the backdrop, so the colour stays sRGB. Opacity follows m.opacity.
   function isoShaded(rgb){
     const m = new THREE.ShaderMaterial({
       uniforms:{olColor:{value:new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2])}, olOpacity:{get value(){ return m.opacity; }}},
-      vertexShader:`varying vec3 vN; void main(){ vN = normalMatrix*normal; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }`,
+      vertexShader:`varying vec3 vN; void main(){ vN = (vec4(normalMatrix*normal, 0.0)*viewMatrix).xyz; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }`,
       fragmentShader:`uniform vec3 olColor; uniform float olOpacity; varying vec3 vN;
-        void main(){ float d = abs(dot(normalize(vN), vec3(0.0, 0.410365, 0.911922)));
-        gl_FragColor = vec4(olColor*(0.7 + 0.3*d), olOpacity); }`,
+        void main(){ float d = abs(dot(normalize(vN), vec3(-0.477670, 0.796117, -0.371521)));
+        gl_FragColor = vec4(olColor*(0.45 + 0.55*d), olOpacity); }`,
       side:THREE.DoubleSide, toneMapped:false
     });
     m.userData.kind = 'iso3d';

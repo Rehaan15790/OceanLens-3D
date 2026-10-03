@@ -99,8 +99,9 @@ function buildIsoGeometry(){
   scene.add(Render.register('iso', isoMesh));
 }
 
-/* ---- cyclone heat potential: TCHP map at the surface, D26 surface beneath ---- */
-const tchpMesh = new THREE.Mesh(gridGeometry(0.04),
+/* ---- cyclone heat potential: TCHP map at the surface, D26 surface beneath ----
+   The map lies on the sea surface like the 0 m layer, so the graticule (0.02) and the floats (0.05) stay above it. */
+const tchpMesh = new THREE.Mesh(gridGeometry(0),
   Render.dataSurface({palette:VAR_META.tchp.palette, min:VAR_META.tchp.defMin, max:VAR_META.tchp.defMax, masked:true}));
 tchpMesh.visible = false;
 scene.add(Render.register('tchp', tchpMesh));

@@ -18,7 +18,8 @@ scene.add(Render.register('backdrop', new THREE.Mesh(new THREE.SphereGeometry(42
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 scene.add(new THREE.HemisphereLight(0x9fd8ff, 0x0a1c14, 0.85));
 const dl = new THREE.DirectionalLight(0xeaf6ff, 0.7); dl.position.set(3, 8, 4); scene.add(dl);
-// depth cue for the terrain only: data, marks and lines ignore fog (render.js)
+// depth cue for the terrain only: data, marks and lines ignore fog (render.js); updateCamera (camera.js) moves
+// near and far with the camera distance
 scene.fog = new THREE.Fog(0x081525, 20, 62);
 
 Render.attach({
