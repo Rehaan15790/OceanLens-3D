@@ -12,7 +12,7 @@ import argparse, base64, contextlib, gzip, json, math, re, socket, struct, sys, 
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 from xml.sax.saxutils import escape, quoteattr
 
 import numpy as np
@@ -125,7 +125,8 @@ class Dataset:
 
     def summary(self, base=''):
         u = f'{base}/api/v1/datasets/{self.id}'
-        links = {'meta': u + '/meta', 'field': u + '/field', 'column': u + '/column', 'profiles': u + '/profiles'}
+        links = {'meta': u + '/meta', 'field': u + '/field', 'column': u + '/column', 'profiles': u + '/profiles',
+                 'opendap': f'{base}/opendap/{self.id}'}
         if self.raw is not None:
             links['snapshot'] = u + '/snapshot'
         if self.track:
@@ -564,12 +565,16 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(400, 'MissingParameterValue', 'SERVICE must be WMS or WCS', 'service')
             if path.startswith('/api'):
                 return self.api(path, q)
+            if path.startswith('/opendap'):
+                return self.dap(path, url.query)
             raise ApiError(404, 'NotFound', f'no route {path}')
         except ApiError as e:
             if path in ('/wms', '/ows') and (service == 'WMS' or path == '/wms'):
                 return self.wms_error(e)
             if path in ('/wcs', '/ows') and (service == 'WCS' or path == '/wcs'):
                 return self.wcs_error(e)
+            if path.startswith('/opendap'):
+                return self.dap_error(e)
             return self.send_json({'error': {'code': e.code, 'message': e.message}}, e.status)
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -635,7 +640,8 @@ class Handler(BaseHTTPRequestHandler):
                 '/api/v1/datasets', '/api/v1/datasets/{id}/meta', '/api/v1/datasets/{id}/snapshot',
                 '/api/v1/datasets/{id}/field?var=&time=&depth=[&format=bin]', '/api/v1/datasets/{id}/column?lat=&lon=&time=',
                 '/api/v1/datasets/{id}/profiles?bbox=w,s,e,n&start=&end=', '/api/v1/datasets/{id}/track',
-                '/wms?SERVICE=WMS&REQUEST=GetCapabilities', '/wcs?SERVICE=WCS&REQUEST=GetCapabilities']})
+                '/wms?SERVICE=WMS&REQUEST=GetCapabilities', '/wcs?SERVICE=WCS&REQUEST=GetCapabilities',
+                '/opendap/{id}.dds|.das|.ascii|.dods?<projection>']})
         if parts[:3] != ['api', 'v1', 'datasets'] or len(parts) > 5:
             raise ApiError(404, 'NotFound', f'no route {path}')
         if len(parts) == 3:
@@ -730,6 +736,38 @@ class Handler(BaseHTTPRequestHandler):
         if not ds.track:
             raise ApiError(404, 'NoTrack', f'{ds.id} has no storm track')
         return self.send_json(ds.track)
+
+    # -- OPeNDAP DAP2 (/opendap/<id>.dds|.das|.ascii|.dods?<projection>)
+    def dap(self, path, query):
+        m = re.fullmatch(r'/opendap/([A-Za-z0-9_-]+)\.(dds|das|ascii|asc|dods)', path)
+        if not m:
+            raise ApiError(404, 'NotFound', 'OPeNDAP URLs are /opendap/<dataset>.dds, .das, .ascii or .dods')
+        ds = self.server.datasets.get(m.group(1))
+        if ds is None:
+            raise ApiError(404, 'NoSuchDataset', f'no dataset {m.group(1)!r}; see /api/v1/datasets')
+        ext = m.group(2)
+        hdr = {'XDODS-Server': 'dods/2.0', 'XOPeNDAP-Server': f'OceanLens/{VERSION}'}
+        if ext == 'das':
+            return self.send(dap_das(ds), 'text/plain; charset=utf-8', headers=dict(hdr, **{'Content-Description': 'dods-das'}))
+        items = dap_projection(ds, query)
+        cells = sum(it['cells'] for it in items)
+        limit = MAX_CELLS // 5 if ext in ('ascii', 'asc') else MAX_CELLS
+        if cells > limit:
+            raise ApiError(400, 'TooLarge', f'{cells} values requested; the limit for .{ext} is {limit}')
+        dds = dap_dds(ds, items)
+        if ext == 'dds':
+            return self.send(dds, 'text/plain; charset=utf-8', headers=dict(hdr, **{'Content-Description': 'dods-dds'}))
+        with self.busy():
+            if ext == 'dods':
+                body = dds.encode('utf-8') + b'Data:\n' + b''.join(dap_xdr(c) for it in items for c in it['parts'])
+                return self.send(body, 'application/octet-stream', headers=dict(hdr, **{'Content-Description': 'dods-data'}))
+            return self.send(dds + '-' * 45 + '\n' + ''.join(dap_ascii(it) for it in items), 'text/plain; charset=utf-8',
+                             headers=hdr)
+
+    def dap_error(self, e):
+        msg = e.message.replace('\\', '\\\\').replace('"', '\\"')
+        self.send(f'Error {{\n    code = {e.status};\n    message = "{msg}";\n}};\n', 'text/plain; charset=utf-8', e.status,
+                  headers={'Content-Description': 'dods-error'})
 
     # -- OGC common
     def ogc_request(self, q, service, versions):
@@ -1079,14 +1117,175 @@ def geo_box(w, s, e, n):
 
 
 FILL = np.float32(9.96921e36)      # the CF/NetCDF default fill for float
+AXES = ('time', 'depth', 'lat', 'lon')
+COORD_ATTRS = {
+    'time': {'standard_name': 'time', 'units': 'hours since 1970-01-01 00:00:00', 'calendar': 'standard', 'axis': 'T'},
+    'depth': {'standard_name': 'depth', 'units': 'm', 'positive': 'down', 'axis': 'Z'},
+    'lat': {'standard_name': 'latitude', 'units': 'degrees_north', 'axis': 'Y'},
+    'lon': {'standard_name': 'longitude', 'units': 'degrees_east', 'axis': 'X'},
+}
 
 
-def coverage_netcdf(ds, key, it, ik, iy, ix, data):
-    """One variable on (time, depth, lat, lon) as CF-1.8 NetCDF-3 bytes."""
+def coords(ds):
+    """The four axes as the CF coordinate values served (time in hours since 1970)."""
+    return {'time': ds.tsec / 3600.0, 'depth': ds.depths, 'lat': ds.lat, 'lon': ds.lon}
+
+
+def var_attrs(ds, key):
     info = ds.info[key]
     attrs = {'units': info['units'], 'long_name': info['label'], '_FillValue': FILL}
     if info.get('standard_name'):
         attrs['standard_name'] = info['standard_name']
+    return attrs
+
+
+# ---- OPeNDAP DAP2 ----------------------------------------------------------------------------------------------
+def dap_slabs(text, sizes, term):
+    """'[0][2:5][0:2:10]' -> one index array per dimension (all of each when there is no hyperslab)."""
+    parts = re.findall(r'\[([^\]]*)\]', text)
+    if not parts:
+        return [np.arange(n) for n in sizes]
+    if len(parts) != len(sizes):
+        raise ApiError(400, 'BadConstraint', f'{term}: {len(parts)} hyperslabs for {len(sizes)} dimensions')
+    out = []
+    for p, n in zip(parts, sizes):
+        try:
+            v = [int(x) for x in p.split(':')]
+        except ValueError:
+            raise ApiError(400, 'BadConstraint', f'{term}: [{p}] is not [start], [start:stop] or [start:stride:stop]')
+        start, stride, stop = (v[0], 1, v[0]) if len(v) == 1 else (v[0], 1, v[1]) if len(v) == 2 else \
+            (v[0], v[1], v[2]) if len(v) == 3 else (None, None, None)
+        if start is None or stride < 1 or not (0 <= start <= stop < n):
+            raise ApiError(400, 'BadConstraint', f'{term}: [{p}] is outside 0..{n - 1} or has a stride below 1')
+        out.append(np.arange(start, stop + 1, stride))
+    return out
+
+
+def dap_projection(ds, query):
+    """A DAP2 projection -> items to send, in request order. An item is a top-level axis array, or a model
+    variable as a Grid (array and its four maps) or as a Structure of the parts asked for."""
+    ce = unquote(query or '').strip()
+    proj, _, sel = ce.partition('&')
+    if sel.strip():
+        raise ApiError(400, 'BadConstraint', 'selection clauses (&...) are not supported; use hyperslabs')
+    C = coords(ds)
+    shape = tuple(len(C[a]) for a in AXES)
+    if not proj.strip():
+        terms = list(AXES) + list(ds.fields)
+    else:
+        terms = [t.strip() for t in proj.split(',') if t.strip()]
+    items, grids = [], {}
+    for term in terms:
+        m = re.fullmatch(r'([\w-]+)(?:\.([\w-]+))?((?:\[[^\]]*\])*)', term)
+        if not m:
+            raise ApiError(400, 'BadConstraint', f'cannot read the projection {term!r}')
+        name, part, slab = m.groups()
+        if name in C and part is None:
+            idx = dap_slabs(slab, [len(C[name])], term)[0]
+            items.append({'kind': 'array', 'name': name, 'cells': len(idx),
+                          'parts': [dap_part(ds, name, name, name, [idx])]})
+            continue
+        if name not in ds.fields or (part is not None and part != name and part not in C):
+            raise ApiError(404, 'NoSuchVariable', f'no variable {term.split("[")[0]!r}; see the .dds')
+        g = grids.get(name)
+        if g is None:
+            g = grids[name] = {'kind': 'grid', 'name': name, 'sel': {}}
+            items.append(g)
+        if part is None:                                  # the whole grid: one hyperslab for the array and maps
+            idx = dap_slabs(slab, shape, term)
+            g['sel'][name] = idx
+            g['sel'].update({a: [i] for a, i in zip(AXES, idx)})
+        elif part == name:
+            g['sel'][name] = dap_slabs(slab, shape, term)
+        else:
+            g['sel'][part] = dap_slabs(slab, [len(C[part])], term)
+    for g in (it for it in items if it['kind'] == 'grid'):
+        order = [x for x in (g['name'],) + AXES if x in g['sel']]
+        g['parts'] = [dap_part(ds, g['name'], x, AXES if x == g['name'] else (x,), g['sel'][x]) for x in order]
+        array = g['parts'][0] if order[0] == g['name'] else None
+        g['grid'] = len(order) == 5 and array is not None and \
+            all(len(g['sel'][a][0]) == n for a, n in zip(AXES, array['shape']))
+        g['cells'] = sum(int(np.prod(c['shape'])) for c in g['parts'])
+    return items
+
+
+def dap_part(ds, grid, name, dims, idx):
+    """One array to send: its declaration and its values (float32 with fill for model data, float64 for axes)."""
+    if name in ds.fields:
+        data = ds.fields[name][np.ix_(*idx)]
+        data = np.where(np.isfinite(data), data, FILL).astype('>f4')
+        kind = 'Float32'
+    else:
+        data = coords(ds)[name][idx[0]].astype('>f8')
+        kind = 'Float64'
+    dims = (dims,) if isinstance(dims, str) else dims
+    return {'grid': grid, 'name': name, 'kind': kind, 'dims': dims, 'shape': data.shape, 'data': data}
+
+
+def dap_decl(c, indent):
+    return f'{indent}{c["kind"]} {c["name"]}' + ''.join(f'[{d} = {n}]' for d, n in zip(c['dims'], c['shape'])) + ';\n'
+
+
+def dap_dds(ds, items):
+    out = ['Dataset {\n']
+    for it in items:
+        if it['kind'] == 'array':
+            out.append(dap_decl(it['parts'][0], '    '))
+        elif it['grid']:
+            out.append('    Grid {\n      ARRAY:\n' + dap_decl(it['parts'][0], '        ') + '      MAPS:\n' +
+                       ''.join(dap_decl(c, '        ') for c in it['parts'][1:]) + f'    }} {it["name"]};\n')
+        else:
+            out.append('    Structure {\n' + ''.join(dap_decl(c, '        ') for c in it['parts']) +
+                       f'    }} {it["name"]};\n')
+    out.append(f'}} {ds.id};\n')
+    return ''.join(out)
+
+
+def dap_xdr(c):
+    n = int(np.prod(c['shape']))
+    return struct.pack('>ii', n, n) + c['data'].tobytes()
+
+
+def dap_ascii(it):
+    out = []
+    for c in it['parts']:
+        label = c['name'] if it['kind'] == 'array' else f'{it["name"]}.{c["name"]}'
+        fmt = '{:.7g}' if c['kind'] == 'Float32' else '{:.15g}'
+        a = c['data'].astype(np.float64)
+        out.append(label + ''.join(f'[{n}]' for n in c['shape']) + '\n')
+        if a.ndim == 1:
+            out.append(', '.join(fmt.format(v) for v in a) + '\n')
+        else:
+            for ix in np.ndindex(a.shape[:-1]):
+                out.append(''.join(f'[{i}]' for i in ix) + ', ' + ', '.join(fmt.format(v) for v in a[ix]) + '\n')
+        out.append('\n')
+    return ''.join(out)
+
+
+def das_value(v):
+    if isinstance(v, (float, np.floating)):
+        return 'Float32' if isinstance(v, np.float32) else 'Float64', f'{float(v):.7g}'
+    if isinstance(v, (int, np.integer)) and not isinstance(v, bool):
+        return 'Int32', str(int(v))
+    text = str(v).replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
+    return 'String', f'"{text}"'
+
+
+def dap_das(ds):
+    def block(name, attrs):
+        rows = ''.join('        {0} {2} {1};\n'.format(*das_value(v), k) for k, v in attrs.items())
+        return f'    {name} {{\n{rows}    }}\n'
+    g = {'Conventions': 'CF-1.8', 'title': ds.title}
+    src = ds.attrs.get('source') or (ds.attrs.get('sources') or {}).get('model')
+    if src:
+        g['source'] = src
+    return ('Attributes {\n' + ''.join(block(a, COORD_ATTRS[a]) for a in AXES) +
+            ''.join(block(k, var_attrs(ds, k)) for k in ds.fields) + block('NC_GLOBAL', g) + '}\n')
+
+
+def coverage_netcdf(ds, key, it, ik, iy, ix, data):
+    """One variable on (time, depth, lat, lon) as CF-1.8 NetCDF-3 bytes."""
+    info, attrs = ds.info[key], var_attrs(ds, key)
     out = np.where(np.isfinite(data), data, FILL).astype(np.float32)
     g = {'Conventions': 'CF-1.8', 'title': f'{ds.title}: {info["label"]}',
          'source': ds.attrs.get('source') or (ds.attrs.get('sources', {}) or {}).get('model', ds.source),
@@ -1096,14 +1295,13 @@ def coverage_netcdf(ds, key, it, ik, iy, ix, data):
         g['references'] = '; '.join(c.get('text', '') for c in cites if isinstance(c, dict))
     dims = {'time': len(it), 'depth': len(ik), 'lat': len(iy), 'lon': len(ix)}
     variables = {
-        'time': {'dims': ('time',), 'dtype': 'f8', 'data': ds.tsec[it] / 3600.0,
-                 'attrs': {'standard_name': 'time', 'units': 'hours since 1970-01-01 00:00:00', 'calendar': 'standard', 'axis': 'T'}},
+        'time': {'dims': ('time',), 'dtype': 'f8', 'data': ds.tsec[it] / 3600.0, 'attrs': COORD_ATTRS['time']},
         'depth': {'dims': ('depth',), 'dtype': 'f4', 'data': ds.depths[ik].astype(np.float32),
-                  'attrs': {'standard_name': 'depth', 'units': 'm', 'positive': 'down', 'axis': 'Z'}},
+                  'attrs': COORD_ATTRS['depth']},
         'lat': {'dims': ('lat',), 'dtype': 'f4', 'data': ds.lat[iy].astype(np.float32),
-                'attrs': {'standard_name': 'latitude', 'units': 'degrees_north', 'axis': 'Y'}},
+                'attrs': COORD_ATTRS['lat']},
         'lon': {'dims': ('lon',), 'dtype': 'f4', 'data': ds.lon[ix].astype(np.float32),
-                'attrs': {'standard_name': 'longitude', 'units': 'degrees_east', 'axis': 'X'}},
+                'attrs': COORD_ATTRS['lon']},
         key: {'dims': ('time', 'depth', 'lat', 'lon'), 'dtype': 'f4', 'data': out, 'attrs': attrs},
     }
     return ncio.write_bytes(dims, variables, g)

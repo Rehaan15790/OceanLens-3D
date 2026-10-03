@@ -7,9 +7,9 @@
 const profileState = {open:false, inst:null, current:null, floatId:null, tab:'temp', depthIdx:undefined};
 const trackState = {open:false};
 const fmtSigned = fmt.signed;
-const VAR_DP = {temp:2, sal:2, dens:2, chl:2, oxy:1};
+const VAR_DP = {temp:2, sal:2, dens:2, chl:2, oxy:1, cur:2};
 // RMSE above which a profile's misfit is highlighted (per variable)
-const RMSE_WARN = {temp:0.5, sal:0.15, dens:0.15, chl:0.1, oxy:10};
+const RMSE_WARN = {temp:0.5, sal:0.15, dens:0.15, chl:0.1, oxy:10, cur:0.1};
 
 function showPanel(which){   // 'empty' | 'profile' | 'track' | 'section'
   state.panel = which;
@@ -147,7 +147,7 @@ function openProfile(x){
   profileState.current = userData;
   profileState.inst = inst;
   profileState.floatId = inst.id;
-  profileState.tab = 'temp';
+  profileState.tab = type.profileTab || 'temp';
   syncProfileTabs();
   if(profileState.depthIdx===undefined) profileState.depthIdx = state.mode==='slice' ? state.depthIdx : 4;
   const seabed = Math.round(bathyDepth(inst.lat, inst.lon));
@@ -182,13 +182,14 @@ function modelGap(inst){
   if(h===null) return analysisGap(inst);
   return `model matched at ${fmt.floatTime(inst.model.time)}, ${fmt.dp(Math.abs(h), 1)} h ${h >= 0 ? 'before' : 'after'} the profile`;
 }
-// chlorophyll and oxygen tabs only for profiles that carry them; a hidden current tab falls back to temperature
+// tabs beyond temperature, salinity and density (chlorophyll, oxygen, current speed) only for profiles that
+// carry them; a hidden current tab falls back to temperature
 function syncProfileTabs(){
   const inst = profileState.inst, p = inst ? observeProfile(inst, state.time) : null;
   const tabs = document.querySelectorAll('.tabbtn');
   tabs.forEach(b=>{
-    const k = b.dataset.p, arr = p && (k==='chl' || k==='oxy') ? obsArray(p, k) : null;
-    b.hidden = (k==='chl' || k==='oxy') && !(arr && arr.some(Number.isFinite));
+    const k = b.dataset.p, core = ['temp', 'sal', 'dens'].includes(k), arr = p && !core ? obsArray(p, k) : null;
+    b.hidden = !core && !(arr && arr.some(Number.isFinite));
   });
   if([...tabs].some(b=>b.hidden && b.dataset.p===profileState.tab)) profileState.tab = 'temp';
   tabs.forEach(b=>setSelected(b, b.dataset.p===profileState.tab));

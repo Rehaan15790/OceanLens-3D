@@ -1,6 +1,7 @@
 # OceanLens 3D server API
 
-`server/serve.py` serves the built app and its data over HTTP: a REST API, OGC WMS 1.3.0 and OGC WCS 2.0.1. It needs
+`server/serve.py` serves the built app and its data over HTTP: a REST API, OGC WMS 1.3.0, OGC WCS 2.0.1 and a minimal
+OPeNDAP DAP2 endpoint. It needs
 Python 3.12 and numpy, nothing else. NetCDF input and output go through `data-pipeline/ncio.py` (NetCDF classic,
 CDF-1/2/5).
 
@@ -114,9 +115,40 @@ http://localhost:8080/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGE
 Read the NetCDF with any CF tool (`ncdump -h`, xarray, Panoply), or with `data-pipeline/ncio.py`:
 `ncio.read('amphan-2020.temp.nc')`.
 
+## OPeNDAP DAP2 (`/opendap/<id>.dds`, `.das`, `.ascii`, `.dods`)
+
+Each dataset is one DAP2 dataset. The axes `time` (hours since 1970-01-01), `depth`, `lat` and `lon` are Float64
+arrays. Each variable is a `Grid` of Float32 `[time][depth][lat][lon]` with those four maps. Cells without data hold
+`_FillValue` 9.96921e+36. The DAS carries the CF attributes.
+
+- **Projection**: a comma-separated list after `?`. A name with no projection returns everything.
+  - `temp` returns the whole Grid.
+  - `temp[t][k][i][j]` returns the Grid with the hyperslab applied to the array and its maps.
+  - `temp.temp[...]` returns the array alone, as a `Structure`.
+  - `temp.lat` returns one map.
+  - `time[0:1:3]` returns an axis.
+- **Hyperslabs**: `[start]`, `[start:stop]` or `[start:stride:stop]`, inclusive and zero-based. Give one per
+  dimension, or none for all.
+- **Formats**:
+  - `.dds` is the structure.
+  - `.das` is the attributes.
+  - `.ascii` is the DDS, a line of 45 dashes, then the values in THREDDS layout (rows of `[i][j][k], v, v, ...`).
+  - `.dods` is the DDS, `Data:`, then XDR (each array is its length twice as big-endian Int32, then big-endian values).
+- **Limits**: up to 5 million values per `.dods` request and 1 million per `.ascii` request.
+- **Errors**: a DAP2 `Error { code = ...; message = "..."; };` with the HTTP status.
+
+```
+http://localhost:8080/opendap/amphan-2020.dds
+http://localhost:8080/opendap/amphan-2020.ascii?temp.temp[3][0:1:2][10:2:14][20:1:22]
+http://localhost:8080/opendap/amphan-2020.dods?temp[0][0][0:32][0:62],time
+```
+
+`data-pipeline/build_snapshot.py` reads `.ascii` responses with the same parser it uses on HYCOM's THREDDS server.
+
 ## What it does not do
 
-- No OPeNDAP (DAP2/DAP4) endpoint. The data pipeline reads HYCOM over OPeNDAP; the server offers REST, WMS and WCS.
+- OPeNDAP is DAP2 projections and hyperslabs only. There are no selection clauses (`&`), server functions,
+  DAP4, `.html`/`.info` pages or Sequences for profiles. It has not been tried with netCDF-C, pydap or Panoply.
 - No WMS `GetLegendGraphic`, no reprojection beyond `CRS:84`/`EPSG:4326`, no WCS `rangeSubset`, scaling or
   POST/SOAP bindings, no WCS-T.
 - No authentication, rate limiting or TLS of its own: put it behind the institution's reverse proxy

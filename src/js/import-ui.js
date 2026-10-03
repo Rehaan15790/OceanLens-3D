@@ -13,6 +13,7 @@ const importUI = (()=>{
     ['lat', 'Latitude', 'required'], ['lon', 'Longitude', 'required'], ['time', 'Time', 'required'],
     ['depth', 'Depth (m)', 'depth or pressure'], ['pres', 'Pressure (dbar)', 'depth or pressure'],
     ['temp', 'Temperature'], ['sal', 'Salinity'], ['chl', 'Chlorophyll'], ['oxy', 'Oxygen'],
+    ['u', 'Eastward current'], ['v', 'Northward current'],
     ['id', 'Profile or platform id'], ['type', 'Instrument type']
   ];
   const api = ()=>window.OceanLens || null;
@@ -99,7 +100,7 @@ const importUI = (()=>{
     if(fs.hidden) return;
     fs.querySelector('legend').textContent = p.needsMapping ? 'Match the columns' : 'Columns';
     fs.querySelector('.field-note').textContent = p.needsMapping
-      ? "Some column names weren't recognised. Pick the column that holds each quantity. Latitude, longitude, time and depth or pressure are required."
+      ? "Some column names weren't recognised. Pick the column that holds each quantity. Latitude, longitude and time are required, and depth or pressure unless the file holds surface currents (eastward and northward)."
       : 'Matched from the header. Change any that are wrong.';
     const sample = i=>p.preview && p.preview[0] && p.preview[0][i]!=null && p.preview[0][i]!=='' ? `: ${p.preview[0][i]}` : '';
     FIELDS.forEach(([key, label, req])=>{
@@ -124,7 +125,8 @@ const importUI = (()=>{
   // the required quantities that have no column, as select elements
   function missingColumns(m){
     const miss = ['lat', 'lon', 'time'].filter(k=>!(k in m));
-    if(!('depth' in m) && !('pres' in m)) miss.push('depth');
+    // surface currents (HF radar) need no depth: u and v alone are enough
+    if(!('depth' in m) && !('pres' in m) && !('u' in m && 'v' in m)) miss.push('depth');
     return miss;
   }
   const MISSING_NAMES = {lat:'latitude', lon:'longitude', time:'time', depth:'depth or pressure'};

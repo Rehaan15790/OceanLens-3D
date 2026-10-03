@@ -317,6 +317,7 @@
           <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="dens">Density</button>
           <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="chl">Chlorophyll</button>
           <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="oxy">Oxygen</button>
+          <button type="button" class="tabbtn" role="tab" aria-selected="false" data-p="cur">Current speed</button>
         </div>
         <div id="obsLegend" class="chart-legend"></div>
         <canvas id="profChart" role="img" aria-label="Observed profile and model column"></canvas>
@@ -512,7 +513,7 @@
       <h3>Files it reads</h3>
       <ul class="about-bullets">
         <li>Comma-, tab- or semicolon-separated text with one row per sample: latitude, longitude, time, depth or
-          pressure, and any of temperature, salinity, chlorophyll and oxygen.</li>
+          pressure, and any of temperature, salinity, chlorophyll, oxygen and current (eastward and northward). Surface currents need no depth.</li>
         <li>NetCDF-3 (.nc): Argo profile files, Ifremer EGO glider files, ERDDAP tabledap downloads, CF profile data.</li>
       </ul>
       <p class="field-note">NetCDF-4 files need converting first: run them through the data pipeline, or export them
@@ -525,7 +526,7 @@
       <fieldset id="importMapping" class="field import-mapping" hidden>
         <legend>Match the columns</legend>
         <p class="field-note">Some column names weren't recognised. Pick the column that holds each quantity.
-          Latitude, longitude, time and depth or pressure are required.</p>
+          Latitude, longitude and time are required, and depth or pressure unless the file holds surface currents (eastward and northward).</p>
         <div id="importMapGrid" class="map-grid"></div>
       </fieldset>
       <div class="import-fields">
@@ -558,6 +559,8 @@
 <script src="js/plugins.js"></script>
 <script src="js/plugins/ctd.js"></script>
 <script src="js/plugins/mooring.js"></script>
+<script src="js/plugins/adcp.js"></script>
+<script src="js/plugins/hfradar.js"></script>
 <script src="js/fmt.js"></script>
 <script src="js/geo.js"></script>
 <script src="js/data-source.js"></script>

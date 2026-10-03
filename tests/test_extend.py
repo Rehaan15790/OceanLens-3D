@@ -98,6 +98,35 @@ class PluginApi(AppTestCase):
         self.assertEqual(self.js("instrumentsNow().filter(i=>i.kind==='testbuoy').length"), 0)
         self.assertNoProblems()
 
+    @pending('plugin API (architect, plugins.js)', probe=API)
+    def test_adcp_profiles_show_current_speed(self):
+        r = self.js("""(()=>{ const t=__ol.state.time; const res=OceanLens.addDataset({id:'adcp-1',name:'adcp',source:'import',
+          type:'adcp',profiles:[{id:'ADCP-1',lat:15.5,lon:88.5,time:META.times[t],z:[10,30,60],vars:{u:[0.3,0.2,null],v:[0.4,0.0,0.1]}}]});
+          __ol.actions.setOverlay('showOther',true); const i=instrumentsNow().find(x=>x.kind==='adcp');
+          return {n:res.profiles, cur:Array.from(i.obs.vars.cur,v=>Number.isFinite(v)?+v.toFixed(3):null)}; })()""")
+        self.assertEqual(r, {'n': 1, 'cur': [0.5, 0.2, None]})
+        open_imported_profile(self, {'ADCP-1'})
+        self.assertEqual(self.js('profileState.tab'), 'cur')
+        self.js("OceanLens.removeDataset('adcp-1')")
+        self.assertNoProblems()
+
+    @pending('plugin API (architect, plugins.js)', probe=API)
+    def test_hf_radar_product_maps_surface_current(self):
+        r = self.js("""(()=>{ const t=__ol.state.time, c=[];
+          for(let la=17;la<=19.001;la+=0.1) for(let lo=86;lo<=88.001;lo+=0.1)
+            c.push({lat:+la.toFixed(2),lon:+lo.toFixed(2),time:META.times[t],vars:{u:[0.3],v:[0.4]}});
+          OceanLens.addDataset({id:'hfr-1',name:'radar',source:'import',type:'hfradar',profiles:c}); __ol.flush();
+          const g=field2dGrid('hfr',t).filter(v=>v!==null); __ol.actions.setVariable('hfr');
+          return {n:g.length, lo:Math.min(...g), hi:Math.max(...g), marks:instrumentsNow().filter(i=>i.kind==='hfradar').length,
+                  pill:!!document.querySelector('.pill[data-v="hfr"]'), view:currentView()}; })()""")
+        self.assertGreater(r['n'], 10)
+        self.assertAlmostEqual(r['lo'], 0.5, 3)
+        self.assertAlmostEqual(r['hi'], 0.5, 3)
+        self.assertEqual((r['marks'], r['pill'], r['view']), (0, True, 'field2d'))
+        self.js("__ol.actions.setVariable('temp'); OceanLens.removeDataset('hfr-1')")
+        self.assertNoProblems()
+
+
 class ImportSamples(AppTestCase):
     data_mode = 'real'
 
@@ -165,6 +194,39 @@ class ImportSamples(AppTestCase):
                 self.assertEqual(r['profiles'], 1)
                 self.assertIn('Argo', r['format'])
                 np.testing.assert_allclose(r['T'], [29.5, 28.9, 25.0, 17.0], atol=1e-4)
+        self.assertNoProblems()
+
+    @pending('import plumbing (architect import.js, science formats.js)', probe=IMPORT)
+    def test_ego_glider_and_cf_profile_netcdf(self):
+        """The EGO glider and generic CF NetCDF mappings, on synthetic files written by ncio.py."""
+        import numpy as np
+        from ncio_fixtures import cf_profiles_bytes, ego_glider_bytes
+        for fx in (ego_glider_bytes(), cf_profiles_bytes()):
+            with self.subTest(format=fx['format']):
+                b64 = base64.b64encode(fx['data']).decode()
+                r = self.js(f"""(async()=>{{ const bin=atob('{b64}'), u8=new Uint8Array(bin.length);
+                    for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+                    const p = await OceanLens.readData({json.dumps(fx['filename'])}, u8.buffer);
+                    if (p.error) return {{error:p.error}};
+                    const r = OceanLens.importParsed(p); __ol.actions.setShowAllImported(true);
+                    __ol.actions.setOverlay('showGlider', true); __ol.actions.setOverlay('showOther', true);
+                    const insts = instrumentsNow().filter(i=>i.imported && i.dataset===r.id).sort((a, b)=>a.ms-b.ms);
+                    const f = insts[0];
+                    return {{label:p.formatLabel, want:IMPORT_FORMATS[{json.dumps(fx['format'])}].label, type:p.type,
+                            id:r.id, profiles:r.profiles, ids:insts.map(i=>i.id), first:f.id, z:f.levels,
+                            T:Array.from(f.obs.T, v=>Number.isFinite(v) ? v : null),
+                            warnings:(p.warnings || []).concat(r.warnings || [])}}; }})()""", await_promise=True)
+                self.assertNotIn('error', r, f"{fx['filename']}: {r.get('error')}")
+                self.assertEqual(r['label'], r['want'], 'detected as another format')
+                self.assertEqual((r['type'], r['profiles'], r['first']), (fx['type'], fx['profiles'], fx['first_id']))
+                np.testing.assert_allclose(r['z'], fx['first_z'], atol=0.01)
+                self.assertEqual([t is None for t in r['T']], [t is None for t in fx['first_temp']], 'missing levels')
+                np.testing.assert_allclose([t for t in r['T'] if t is not None],
+                                           [t for t in fx['first_temp'] if t is not None], atol=1e-4)
+                for w in fx['warnings']:
+                    self.assertTrue(any(w in x for x in r['warnings']), f'no warning containing {w!r}: {r["warnings"]}')
+                open_imported_profile(self, set(r['ids']))
+                self.js(f"OceanLens.removeDataset({json.dumps(r['id'])})")
         self.assertNoProblems()
 
     @pending('import dialog (ux import-ui.js)', probe="typeof importUI === 'undefined'")

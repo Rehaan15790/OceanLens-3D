@@ -12,8 +12,8 @@ function theme(){
 }
 // readout formats (until fmt.js has them): temperature 1 dp, salinity and speed 2 dp
 const VALUE_DP = {temp:1, sal:2, cur:2, dens:2, chl:2, oxy:0};
-const PROFILE_UNITS = {temp:'°C', sal:'PSU', chl:'mg/m³', oxy:'µmol/kg', dens:'kg/m³'};
-const PROFILE_NAMES = {temp:'temperature', sal:'salinity', chl:'chlorophyll', oxy:'oxygen', dens:'density'};
+const PROFILE_UNITS = {temp:'°C', sal:'PSU', chl:'mg/m³', oxy:'µmol/kg', dens:'kg/m³', cur:'m/s'};
+const PROFILE_NAMES = {temp:'temperature', sal:'salinity', chl:'chlorophyll', oxy:'oxygen', dens:'density', cur:'current speed'};
 const escapeHtml = s=>String(s).replace(/[&<>"']/g, c=>({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[c]);
 // an instrument type's label from the plugin registry, for imported and plugin data
 function instrumentLabel(kind){

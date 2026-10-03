@@ -5,7 +5,7 @@ One build produces two things, and a small server adds a third:
 1. **The single file**, `OceanLens3D.html`. It is for USB drives, email and the hackathon submission, and it must
    keep opening by double-click over `file://` with no network.
 2. **A static site**: the same file served as `index.html`, with security headers.
-3. **The data server** (`server/serve.py`): the same file plus a REST API, OGC WMS 1.3.0 and WCS 2.0.1, for an
+3. **The data server** (`server/serve.py`): the same file plus a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2, for an
    institution's own machines (section 4).
 
 The repository is private and has no remote. Everything below assumes a **private** GitHub repository that the owner

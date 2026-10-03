@@ -3,7 +3,8 @@
    parseDelimited(text) -> table; guessMapping(table) -> column mapping; tableToDataset(table,
    mapping) -> dataset (one row per sample, grouped into profiles by id + time).
    ============================================================ */
-const CSV_FIELDS = ['lat', 'lon', 'time', 'depth', 'pres', 'temp', 'sal', 'chl', 'oxy', 'id', 'type'];
+const CSV_FIELDS = ['lat', 'lon', 'time', 'depth', 'pres', 'temp', 'sal', 'chl', 'oxy', 'u', 'v', 'id', 'type'];
+const CSV_MEASURED = ['temp', 'sal', 'chl', 'oxy', 'u', 'v'];
 // header names per field, compared after lower-casing and dropping units; first match wins, so
 // adjusted (delayed-mode) columns come before raw ones
 const CSV_NAMES = {
@@ -14,10 +15,12 @@ const CSV_NAMES = {
   sal:['psal_adjusted', 'psal', 'sal', 'salinity', 'sea_water_salinity', 's'],
   chl:['chla_adjusted', 'chla', 'chl', 'chl_a', 'chlorophyll', 'chlorophyll_a'],
   oxy:['doxy_adjusted', 'doxy', 'oxy', 'oxygen', 'o2', 'dissolved_oxygen'],
+  u:['u', 'ucur', 'water_u', 'east_vel', 'vel_east', 'eastward_velocity', 'eastward_sea_water_velocity'],
+  v:['v', 'vcur', 'water_v', 'north_vel', 'vel_north', 'northward_velocity', 'northward_sea_water_velocity'],
   id:['platform_number', 'platform', 'platform_code', 'wmo', 'float', 'float_id', 'station', 'station_id', 'cast', 'cast_id', 'id', 'site'],
   type:['instrument_type', 'platform_type', 'instrument', 'type']
 };
-const CSV_UNIT_TOKENS = /^(c|degc|°c|deg_c|degree_c|degrees_c|celsius|f|degf|°f|k|kelvin|m|meters|metres|ft|feet|km|dbar|decibar|db|bar|kpa|psu|pss|pss78|pss-78|g\/kg|1|mg\/m3|mg_m3|mg_m-3|mg m-3|ug\/l|µg\/l|ugl|umol\/kg|µmol\/kg|umol_kg|micromole\/kg|umol\/l|µmol\/l|ml\/l|ml_l|mg\/l|mg_l|degrees_north|degrees_east|degree_north|degree_east|deg|utc|iso8601)$/i;
+const CSV_UNIT_TOKENS = /^(c|degc|°c|deg_c|degree_c|degrees_c|celsius|f|degf|°f|k|kelvin|m|meters|metres|ft|feet|km|dbar|decibar|db|bar|kpa|psu|pss|pss78|pss-78|g\/kg|1|mg\/m3|mg_m3|mg_m-3|mg m-3|ug\/l|µg\/l|ugl|umol\/kg|µmol\/kg|umol_kg|micromole\/kg|umol\/l|µmol\/l|ml\/l|ml_l|mg\/l|mg_l|degrees_north|degrees_east|degree_north|degree_east|deg|utc|iso8601|m\/s|cm\/s|mm\/s|m_s|cm_s|kn|knots)$/i;
 
 const isNumCell = c => c!=='' && Number.isFinite(+c);
 function splitLine(line, d){
@@ -83,8 +86,10 @@ function guessMapping(table){
     }
   });
   const missing = ['lat', 'lon', 'time'].filter(f=>mapping[f]===undefined);
-  if(mapping.depth===undefined && mapping.pres===undefined) missing.push('depth or pressure');
-  if(!['temp', 'sal', 'chl', 'oxy'].some(f=>mapping[f]!==undefined)) missing.push('a measured variable');
+  // surface current maps (HF radar) have u and v but no depth
+  const surface = mapping.u!==undefined && mapping.v!==undefined;
+  if(mapping.depth===undefined && mapping.pres===undefined && !surface) missing.push('depth or pressure');
+  if(!CSV_MEASURED.some(f=>mapping[f]!==undefined)) missing.push('a measured variable');
   return {mapping, missing, needsMapping: !table.headerDetected || missing.length > 0};
 }
 
@@ -113,13 +118,16 @@ function unitConverter(field, unit){
     sal:{psu:same, pss:same, pss78:same, 'pss-78':same, 1:same, 'g/kg':same},
     chl:{'mg/m3':same, mg_m3:same, 'mg_m-3':same, 'mg m-3':same, 'ug/l':same, 'µg/l':same, ugl:same},
     // µmol/L to µmol/kg with a seawater density of 1.025 kg/L; 1 mL/L O2 = 44.661 µmol/L
+    u:{'m/s':same, m_s:same, 'cm/s':x=>x/100, cm_s:x=>x/100, 'mm/s':x=>x/1000, kn:x=>x*0.514444, knots:x=>x*0.514444},
+    v:{'m/s':same, m_s:same, 'cm/s':x=>x/100, cm_s:x=>x/100, 'mm/s':x=>x/1000, kn:x=>x*0.514444, knots:x=>x*0.514444},
     oxy:{'umol/kg':same, 'µmol/kg':same, umol_kg:same, 'micromole/kg':same, 'umol/l':x=>x/1.025, 'µmol/l':x=>x/1.025,
          'ml/l':x=>x*44.661/1.025, ml_l:x=>x*44.661/1.025, 'mg/l':x=>x*31.252/1.025, mg_l:x=>x*31.252/1.025}
   }[field];
   if(!table) return same;
   return table[u] || null;
 }
-const TYPE_WORDS = {argo:'argo', float:'argo', 'bgc-argo':'argo', glider:'glider', ctd:'ctd', cast:'ctd', mooring:'mooring', buoy:'mooring'};
+const TYPE_WORDS = {adcp:'adcp', radar:'hfradar', hfr:'hfradar', argo:'argo', float:'argo', 'bgc-argo':'argo', glider:'glider',
+                    ctd:'ctd', cast:'ctd', mooring:'mooring', buoy:'mooring'};
 function typeFromText(s){
   const w = String(s || '').toLowerCase();
   for(const k of Object.keys(TYPE_WORDS)) if(w.includes(k)) return TYPE_WORDS[k];
@@ -130,19 +138,21 @@ function tableToDataset(table, mapping, opts = {}){
   const col = f=>mapping[f]===undefined || mapping[f]===null || mapping[f]==='' ? -1 : +mapping[f];
   ['lat', 'lon', 'time'].forEach(f=>{ if(col(f) < 0) throw new Error(`Choose the column that holds ${f==='lat' ? 'latitude' : f==='lon' ? 'longitude' : 'time'}.`); });
   const zf = col('depth') >= 0 ? 'depth' : col('pres') >= 0 ? 'pres' : null;
-  if(!zf) throw new Error('Choose the column that holds depth or pressure.');
-  const vars = ['temp', 'sal', 'chl', 'oxy'].filter(f=>col(f) >= 0);
-  if(!vars.length) throw new Error('Choose at least one measured column (temperature, salinity, chlorophyll or oxygen).');
+  const surface = !zf && col('u') >= 0 && col('v') >= 0;          // a surface current map: every row at 0 m
+  if(!zf && !surface) throw new Error('Choose the column that holds depth or pressure.');
+  const vars = CSV_MEASURED.filter(f=>col(f) >= 0);
+  if(!vars.length) throw new Error('Choose at least one measured column (temperature, salinity, chlorophyll, oxygen or current).');
   const warnings = table.ragged ? [`${table.ragged} ${table.ragged===1 ? 'row has' : 'rows have'} a different number of columns from the header; skipped.`] : [];
   const conv = {};
-  [zf, ...vars].forEach(f=>{
+  const measured = zf ? [zf, ...vars] : vars;
+  measured.forEach(f=>{
     const unit = table.units[col(f)], c = unitConverter(f, unit);
     if(c) conv[f] = c;
     else { conv[f] = x=>x; warnings.push(`Unit "${unit}" for ${f} not recognised; values used as they are.`); }
   });
   // Argo-style QC columns (NAME_QC next to a mapped column): flags 1, 2, 5 and 8 are kept
   const qcCol = {};
-  [zf, ...vars].forEach(f=>{
+  measured.forEach(f=>{
     const name = table.names[col(f)], j = table.names.indexOf(name + '_qc');
     if(j >= 0) qcCol[f] = j;
   });
@@ -163,9 +173,9 @@ function tableToDataset(table, mapping, opts = {}){
       if(t) g.type = t;
       groups.set(key, g);
     }
-    const g = groups.get(key), zr = r[col(zf)];
-    if(!isNumCell(zr) || (qcCol[zf]!==undefined && !goodQc(r[qcCol[zf]]))) return;
-    const zv = conv[zf](+zr);
+    const g = groups.get(key), zr = zf ? r[col(zf)] : '0';
+    if(!isNumCell(zr) || (zf && qcCol[zf]!==undefined && !goodQc(r[qcCol[zf]]))) return;
+    const zv = zf ? conv[zf](+zr) : 0;
     g.z.push(zf==='pres' ? depthFromPressure(zv, lat) : zv);
     vars.forEach(f=>{
       const c = r[col(f)], ok = isNumCell(c) && (qcCol[f]===undefined || goodQc(r[qcCol[f]]));
@@ -176,5 +186,5 @@ function tableToDataset(table, mapping, opts = {}){
   if(!groups.size) throw new Error('No rows with a readable time, position and depth.');
   const type = opts.type || typeFromText(table.header.join(' ') + ' ' + (opts.name || '')) || 'other';
   return {name:opts.name || 'Imported CSV', format:'csv', type, profiles:[...groups.values()], warnings,
-          notes: zf==='pres' ? ['Depth from pressure (Saunders 1981).'] : []};
+          notes: zf==='pres' ? ['Depth from pressure (Saunders 1981).'] : surface ? ['No depth column: surface values (0 m).'] : []};
 }

@@ -52,7 +52,7 @@ function is2D(key){ return !!VAR_META[key] && VAR_META[key].dims === 2; }
 // one value per map point (gridPts order, null on land) for a 2D variable
 const field2dCache = new Map();
 function field2dGrid(key, t){
-  const v = VAR_META[key], ck = key+'|'+dataMode+'|'+t;
+  const v = VAR_META[key], ck = key+'|'+dataMode+'|'+t+'|'+datasetRev+'|'+state.showAllImported;
   if(!v || v.dims !== 2) return null;
   if(!field2dCache.has(ck)){
     const g = v.grid ? v.grid(t) : gridPts.map((p, i)=>{
@@ -188,12 +188,13 @@ function removeDataset(id, quiet){
   if(!quiet){ datasetsChanged(); pluginEmit('dataset', {action:'remove', dataset:summary}); }
   return true;
 }
-// imported instruments within ±1.5 days of analysis t (all of them with "show all")
+// imported profiles within ±1.5 days of analysis t (all of them with "show all"); gridded types
+// (spec.gridded, e.g. HF radar cells) are fields, not profiles: products read them, markers do not
 const IMPORT_WINDOW_MS = 1.5*864e5;
 function importedNow(t){
   if(!importedInsts.length) return [];
   const at = Date.parse(META.times[t]);
-  return state.showAllImported ? importedInsts : importedInsts.filter(i=>Math.abs(i.ms - at) <= IMPORT_WINDOW_MS);
+  return importedInsts.filter(i=>!instrumentType(i.kind).gridded && (state.showAllImported || Math.abs(i.ms - at) <= IMPORT_WINDOW_MS));
 }
 
 const OceanLens = window.OceanLens = {
@@ -204,6 +205,7 @@ const OceanLens = window.OceanLens = {
   variable: k=>VAR_META[k] || null, variables: ()=>Object.keys(VAR_META),
   instrument: t=>INSTRUMENT_TYPES[t] || null, instruments: ()=>Object.keys(INSTRUMENT_TYPES),
   formats: ()=>Object.keys(IMPORT_FORMATS),
+  observations: type=>importedInsts.filter(i=>i.kind===type),   // every imported record of a type, all times
   on(name, fn){ (pluginListeners[name] = pluginListeners[name] || []).push(fn); return fn; },
   off(name, fn){ const l = pluginListeners[name]; if(l && l.includes(fn)) l.splice(l.indexOf(fn), 1); }
 };

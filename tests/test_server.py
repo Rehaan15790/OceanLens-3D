@@ -388,6 +388,80 @@ class ServerTest(unittest.TestCase):
             self.assertEqual(s, 400, sub)
             self.assertEqual(ET.fromstring(b).find('ows:Exception', NS).get('exceptionCode'), 'InvalidSubsetting', sub)
 
+    # ---- OPeNDAP DAP2
+    def test_opendap_dds_and_das(self):
+        import build_snapshot as B
+        dds = self.get('/opendap/amphan-2020.dds?temp[0][0:1][10:11][20:22],time,sal.sal[0][0][10][20]')[2].decode()
+        for line in ('Grid {', 'Float32 temp[time = 1][depth = 2][lat = 2][lon = 3];', 'Float64 lon[lon = 3];',
+                     'Float64 time[time = 8];', 'Structure {', 'Float32 sal[time = 1][depth = 1][lat = 1][lon = 1];',
+                     '} amphan-2020;'):
+            self.assertIn(line, dds)
+        full = self.get('/opendap/amphan-2020.dds')[2].decode()
+        self.assertEqual(full.count('Grid {'), 5, 'one Grid per variable (temp, sal, u, v, speed)')
+        das = B.parse_das(self.get('/opendap/amphan-2020.das')[2])
+        for line in ('Float32 _FillValue 9.96921e+36;', 'String standard_name "sea_water_temperature";',
+                     'String units "hours since 1970-01-01 00:00:00";', 'NC_GLOBAL {'):
+            self.assertIn(line, das)
+
+    def test_opendap_ascii_read_by_the_pipeline_parser(self):
+        """build_snapshot.parse_ascii, the reader the pipeline uses on HYCOM's THREDDS, reads our own .ascii."""
+        import build_snapshot as B
+        m = self.meta
+        # the request form the pipeline sends HYCOM: var.var[t][k0:1:k1][i0:SI:i1][j0:SJ:j1]
+        out = B.parse_ascii(self.get('/opendap/amphan-2020.ascii?temp.temp[3][0:1:2][10:2:14][20:1:22],'
+                                     'sal.sal[3][0:1:2][10:2:14][20:1:22]')[2])
+        self.assertEqual(out['temp_shape'], [1, 3, 3, 3])
+        for var in ('temp', 'sal'):
+            got = out[var].reshape(3, 3, 3)
+            for k in range(3):
+                for a, i in enumerate((10, 12, 14)):
+                    for c, j in enumerate((20, 21, 22)):
+                        if self.wet[k, i, j]:
+                            self.assertAlmostEqual(got[k, a, c], self.value(var, 3, k, i, j), places=3)
+                        else:
+                            self.assertAlmostEqual(got[k, a, c] / 9.96921e36, 1, places=5, msg='no water -> _FillValue')
+        ax = B.parse_ascii(self.get('/opendap/amphan-2020.ascii?lat,lon,depth')[2])
+        self.assertEqual(list(ax['depth']), m['depths'])
+        np.testing.assert_allclose(ax['lat'], m['lat0'] + m['step'] * np.arange(m['nlat']))
+        t = B.parse_ascii(self.get('/opendap/amphan-2020.ascii?time')[2])['time']
+        self.assertEqual(t[4] * 3600, serve.parse_iso(m['times'][4]))
+        # a whole Grid brings its maps
+        g = B.parse_ascii(self.get('/opendap/amphan-2020.ascii?temp[3][1][10:11][20:21]')[2])
+        self.assertEqual((list(g['depth']), list(g['lat']), list(g['lon'])), ([20.0], [11.0, 11.5], [71.0, 71.5]))
+        # a NetCDF dataset (latitude stored north to south, served south to north)
+        lat, lon, depth, temp = self.cf
+        v = B.parse_ascii(self.get('/opendap/cf-model.ascii?temp.temp[1][1][0][2]')[2])['temp']
+        self.assertAlmostEqual(v[0], float(temp[1, 1, 3, 2]), places=4)
+
+    def test_opendap_dods_byte_layout(self):
+        i, j = self.node
+        s, h, b = self.get(f'/opendap/amphan-2020.dods?temp[0][0][{i}:1:{i + 1}][{j}:1:{j + 2}]')
+        self.assertEqual((s, h['Content-Type'], h['Content-Description']), (200, 'application/octet-stream', 'dods-data'))
+        dds, sep, data = b.partition(b'\nData:\n')
+        self.assertTrue(sep and dds.startswith(b'Dataset {'), 'DDS, then "Data:", then XDR')
+        pos, parts = 0, []
+        for kind, n in (('>f4', 6), ('>f8', 1), ('>f8', 1), ('>f8', 2), ('>f8', 3)):   # array, then the 4 maps
+            self.assertEqual(struct.unpack('>ii', data[pos:pos + 8]), (n, n), 'XDR arrays start with the length twice')
+            size = np.dtype(kind).itemsize * n
+            parts.append(np.frombuffer(data[pos + 8:pos + 8 + size], kind))
+            pos += 8 + size
+        self.assertEqual(pos, len(data), 'nothing after the last map')
+        want = [self.value('temp', 0, 0, i + a, j + c) if self.wet[0, i + a, j + c] else 9.96921e36
+                for a in range(2) for c in range(3)]
+        np.testing.assert_allclose(parts[0], want, rtol=1e-6)
+        m = self.meta
+        self.assertEqual(parts[1][0] * 3600, serve.parse_iso(m['times'][0]))
+        np.testing.assert_allclose(parts[4], m['lon0'] + m['step'] * np.arange(j, j + 3))
+
+    def test_opendap_errors(self):
+        for path, status in [('/opendap/amphan-2020.ascii?nope', 404), ('/opendap/amphan-2020.ascii?temp[0][0:1]', 400),
+                             ('/opendap/amphan-2020.dods?temp[9][0][0][0]', 400), ('/opendap/amphan-2020.ascii?temp[0:2:x][0][0][0]', 400),
+                             ('/opendap/amphan-2020.ascii?temp&temp>3', 400), ('/opendap/nope.dds', 404),
+                             ('/opendap/amphan-2020.nc', 404)]:
+            s, h, b = self.get(path)
+            self.assertEqual(s, status, path)
+            self.assertTrue(b.startswith(b'Error {') and f'code = {status};'.encode() in b, path)
+
     # ---- a CF NetCDF model file as a dataset
     def test_netcdf_dataset(self):
         lat, lon, depth, temp = self.cf

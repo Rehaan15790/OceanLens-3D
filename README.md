@@ -30,7 +30,7 @@ regularly in Edge), or Safari 15 or later. It is built for laptop and desktop sc
 | `data/amphan-2020.json` | The real-data snapshot, written by the data pipeline |
 | `build.py` | Assembles `src/`, `vendor/` and `data/` into one HTML file (Python standard library only) |
 | `data-pipeline/` | Fetches, caches and packs HYCOM, Argo, BGC-Argo, ETOPO1 and IBTrACS into `data/`; `ncio.py` reads and writes NetCDF classic (Python + numpy) |
-| `server/serve.py` | The optional data server: the app, a REST API, OGC WMS 1.3.0 and WCS 2.0.1 (Python + numpy) |
+| `server/serve.py` | The optional data server: the app, a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2 (Python + numpy) |
 | `samples/` | Files to try with "Add data": a real BGC-Argo NetCDF, real Argo CSV, a synthetic CTD cast |
 | `tools/`, `tests/` | The test runner, the headless-browser client and the tests |
 | `docs/` | `TESTING.md` (tests and harness), `DEPLOY.md` (hosting, releases, the server), `API.md` (REST, WMS, WCS), `EXTENDING.md` (plugins, variables, formats) |
@@ -78,7 +78,7 @@ See `docs/DEPLOY.md`. It covers the downloadable single file, static hosting fro
 server on an institution's own machines:
 
 ```
-python server/serve.py                # http://127.0.0.1:8080/: the app, /api/v1, /wms, /wcs
+python server/serve.py                # http://127.0.0.1:8080/: the app, /api/v1, /wms, /wcs, /opendap
 ```
 
 ## Data sources and citations
@@ -106,7 +106,8 @@ operational one would add:
 - Scheduled ingestion of live model output. The server reads NetCDF-3 files at start-up; NetCDF-4 must be
   converted first, and nothing yet pulls new forecasts over OPeNDAP.
 - Scheduled Argo, BGC-Argo and glider ingestion from the GDACs into the same layout.
-- HF radar and ADCP plugins (`REQUIREMENTS.md`, row 6a).
+- Readers for real ADCP and HF radar files. The plugins exist but are tested on synthetic records
+  (`REQUIREMENTS.md`, row 6a).
 - Authentication, TLS and rate limits, from the institution's reverse proxy (`docs/DEPLOY.md`, section 4).
 - Further data sources: the INCOIS Live Access Server (las.incois.gov.in) and Copernicus Marine
   (data.marine.copernicus.eu, which needs a free account).
