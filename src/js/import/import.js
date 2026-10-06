@@ -83,7 +83,7 @@ function finishParsed(out, format, label, ds){
 function importParsed(parsed, opts = {}){
   if(!parsed || parsed.error) throw new Error(parsed ? parsed.error : 'Nothing to import.');
   let ds = parsed._dataset;
-  if(parsed._table && (opts.mapping || !ds)) ds = tableToDataset(parsed._table, opts.mapping || parsed.mapping, {name:parsed.name});
+  if(parsed._table && (opts.mapping || !ds)) ds = tableToDataset(parsed._table, opts.mapping || parsed.mapping, {name:parsed.name, type:opts.type});
   if(!ds) throw new Error('Choose the columns first.');
   const d = Object.assign({}, ds, {id:`imp-${++importSeq}`, name:opts.name || parsed.name, source:'import',
                                    format:parsed.format, type:opts.type || ds.type || parsed.type || 'other'});

@@ -21,7 +21,8 @@ function hoverText(e){
   }
   if(pick){
     const inst = pick.userData.wp ? pick.userData.wp.inst : pick.userData.data.inst;
-    const when = inst.real ? fmt.floatTime(inst.time) : '';
+    // an imported profile far from the analyses (another year, with "show all") gets its year
+    const when = !inst.real ? '' : inst.imported && Math.abs(inst.gapH) > 36 ? fmt.analysisTime(inst.time) : fmt.floatTime(inst.time);
     return `${fmtDeg(inst.lat, inst.lon)}<br>${fmt.esc(inst.id)}${when ? ' · '+when : ''} (click to compare)`;
   }
   // the section curtain, when the pointer is on it

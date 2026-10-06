@@ -20,6 +20,7 @@ const importUI = (()=>{
   const typeLabel = t=>typeof instrumentLabel==='function' ? instrumentLabel(t) : t;
   const plural = (n, one, many)=>`${n} ${n===1 ? one : many}`;
   let parsed = null, busy = false, isOpen = false;
+  const autoAll = new Set();       // datasets whose import turned Show all times on
 
   /* ---- dialog steps ---- */
   function setStatus(text){ statusEl.textContent = text || ''; }
@@ -153,7 +154,7 @@ const importUI = (()=>{
     const shown = reveal(res), msg = addedMessage(opts.name, res, shown);
     close();
     announce(msg, true);
-    if(shown.inst) openProfile(shown.inst.userData);
+    if(shown.inst){ openProfile(shown.inst.userData); shell.revealRight(); }   // a narrow window starts with the panel collapsed
   }
   // profiles more than 1.5 days from the analysis are hidden: when none of the new ones shows, go to the analysis
   // nearest the first that has one, else turn on Show all times; then the first one on the map opens
@@ -167,7 +168,7 @@ const importUI = (()=>{
     if(mine.length && !now().length){
       const near = mine.find(i=>Math.abs(i.gapH) <= 36);
       if(near){ setTime(near.snap); out.moved = true; }
-      else { setShowAllImported(true); out.all = true; out.date = fmt.analysisTime(mine[0].ms); }
+      else { setShowAllImported(true); autoAll.add(res.id); out.all = true; out.date = fmt.analysisTime(mine[0].ms); }
     }
     out.inst = now()[0] || null;
     return out;
@@ -175,21 +176,23 @@ const importUI = (()=>{
   function addedMessage(name, res, shown = {}){
     let s = `Added ${plural(res.profiles, 'profile', 'profiles')} from ${name}.`;
     if(res.skipped) s += ` ${plural(res.skipped, 'profile was', 'profiles were')} outside the map and left out.`;
-    if(typeof dataMode!=='undefined' && dataMode!=='real') return s + ' Switch to Real data to see it.';
     if(shown.moved) s += ` The timeline moved to ${timeLabel(state.time)}, the analysis nearest the new profiles.`;
     if(shown.all) s += ` No profile is within 1.5 days of an analysis (the first is from ${shown.date}), so Show all times is now on.`;
     else if(typeof state!=='undefined' && !state.showAllImported) s += ' Profiles within 1.5 days of the analysis time are shown; turn on Show all times to see every one.';
     if(shown.inst) s += ` Profile ${shown.inst.id} is open.`;
     return s;
   }
-  // "Added" stays on screen (it says how to see every profile), scrolled into view under Your data; other notices
-  // are for screen readers only
+  // "Added" stays on screen (it says how to see every profile), scrolled into view under Your data with the Show
+  // all times switch below it when both fit; other notices are for screen readers only
   function announce(text, visible){
     const vis = $('importAnnounce'), sr = $('importAnnounceSr'), el = visible ? vis : sr;
     vis.textContent = ''; sr.textContent = '';
     setTimeout(()=>{
       el.textContent = text;
-      if(visible && getComputedStyle(el).visibility==='visible') el.scrollIntoView({block:'nearest'});
+      if(!visible || getComputedStyle(el).visibility!=='visible') return;
+      el.scrollIntoView({block:'nearest'});
+      const sw = $('userDataOpts');
+      if(!sw.hidden && sw.getBoundingClientRect().bottom - el.getBoundingClientRect().top <= $('left').clientHeight) sw.scrollIntoView({block:'nearest'});
     }, 50);
   }
   // charts.js updateLegend() calls this on every update: the "Real data only" note follows the data mode
@@ -223,14 +226,18 @@ const importUI = (()=>{
     $('userDataMode').hidden = !any || typeof dataMode==='undefined' || dataMode==='real';
     const other = sets.some(ds=>Object.keys(ds.types || {}).some(t=>!['argo', 'glider'].includes(t)));
     $('rowOther').hidden = !other;
+    // Show all times that imports turned on goes off with the last of those datasets
+    if(!autoAll.size) return;
+    autoAll.forEach(id=>{ if(!sets.some(d=>d.id===id)) autoAll.delete(id); });
+    if(!autoAll.size && state.showAllImported) setShowAllImported(false);
   }
   function remove(ds, btn){
-    const buttons = [...$('userDataList').querySelectorAll('button')], i = buttons.indexOf(btn);
+    const buttons = [...$('userDataList').querySelectorAll('button')], i = buttons.indexOf(btn), all = state.showAllImported;
     api().removeDataset(ds.id);
     renderList();
     const left = [...$('userDataList').querySelectorAll('button')];
     (left[Math.min(i, left.length-1)] || $('addDataBtn')).focus();
-    announce(`Removed ${ds.name || ds.id}.`);
+    announce(`Removed ${ds.name || ds.id}.${all && !state.showAllImported ? ' Show all times is off again.' : ''}`);
   }
 
   /* ---- server data source (only when the page is served by server/serve.py) ---- */
@@ -285,6 +292,7 @@ const importUI = (()=>{
   cancelBtn.addEventListener('click', close);
   backBtn.addEventListener('click', ()=>{ reset(); $('importChoose').focus(); });
   addBtn.addEventListener('click', add);
+  $('swAllImported').addEventListener('click', ()=>autoAll.clear());     // the user's choice from now on
   card.addEventListener('keydown', e=>{
     if(e.key==='Enter' && e.target.id==='importName'){ e.preventDefault(); add(); }
   });

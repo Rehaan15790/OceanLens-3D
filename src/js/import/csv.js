@@ -139,20 +139,24 @@ function typeFromText(s){
 
 // a trajectory in time order (a glider, a towed or profiling CTD) -> its dives and climbs, split where the depth
 // or pressure turns round by more than 5 m (dbar) from its extreme: Map(segment -> sample indices); samples
-// without z join none. Until it has moved 5 m the start is the reference, so dense sampling still turns.
+// without z join none. Until it has moved 5 m the start is the reference, so dense sampling still turns. The
+// samples from the turning point to the turn belong to both segments, so each dive and climb keeps its ends.
 function diveSegments(z){
-  const out = new Map();
-  let s = 0, dir = 0, ext = NaN;
+  const out = new Map(), put = (s, k)=>{ if(!out.has(s)) out.set(s, []); out.get(s).push(k); };
+  let s = 0, dir = 0, ext = NaN, ek = -1;
   for(let k=0;k<z.length;k++){
     if(!Number.isFinite(z[k])) continue;
     if(Number.isFinite(ext)){
       const d = z[k] - ext;
-      if(dir===0){ if(Math.abs(d) > 5){ dir = Math.sign(d); ext = z[k]; } }
-      else if(d*dir < -5){ s++; dir = -dir; ext = z[k]; }
-      else if(d*dir > 0) ext = z[k];
-    } else ext = z[k];
-    if(!out.has(s)) out.set(s, []);
-    out.get(s).push(k);
+      if(dir===0){ if(Math.abs(d) > 5){ dir = Math.sign(d); ext = z[k]; ek = k; } }
+      else if(d*dir < -5){
+        s++; dir = -dir;
+        for(let j=ek;j<k;j++) if(Number.isFinite(z[j])) put(s, j);
+        ext = z[k]; ek = k;
+      }
+      else if(d*dir > 0){ ext = z[k]; ek = k; }
+    } else { ext = z[k]; ek = k; }
+    put(s, k);
   }
   return out;
 }
@@ -198,6 +202,9 @@ function tableToDataset(table, mapping, opts = {}){
   });
   if(Object.keys(qcCol).length) warnings.push('QC columns found: only flags 1, 2, 5 and 8 are kept.');
   const goodQc = c => c==='' || /^[1258]$/.test(String(c).trim());
+  // an Argo WMO number is named as in the snapshot and the NetCDF readers: ARGO-2902234
+  const wmo = col('id') >= 0 && /^(platform_number|wmo|float|float_id)$/.test(table.names[col('id')]);
+  const pid = id=>wmo && /^\d{5,7}$/.test(id) ? 'ARGO-'+id : id;
   const groups = new Map(), tracks = new Map(), at = new Map();
   let badTime = 0;
   table.rows.forEach(r=>{
@@ -207,7 +214,7 @@ function tableToDataset(table, mapping, opts = {}){
     const id = col('id') >= 0 ? r[col('id')] : `${lat.toFixed(3)},${lon.toFixed(3)}`;
     const key = id + '|' + ms;
     if(!groups.has(key)){
-      const g = {id: col('id') >= 0 ? id : `${opts.name || 'Profile'} ${groups.size+1}`, lat, lon,
+      const g = {id: col('id') >= 0 ? pid(id) : `${opts.name || 'Profile'} ${groups.size+1}`, lat, lon,
                  time:new Date(ms).toISOString(), z:[], vars:Object.fromEntries(vars.map(f=>[f, []]))};
       const t = col('type') >= 0 ? typeFromText(r[col('type')]) : null;
       if(t) g.type = t;
@@ -228,18 +235,20 @@ function tableToDataset(table, mapping, opts = {}){
   if(badTime) warnings.push(`${badTime} ${badTime===1 ? 'row has' : 'rows have'} a time that is not ISO 8601 or YYYY-MM-DD hh:mm; skipped.`);
   if(!groups.size) throw new Error('No rows with a readable time, position and depth.');
   // a platform whose samples nearly all have their own time while the depth changes is a trajectory (glider):
-  // its dives and climbs become the profiles, not thousands of one-sample ones
+  // its dives and climbs become the profiles, not thousands of one-sample ones. A time series (a mooring, by
+  // the chosen type, a type column, the header or the file name) is never split.
+  const kind = opts.type || typeFromText(table.header.join(' ') + ' ' + (opts.name || ''));
   const profiles = [];
   let dives = 0, dropped = 0;
   for(const [tk, gs] of tracks){
     let n = 0, z0 = Infinity, z1 = -Infinity;
     gs.forEach(g=>g.z.forEach(z=>{ n++; z0 = Math.min(z0, z); z1 = Math.max(z1, z); }));
-    if(!zf || gs.length < 5 || gs.length < 0.5*n || z1 - z0 < 10){ gs.forEach(g=>profiles.push(g)); continue; }
+    if(!zf || (gs[0].type || kind)==='mooring' || gs.length < 5 || gs.length < 0.5*n || z1 - z0 < 10){ gs.forEach(g=>profiles.push(g)); continue; }
     const s = {ms:[], lat:[], lon:[], z:[], vals:Object.fromEntries(vars.map(f=>[f, []]))};
     gs.sort((a, b)=>at.get(a) - at.get(b)).forEach(g=>g.z.forEach((z, k)=>{
       s.ms.push(at.get(g)); s.lat.push(g.lat); s.lon.push(g.lon); s.z.push(z); vars.forEach(f=>s.vals[f].push(g.vars[f][k]));
     }));
-    const id = tk || opts.name || 'Trajectory', segs = [...diveSegments(s.z)], ds = [];
+    const id = pid(tk) || opts.name || 'Trajectory', segs = [...diveSegments(s.z)], ds = [];
     segs.forEach(([seg, ks])=>{
       const d = diveProfile(ks, s);
       if(!d) return;
@@ -253,6 +262,6 @@ function tableToDataset(table, mapping, opts = {}){
   if(dropped) warnings.push(`${dropped} ${dropped===1 ? 'dive or climb was' : 'dives and climbs were'} left out: under 5 samples or 10 m.`);
   const notes = zf==='pres' ? ['Depth from pressure (Saunders 1981).'] : surface ? ['No depth column: surface values (0 m).'] : [];
   if(dives) notes.push(`Trajectory split into ${dives===1 ? 'one dive or climb' : dives+' dives and climbs'} where the depth turns round; 1 m bins.`);
-  const type = opts.type || typeFromText(table.header.join(' ') + ' ' + (opts.name || '')) || (dives ? 'glider' : 'other');
+  const type = kind || (dives ? 'glider' : 'other');
   return {name:opts.name || 'Imported CSV', format:'csv', type, profiles, warnings, notes};
 }

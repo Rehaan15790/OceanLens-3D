@@ -4,7 +4,9 @@ multi-profile NetCDF, ERDDAP CSV with a units row, OceanGliders glider tables), 
 brought into view and opened), the log colour scale, the 3D isosurface, and server mode (the page served by
 server/serve.py lists the server's datasets)."""
 import base64
+import datetime
 import json
+import math
 import sys
 import threading
 import unittest
@@ -20,7 +22,7 @@ IMPORT = '!(window.OceanLens && OceanLens.readData && OceanLens.importParsed)'
 ISO3D = "typeof iso3dStats === 'undefined'"
 SAMPLES = sorted(p for p in (REPO / 'samples').glob('*') if p.suffix.lower() in ('.nc', '.csv'))
 # profiles each sample must give (gliders: dives and climbs, not one profile per sample)
-SAMPLE_PROFILES = {'argo-5907326_prof.nc': 4, 'argo-amphan-samples.csv': 3, 'argo-erddap-2020-05-18.csv': 3,
+SAMPLE_PROFILES = {'argo-5907328_prof.nc': 3, 'argo-amphan-samples.csv': 3, 'argo-erddap-2020-05-18.csv': 3,
                    'bgc-argo-2902120-c227.nc': 1, 'ctd-synthetic-cast.csv': 1, 'glider-humpback504-2016-07-05.nc': 4,
                    'glider-marlin505-2016-07-06.csv': 6}
 READ_SAMPLE = """(async()=>{{ const bin=atob('{b64}'), u8=new Uint8Array(bin.length);
@@ -274,8 +276,9 @@ class ImportSamples(AppTestCase):
         """Files as the data centres serve them: an Argo GDAC multi-profile file (record variables with N_HISTORY = 0;
         a copy cut short by even one byte is still refused), ERDDAP's default CSV (a units row under the header) and
         OceanGliders tables as .nc (time valid_max 90000, no profile id, QC columns all missing) and .csv; a glider
-        becomes whole dives and climbs, each from near the surface to about 1000 m."""
-        want = {'argo-5907326_prof.nc': ('Argo profile NetCDF', 'argo'),
+        becomes whole dives and climbs, each from the surface to about 1000 m. Every profile is whole: no level is
+        100 m or more from the next (the Argo profiles run 0-2000 dbar without a missing packet)."""
+        want = {'argo-5907328_prof.nc': ('Argo profile NetCDF', 'argo'),
                 'argo-erddap-2020-05-18.csv': ('Delimited text (comma)', 'argo'),
                 'glider-humpback504-2016-07-05.nc': ('ERDDAP tabledap NetCDF', 'glider'),
                 'glider-marlin505-2016-07-06.csv': ('Delimited text (comma)', 'glider')}
@@ -293,12 +296,16 @@ class ImportSamples(AppTestCase):
                     return {{label:p.formatLabel, type:p.type, profiles:r.profiles, units:p.units,
                       warnings:(p.warnings || []).concat(r.warnings || []), ids:[...new Set(insts.map(i=>i.id))],
                       levels:insts.map(i=>i.levels.length), top:insts.map(i=>i.levels[0]), deepest:insts.map(i=>i.maxDepth), cut,
+                      gap:insts.map(i=>Math.max(...i.levels.slice(1).map((z, k)=>z - i.levels[k]))),
                       numrecs:nc && nc.numrecs, history:nc && (nc.dims.find(d=>d.name==='N_HISTORY') || {{}}).size,
                       times:nc && nc.vars.time ? Array.from(nc.read('time')).every(Number.isFinite) : null}};"""),
                             await_promise=True)
                 self.assertNotIn('error', r, f"{name}: {r.get('error')}")
                 self.assertEqual((r['label'], r['type'], r['profiles']), (label, kind, SAMPLE_PROFILES[name]))
                 self.assertFalse([w for w in r['warnings'] if 'not recognised' in w], r['warnings'])
+                self.assertTrue(all(g < 100 for g in r['gap']), f"a profile has a hole: largest gaps {r['gap']} m")
+                if kind == 'argo':
+                    self.assertTrue(all(i.startswith('ARGO-') for i in r['ids']), f"not named as Argo floats: {r['ids']}")
                 if name.endswith('_prof.nc'):
                     self.assertEqual((r['numrecs'], r['history']), (0, 0), 'not the N_HISTORY = 0 layout')
                     for err in r['cut']:
@@ -309,7 +316,7 @@ class ImportSamples(AppTestCase):
                     self.assertIn('degree_Celsius', r['units'], 'the ERDDAP units row was not read as units')
                 if kind == 'glider':
                     self.assertEqual(len(r['ids']), 1, f"one glider, not {r['ids'][:5]}")
-                    self.assertTrue(all(n >= 50 and t < 50 and z > 900 for n, t, z in zip(r['levels'], r['top'], r['deepest'])),
+                    self.assertTrue(all(n >= 50 and t < 5 and z > 900 for n, t, z in zip(r['levels'], r['top'], r['deepest'])),
                                     f"not whole dives and climbs: {r['levels']} {r['top']} {r['deepest']}")
                 if name == 'glider-humpback504-2016-07-05.nc':
                     self.assertTrue(r['times'], 'times masked by the valid range')
@@ -317,20 +324,35 @@ class ImportSamples(AppTestCase):
 
     def test_dense_trajectory_splits_into_dives(self):
         """A glider sampled every second (steps well under the 5 dbar turn threshold) still splits into its dive,
-        climb and second dive, with or without an id column; one row per time with a fixed depth (a mooring) does not."""
+        climb and second dive, with or without an id column, and each starts where the last turned (the samples at
+        a turn belong to both). One row per time with a fixed depth does not split, nor does a mooring whose sensor
+        is knocked down by 30 m, when the file name or a type column says it is a mooring."""
         ramp = [i * 0.5 for i in range(201)] + [100 - i * 0.5 for i in range(1, 201)] + [i * 0.5 for i in range(1, 121)]
         rows = [f'G1,2020-05-18T06:{k // 60:02d}:{k % 60:02d}Z,15.5,88.5,{p},{30 - p / 10:.2f}' for k, p in enumerate(ramp)]
-        files = {'with id': 'id,time,lat,lon,pres,temp\n' + '\n'.join(rows),
-                 'no id': 'time,lat,lon,pres,temp\n' + '\n'.join(r.split(',', 1)[1] for r in rows),
-                 'mooring': 'id,time,lat,lon,depth,temp\n' + '\n'.join(
-                     f'M1,2020-05-18T06:{k // 60:02d}:{k % 60:02d}Z,15.5,88.5,50,{28 + k / 100:.2f}' for k in range(30))}
+        # a sensor at 100 dbar every 10 minutes for two days, knocked down by up to 30 dbar
+        t0 = datetime.datetime(2020, 5, 17)
+        knock = [((t0 + datetime.timedelta(minutes=10 * k)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                  100 + 15 * (1 - math.cos(2 * math.pi * k / 74.5))) for k in range(288)]
+        files = {'with id': ('dense.csv', 'id,time,lat,lon,pres,temp\n' + '\n'.join(rows)),
+                 'no id': ('dense.csv', 'time,lat,lon,pres,temp\n' + '\n'.join(r.split(',', 1)[1] for r in rows)),
+                 'fixed depth': ('dense.csv', 'id,time,lat,lon,depth,temp\n' + '\n'.join(
+                     f'M1,2020-05-18T06:{k // 60:02d}:{k % 60:02d}Z,15.5,88.5,50,{28 + k / 100:.2f}' for k in range(30))),
+                 'mooring by name': ('rama-mooring.csv', 'id,time,lat,lon,pres,temp\n' + '\n'.join(
+                     f'RAMA-15N90E,{t},15,90,{p:.1f},{25 + math.sin(k / 10):.2f}' for k, (t, p) in enumerate(knock))),
+                 'mooring by type': ('dense.csv', 'id,type,time,lat,lon,pres,temp\n' + '\n'.join(
+                     f'RAMA-15N90E,mooring,{t},15,90,{p:.1f},{25 + math.sin(k / 10):.2f}' for k, (t, p) in enumerate(knock)))}
         got = {}
-        for case, text in files.items():
-            got[case] = self.js(f"""(async()=>{{ const p = await OceanLens.readData('dense.csv', {json.dumps(text)});
-                const d = p._dataset; return p.error || d.profiles.map(x=>x.z.length); }})()""", await_promise=True)
-        self.assertEqual([len(got['with id']), len(got['no id'])], [3, 3], got)
-        self.assertTrue(all(n >= 50 for n in got['with id']), got)
-        self.assertEqual(len(got['mooring']), 30, 'a fixed-depth time series was split as a trajectory')
+        for case, (name, text) in files.items():
+            got[case] = self.js(f"""(async()=>{{ const p = await OceanLens.readData({json.dumps(name)}, {json.dumps(text)});
+                const d = p._dataset; return p.error || {{type:d.type, z:d.profiles.map(x=>[x.z.length, x.z[0]])}}; }})()""",
+                                await_promise=True)
+        self.assertEqual([len(got['with id']['z']), len(got['no id']['z'])], [3, 3], got)
+        self.assertTrue(all(n >= 50 for n, _ in got['with id']['z']), got)
+        self.assertLess(got['with id']['z'][2][1], 1, f"the second dive lost its top to the climb: {got['with id']['z']}")
+        self.assertEqual(len(got['fixed depth']['z']), 30, 'a fixed-depth time series was split as a trajectory')
+        for case in ('mooring by name', 'mooring by type'):
+            self.assertEqual(len(got[case]['z']), 288, f'{case}: a mooring was split into dives and climbs')
+            self.assertNotEqual(got[case]['type'], 'glider', case)
         self.assertNoProblems()
 
     def test_units_and_valid_ranges_as_data_centres_write_them(self):
@@ -374,17 +396,20 @@ class ImportSamples(AppTestCase):
         """A file chosen in Add data and added with a click is on screen with its first profile open, and the notice
         under Your data, scrolled into view, says how: the timeline moves to the analysis nearest the first profile
         (BGC-Argo, 17 May 2020), stays when new profiles already show (Argo CSV, 15-17 May), or Show all times turns
-        on (a 2016 glider)."""
+        on (a 2016 glider), with that switch in view too. A collapsed right panel (a narrow window) opens. Another
+        dive of the same glider, once opened, stays open through an update; removing the glider turns Show all times
+        off again."""
         self.js("__ol.actions.setShowAllImported(false); __ol.actions.setTime(0); __ol.actions.closePanels()")
         self.addCleanup(self.js, "(()=>{ shell.closeDialog(); OceanLens.datasets().filter(d=>d.source==='import')"
                                  ".forEach(d=>OceanLens.removeDataset(d.id)); __ol.actions.setShowAllImported(false);"
-                                 " __ol.actions.setTime(0); })()")
+                                 " __ol.actions.setTime(0); __ol.actions.setVariable('temp'); shell.setPanel('right', true); })()")
         cases = (('bgc-argo-2902120-c227.nc', 'moved', 'ARGO-2902120'), ('argo-amphan-samples.csv', 'stays', 'ARGO-2902120'),
                  ('glider-humpback504-2016-07-05.nc', 'all', 'Humpback_504'))
         added = []
         for name, how, first in cases:
             with self.subTest(sample=name):
                 t0 = self.js('__ol.state.time')
+                self.js("shell.setPanel('right', false)")       # as below 1100 px
                 self.b.click('#addDataBtn')
                 self.b.pump(0.3)
                 doc = self.b.send('DOM.getDocument')
@@ -395,10 +420,13 @@ class ImportSamples(AppTestCase):
                 self.click_control('#importAdd')
                 self.b.wait("document.getElementById('importAnnounce').textContent", 5)
                 self.b.pump(0.3)
-                got = self.js(f"""(()=>{{ const d=OceanLens.datasets().find(x=>x.name==={json.dumps(name)});
+                got = self.js(f"""(()=>{{ __ol.flush(); const d=OceanLens.datasets().find(x=>x.name==={json.dumps(name)});
                     const el=document.getElementById('importAnnounce'), r=el.getBoundingClientRect(),
-                      L=document.getElementById('left').getBoundingClientRect();
+                      L=document.getElementById('left').getBoundingClientRect(),
+                      sw=document.getElementById('userDataOpts').getBoundingClientRect();
                     return {{id:d.id, time:__ol.state.time, all:__ol.state.showAllImported,
+                      right:!document.getElementById('app').classList.contains('right-collapsed'),
+                      swInView:sw.height>0 && sw.top>=L.top && sw.bottom<=L.bottom+1,
                       open:document.getElementById('profile').classList.contains('show') && profileState.inst.dataset===d.id
                         ? profileState.inst.id : null,
                       drawn:markerItems.filter(it=>it.userData.data && it.userData.data.inst.dataset===d.id && isShown(it.vis)).length,
@@ -410,6 +438,8 @@ class ImportSamples(AppTestCase):
                 self.assertGreater(got['now'], 0, 'none of the new profiles shows at this time')
                 self.assertGreater(got['drawn'], 0, 'no marker is drawn for the new profiles')
                 self.assertTrue(got['inView'], f"the notice is not on screen: {got['rect']}")
+                self.assertTrue(got['swInView'], 'the Show all times switch is not on screen')
+                self.assertTrue(got['right'], 'the profile opened in a collapsed panel')
                 self.assertEqual(got['all'], how == 'all')
                 self.assertIn(f'Profile {first} is open', got['text'])
                 if how == 'all':
@@ -421,10 +451,20 @@ class ImportSamples(AppTestCase):
                 else:
                     self.assertEqual(got['time'], t0, 'the timeline moved although new profiles were showing')
                     self.assertNotIn('timeline moved', got['text'])
-        for i in added:
+        # the dives share one id: the third, opened as a click on its marker does, survives choosing Salinity
+        key = self.js(f"""(()=>{{ const i=instrumentsNow().filter(x=>x.dataset==={json.dumps(added[-1])})[2];
+            __ol.actions.openProfile(i.userData); return i.key; }})()""")
+        self.click_control('.pill[data-v="sal"]')
+        self.b.pump(0.3)
+        self.assertEqual(self.js("[__ol.state.variable, profileState.inst && profileState.inst.key]"), ['sal', key],
+                         'the panel went back to the first dive')
+        self.b.click(f'#userDataList button[data-id="{added[-1]}"]')     # the glider turned Show all times on
+        self.b.pump(0.3)
+        self.assertFalse(self.js('__ol.state.showAllImported'), 'Show all times stayed on after the glider was removed')
+        for i in added[:-1]:
             self.b.click(f'#userDataList button[data-id="{i}"]')
             self.b.pump(0.3)
-        self.js("__ol.actions.setShowAllImported(false); __ol.actions.setTime(0)")
+        self.js("__ol.actions.setTime(0); __ol.actions.setVariable('temp')")
         self.assertNoProblems()
 
 
