@@ -59,13 +59,17 @@ function colorbarSpec(){
     return {palette:'depth', min:any ? isoInfo.lo : NaN, max:any ? isoInfo.hi : NaN, scale:'linear', unit:'m', label:isoLabel(),
             view, depth:null, isoValue:state.isoVal, editable:false, empty:!any};
   }
+  // an isosurface with nothing to draw has no colour scale to edit either
+  const empty = view==='iso3d' && iso && !any;
   return {palette:state.palette, min:state.cbMin, max:state.cbMax, scale:state.scale, unit:meta.unit, label:meta.label,
           view, depth: view==='tchp' || view==='field2d' || view==='iso3d' ? null : readoutDepth(),
-          isoValue: view==='iso3d' && iso ? state.isoVal : null, editable:true, empty:view==='iso3d' && iso && !any};
+          isoValue: view==='iso3d' && iso ? state.isoVal : null, editable:!empty, empty};
 }
 function updateColorbarUI(){
   const spec = colorbarSpec(), meta = VAR_META[state.variable];
-  ui.cbMin.value = Number.isFinite(spec.min) ? spec.min : ''; ui.cbMax.value = Number.isFinite(spec.max) ? spec.max : '';
+  // an empty key (no surface) leaves the fields blank, in both iso views
+  const shown = v=>Number.isFinite(v) && !spec.empty ? v : '';
+  ui.cbMin.value = shown(spec.min); ui.cbMax.value = shown(spec.max);
   ui.cbMin.disabled = ui.cbMax.disabled = ui.paletteSel.disabled = !spec.editable;
   ui.paletteSel.value = spec.palette;
   ui.cbReset.hidden = !spec.editable || (!state.customRange && state.palette===meta.palette && state.scale===meta.scale);

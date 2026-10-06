@@ -395,8 +395,8 @@ function keySpec(){
   importedLegend().forEach(r=>legend.push(r));
   const scale = c.scale || (c.editable ? scaleNow() : 'linear');
   if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);
-  if(scale==='log') notes.unshift('Log colour scale.');
-  notes.push(`Vertical exaggeration ≈ ${exaggerationRatio(state.exagg)} : 1; below 1000 m the sea floor is compressed a further 12×.`);
+  if(scale==='log' && !c.empty) notes.unshift('Log colour scale.');
+  notes.push(`Vertical exaggeration ≈\u00a0${exaggerationRatio(state.exagg)}\u00a0:\u00a01; below 1000\u00a0m the sea floor is compressed a further\u00a012×.`);
   if(c.empty) return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale, ticks:[], ends:{min:'–', max:'–'},
     marks, legend, note:notes.join(' '), empty:true};
   if(scale==='log'){
@@ -429,21 +429,28 @@ function renderKey(spec){
     const pos = v=>rampT(v, spec.min, spec.max, spec.scale || 'linear')*100;
     const add = (cls, left, text)=>{ const el = document.createElement('span'); el.className = cls; el.style.left = left+'%';
       if(text!==undefined) el.textContent = text; return row.appendChild(el); };
-    // marks (26 °C, 50 kJ/cm²) get bold labels; plain ticks too close to a mark or an end, or whose label would
-    // touch another label (an end such as 32.5 is wider than a tick), are left out
+    // marks (26 °C, 50 kJ/cm², the isosurface's value) get bold labels and come first: an end label that would touch
+    // one is left out, and so is a plain tick too close to a mark or an end, or whose label would touch another label
+    // (an end such as 32.5 is wider than a tick)
     const markPos = spec.marks.map(m=>pos(m.v));
     const endMark = e=>spec.marks.find(m=>Math.abs(pos(m.v)-e) < 3);
     const lo = endMark(0), hi = endMark(100);
-    add('key-tick first'+(lo ? ' mark' : ''), 0, lo ? lo.text : spec.ends.min);
-    add('key-tick last'+(hi ? ' mark' : ''), 100, hi ? hi.text : spec.ends.max);
-    spec.marks.forEach((m,i)=>{ add('key-mark', markPos[i]); if(m!==lo && m!==hi) add('key-tick mark', markPos[i], m.text); });
+    const ends = [add('key-tick first'+(lo ? ' mark' : ''), 0, lo ? lo.text : spec.ends.min),
+                  add('key-tick last'+(hi ? ' mark' : ''), 100, hi ? hi.text : spec.ends.max)];
+    const marked = spec.marks.flatMap((m,i)=>{ add('key-mark', markPos[i]); return m!==lo && m!==hi ? [add('key-tick mark', markPos[i], m.text)] : []; });
     const plain = spec.ticks.filter(t=>[0, 100, ...markPos].every(o=>Math.abs(o-pos(t.v)) >= 12)).map(t=>add('key-tick', pos(t.v), t.text));
-    const box = new Map([...row.children].map(el=>[el, el.getBoundingClientRect()]));   // one layout
-    const taken = [...box].filter(([el])=>el.textContent && !plain.includes(el)).map(([, r])=>r);
-    if(row.clientWidth) plain.forEach(el=>{
-      const r = box.get(el);
-      if(taken.some(q=>r.left < q.right+4 && r.right > q.left-4)) el.remove(); else taken.push(r);
-    });
+    if(row.clientWidth){
+      // a mark label that would stand past an end of the bar starts (or ends) at its mark instead
+      const rr = row.getBoundingClientRect();
+      marked.forEach(el=>{ const r = el.getBoundingClientRect();
+        if(r.left < rr.left) el.classList.add('first'); else if(r.right > rr.right) el.classList.add('last'); });
+      const box = new Map([...row.children].map(el=>[el, el.getBoundingClientRect()]));   // one layout
+      const taken = [...box].filter(([el])=>el.classList.contains('mark')).map(([, r])=>r);
+      ends.filter(el=>!el.classList.contains('mark')).concat(plain).forEach(el=>{
+        const r = box.get(el);
+        if(taken.some(q=>r.left < q.right+4 && r.right > q.left-4)) el.remove(); else taken.push(r);
+      });
+    }
   }
   $('keyRange').textContent = spec.empty ? 'No colour range: there is no surface to colour.' :
     `Colour range ${spec.ends.min} to ${spec.ends.max} ${spec.unit}` +

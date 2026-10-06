@@ -15,6 +15,19 @@ SPEC_RANGE = "(()=>{const c=colorbarSpec(); return `Colour range ${c.min} to ${c
 # labels under the colour bar: [text, left edge, right edge, position along the bar 0-1, is a mark]
 KEY_LABELS = """[...document.querySelectorAll('#keyTicks .key-tick')].map(e=>{ const r=e.getBoundingClientRect();
   return [e.textContent, r.left, r.right, parseFloat(e.style.left)/100, e.classList.contains('mark')]; })"""
+# the PNG export's key painted on its own canvas: every text with its extent, the bar's columns, and where the
+# spec's marks and ticks belong on the 260 px bar (bar from x 20 to 280)
+EXPORT_KEY = """(()=>{ const c=document.createElement('canvas'); c.width=300; c.height=600; const g=c.getContext('2d'), s=keySpec();
+  const out={text:[], bar:0, empty:!!s.empty}, ft=g.fillText.bind(g), fr=g.fillRect.bind(g), at=v=>20+rampT(v, s.min, s.max, s.scale||'linear')*260;
+  g.fillText=(t,x,y)=>{ const w=g.measureText(t).width, l=g.textAlign==='center' ? x-w/2 : g.textAlign==='right' ? x-w : x;
+    out.text.push([t, l, l+w, g.textAlign, g.font.startsWith('600')]); ft(t,x,y); };
+  g.fillRect=(x,y,w,h)=>{ if(w===1 && h===12) out.bar++; fr(x,y,w,h); };
+  paintKey(g, s, 10, 590, 280);
+  out.marks=s.marks.map(m=>[m.text, at(m.v)]); out.ticks=s.ticks.map(t=>[t.text, at(t.v)]); out.ends=[s.ends.min, s.ends.max];
+  return out; })()"""
+# client coordinates of a point on the sea surface
+SEA_POINT = """(()=>{ const v=new THREE.Vector3((%f-(LON0+LON1)/2)*SCALE_XZ, 0, -(%f-(LAT0+LAT1)/2)*SCALE_XZ).project(camera);
+  const r=renderer.domElement.getBoundingClientRect(); return [r.left+(v.x*0.5+0.5)*r.width, r.top+(-v.y*0.5+0.5)*r.height]; })()"""
 
 
 class Boot(AppTestCase):
@@ -120,7 +133,52 @@ class Controls:
         self.press('#isoPresets .preset[data-iso="20"]')
         self.assertEqual(self.js(KEY_TITLE), 'Temperature (°C) · 20.0 °C isosurface')
         self.assertIn('marked: 20.0', self.js(KEY_RANGE))
+        # a value near an end of the bar: its bold label stays over the bar and the end label gives way
+        bar = self.js("(()=>{const r=document.getElementById('keyBar').getBoundingClientRect(); return [r.left, r.right];})()")
+        lo, hi = self.js('[colorbarSpec().min, colorbarSpec().max]')
+        for at in (0.05, 0.95):
+            with self.subTest(at=at):
+                self.js(f'__ol.actions.setIso({round(lo + at * (hi - lo), 1)})')
+                if self.js('colorbarSpec().empty'):
+                    continue
+                labels = self.js(KEY_LABELS)
+                self.assertEqual(sum(1 for t in labels if t[4]), 1, f'the value is not marked: {labels}')
+                spans = sorted(t[1:3] for t in labels)
+                self.assertTrue(all(a[1] <= b[0] for a, b in zip(spans, spans[1:])), f'key labels overlap: {labels}')
+                self.assertTrue(all(bar[0] - 0.5 <= t[1] and t[2] <= bar[1] + 0.5 for t in labels),
+                                f'a key label stands past the bar {bar}: {labels}')
         self.press('#isoPresets .preset[data-iso="26"]')
+        self.pill('m', 'surface')
+        self.assertNoProblems()
+
+    def test_exported_key_matches_the_screen(self):
+        for v, m in (('temp', 'iso3d'), ('chl', 'iso3d'), ('chl', 'surface'), ('chl', 'iso'), ('tchp', 'surface')):
+            with self.subTest(variable=v, view=m):
+                self.pill('v', v)
+                if v != 'tchp':
+                    self.pill('m', m)
+                k = self.js(EXPORT_KEY)
+                # nothing past the box's 10 px padding: titles and notes wrap
+                self.assertTrue(all(20 - 0.5 <= t[1] and t[2] <= 280 + 0.5 for t in k['text']),
+                                f'text outside the exported key: {[t for t in k["text"] if t[1] < 19.5 or t[2] > 280.5]}')
+                self.assertEqual(k['empty'], self.js("document.getElementById('keyBar').parentNode.hidden"))
+                if k['empty']:
+                    self.assertEqual(k['bar'], 0, 'an empty key paints a colour bar')
+                    self.assertFalse([t for t in k['text'] if t[0] in [mk[0] for mk in k['marks']]], 'an empty key paints a mark')
+                    continue
+                self.assertEqual(k['bar'], 260)
+                # marks and ticks where the screen puts them: on a log key too
+                for text, x in k['marks']:
+                    drawn = [t for t in k['text'] if t[0] == text and t[4]]
+                    self.assertTrue(drawn and drawn[0][1] - 1 <= x <= drawn[0][2] + 1, f'mark {text} belongs at x {x:.0f}: {drawn}')
+                for text, x in k['ticks']:
+                    for t in k['text']:
+                        if t[0] == text and t[3] == 'center' and not t[4]:
+                            self.assertAlmostEqual((t[1] + t[2]) / 2, x, delta=1, msg=f'tick {text} belongs at x {x:.0f}')
+                names = {*k['ends'], *(mk[0] for mk in k['marks']), *(tk[0] for tk in k['ticks'])}
+                row = sorted(t[1:3] for t in k['text'] if t[0] in names)
+                self.assertTrue(all(a[1] <= b[0] for a, b in zip(row, row[1:])), f'exported key labels overlap: {row}')
+        self.pill('v', 'temp')
         self.pill('m', 'surface')
         self.assertNoProblems()
 
@@ -187,6 +245,33 @@ class Controls:
         self.assertIn('arrows and streaks show direction', self.js("document.getElementById('tourText').textContent"))
         self.b.click('#tourStop')
         self.b.pump(0.5)
+        self.pill('v', 'temp')
+        self.pill('m', 'surface')
+        self.assertNoProblems()
+
+    def test_header_readout_is_never_cut(self):
+        cut = """(()=>{ const ro=document.getElementById('readout').getBoundingClientRect();
+          return [...document.querySelectorAll('#readout > span')].filter(e=>getComputedStyle(e).display!=='none')
+            .filter(e=>{ const r=e.getBoundingClientRect(); return r.left < ro.left-0.5 || r.right > ro.right+0.5 ||
+              e.scrollWidth > e.clientWidth+1; }).map(e=>e.id+': '+e.textContent); })()"""
+        depth = self.js(f'{STATE}.depthIdx')
+        self.js('__ol.actions.setDepth(DEPTHS.length-1)')         # the slice readout at 1000 m is the longest
+        try:
+            for w, h in ((1280, 720), (1366, 768), (1600, 900)):
+                self.b.resize(w, h)
+                self.b.pump(0.3)
+                for v in ('temp', 'sal', 'cur', 'tchp', 'chl'):
+                    self.pill('v', v)
+                    for m in (('surface',) if v == 'tchp' else ('surface', 'slice', 'iso', 'iso3d')):
+                        with self.subTest(width=w, variable=v, view=m):
+                            if v != 'tchp':
+                                self.pill('m', m)
+                            self.assertEqual(self.js(cut), [], f'header readout cut off at {w}x{h}')
+                            self.assertTrue(self.visible('#roRange'))
+        finally:
+            self.b.resize(self.width, self.height)
+            self.b.pump(0.3)
+            self.js(f'__ol.actions.setDepth({depth})')
         self.pill('v', 'temp')
         self.pill('m', 'surface')
         self.assertNoProblems()
@@ -354,7 +439,7 @@ class Controls:
 class RealMode(Controls, AppTestCase):
     data_mode = 'real'
 
-    def test_chlorophyll_depth_of_a_value_has_an_empty_key(self):
+    def test_chlorophyll_iso_views_have_an_empty_key(self):
         self.pill('v', 'chl')
         self.pill('m', 'iso')
         self.assertEqual(self.js(KEY_TITLE), 'Depth of the 0.20 mg/m³ surface (m)')
@@ -362,43 +447,44 @@ class RealMode(Controls, AppTestCase):
         self.assertEqual(self.js(KEY_LABELS), [])
         self.assertIn('no model field', self.js("document.getElementById('keyNote').textContent"))
         self.assertEqual(self.js("document.getElementById('roRange').textContent"), 'No model field')
+        fields = "['cbMin', 'cbMax', 'paletteSel'].map(id=>[document.getElementById(id).value, document.getElementById(id).disabled])"
+        self.assertEqual([f[1] for f in self.js(fields)], [True] * 3, 'the colour scale can be edited with nothing coloured')
+        self.pill('m', 'iso3d')
+        self.assertEqual(self.js(KEY_TITLE), 'Chlorophyll (mg/m³) · 0.20 mg/m³ isosurface')
+        self.assertFalse(self.visible('#keyBar'), 'a colour bar for an isosurface that is not drawn')
+        note = self.js("document.getElementById('keyNote').textContent")
+        self.assertIn('no model field', note)
+        self.assertNotIn('Log colour scale', note, 'the note describes a colour bar that is not drawn')
+        self.assertEqual(self.js(fields)[:2], [['', True], ['', True]], 'the colour range of an isosurface that is not drawn')
         self.pill('v', 'temp')
         self.pill('m', 'surface')
         self.assertTrue(self.visible('#keyBar'))
-        self.assertNoProblems()
-
-    def test_header_readout_fits_on_a_1366_screen(self):
-        cut = """(()=>{ const ro=document.getElementById('readout').getBoundingClientRect();
-          return [...document.querySelectorAll('#readout > span')].filter(e=>getComputedStyle(e).display!=='none')
-            .filter(e=>{ const r=e.getBoundingClientRect(); return r.left < ro.left-0.5 || r.right > ro.right+0.5 ||
-              e.scrollWidth > e.clientWidth+1; }).map(e=>e.id+': '+e.textContent); })()"""
-        try:
-            self.b.resize(1366, 768)
-            self.b.pump(0.3)
-            for v in ('temp', 'sal', 'cur', 'tchp', 'chl'):
-                with self.subTest(variable=v):
-                    self.pill('v', v)
-                    self.assertEqual(self.js(cut), [], 'header readout cut off at 1366x768')
-                    self.assertTrue(self.visible('#roRange'))
-        finally:
-            self.b.resize(self.width, self.height)
-            self.b.pump(0.3)
-        self.pill('v', 'temp')
+        self.assertEqual([f[1] for f in self.js(fields)], [False] * 3)
         self.assertNoProblems()
 
     def test_bgc_profile_tabs_can_be_clicked(self):
-        open_float = """(()=>{ for(let t=0; t<META.times.length; t++){ __ol.actions.setTime(t);
-          const it=markerItems.find(m=>m.userData.data && m.userData.data.inst.id==='ARGO-2902174');
-          if(it){ __ol.actions.openProfile(it.userData); return t; } } return -1; })()"""
+        # the time step whose snapshot holds BGC float ARGO-2902174, and its marker on screen
+        find = """(()=>{ for(let t=0; t<META.times.length; t++){ __ol.actions.setTime(t);
+          const m=__ol.render.marks('argo').find(m=>m.id==='ARGO-2902174'); if(m) return [m.x, m.y]; } return null; })()"""
         tab_hit = """(()=>{ const e=document.querySelector('.tabbtn[data-p="%s"]'), r=e.getBoundingClientRect();
           return document.elementFromPoint(r.left+r.width/2, r.top+r.height/2)===e && r.right<=innerWidth; })()"""
+        self.pill('v', 'temp')
+        self.pill('m', 'surface')
         try:
             for w, h in ((1366, 768), (1600, 900)):
                 with self.subTest(width=w):
                     self.b.resize(w, h)
                     self.b.pump(0.3)
-                    self.assertGreaterEqual(self.js(open_float), 0, 'BGC float ARGO-2902174 is not in the snapshot')
+                    self.b.click('#resetViewBtn')
                     self.b.pump(0.3)
+                    at = self.js(find)
+                    self.assertTrue(at, 'BGC float ARGO-2902174 is not on screen in any snapshot')
+                    self.assertTrue(self.js("document.elementFromPoint(%f, %f)===renderer.domElement" % tuple(at)),
+                                    'the float marker is covered')
+                    self.b.click_at(*at)
+                    self.b.pump(0.4)
+                    self.assertIn('2902174', self.js("document.getElementById('profName').textContent"),
+                                  'a click on the marker did not open its profile')
                     for tab in ('chl', 'oxy', 'temp'):
                         self.assertTrue(self.js(tab_hit % tab), f'the {tab} tab is off screen or covered at {w} px')
                         self.b.click(f'.tabbtn[data-p="{tab}"]')
@@ -410,6 +496,25 @@ class RealMode(Controls, AppTestCase):
             self.b.resize(self.width, self.height)
             self.js("__ol.actions.setTime(0)")
             self.b.pump(0.3)
+        self.assertNoProblems()
+
+    def test_chlorophyll_hover_has_no_model_value(self):
+        self.pill('v', 'chl')
+        self.b.click('#resetViewBtn')
+        self.b.pump(0.3)
+        for m in ('surface', 'iso', 'iso3d'):
+            with self.subTest(view=m):
+                self.pill('m', m)
+                tips = []
+                for lat, lon in ((8, 86), (12, 66), (16, 88)):
+                    self.b.mouse('mouseMoved', *self.js(SEA_POINT % (lon, lat)))
+                    self.b.pump(0.2)
+                    tips.append(self.js("document.getElementById('hoverTip').innerText"))
+                self.assertTrue(any('No model field' in t for t in tips), f'hover over the sea: {tips}')
+                self.assertFalse([t for t in tips if 'NaN' in t or 'crossing' in t], f'hover over the sea: {tips}')
+        self.b.mouse('mouseMoved', 5, 300)
+        self.pill('v', 'temp')
+        self.pill('m', 'surface')
         self.assertNoProblems()
 
 
