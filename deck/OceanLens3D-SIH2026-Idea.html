@@ -134,19 +134,19 @@
   <div class="s2-body">
     <div class="h">WHAT IT IS</div>
     <div class="bl">
-      <p>One self-contained HTML file (~3 MB) that opens the Arabian Sea and Bay of Bengal <span style="white-space:nowrap">(6–22°N, 61–92°E)</span> as a navigable 3D ocean volume</p>
-      <p>No install, no login, no server — runs offline from a pen drive or an email attachment</p>
-      <p>Real case study built in: Cyclone Amphan, May 2020 — HYCOM model analyses, 206 Argo profiles (with BGC chlorophyll and oxygen) and the IBTrACS track</p>
+      <p>A web platform: a Python server (REST, OGC WMS/WCS, OPeNDAP) and a 3D browser client for the Arabian Sea and Bay of Bengal <span style="white-space:nowrap">(6–22°N, 61–92°E)</span></p>
+      <p>The client is one HTML file (~3.4 MB): no install or login; runs offline from a pen drive</p>
+      <p>Real case built in: Cyclone Amphan, May 2020 (hindcast) — HYCOM analyses, 206 Argo profiles from 70 floats, BGC-Argo chlorophyll and oxygen, IBTrACS track</p>
     </div>
     <div class="h" style="color:var(--teal2)">HOW IT ADDRESSES THE PROBLEM</div>
     <div class="bl">
-      <p>Model fields (temperature, salinity, currents) and in-situ Argo, BGC, glider and CTD profiles are drawn in the SAME 3D scene instead of separate portals</p>
+      <p>Model fields (temperature, salinity, currents) and Argo / BGC-Argo profiles share the SAME 3D scene; imported glider (real BoBBLE 2016 samples) and CTD files join it</p>
       <p>Click any float → its observed profile is drawn over the co-located model column with bias and RMSE, so model–observation agreement is visible in one glance</p>
       <p>Depth slices, vertical sections, 3D isosurfaces, D20 / D26 surfaces, a cyclone heat potential map, current particle streaks, ETOPO1 bathymetry and coastline</p>
     </div>
     <div class="h" style="color:var(--navy)">INNOVATION AND UNIQUENESS</div>
     <div class="bl">
-      <p>Existing tools (Ocean Navigator, MyOcean Pro, Argovis) need servers, accounts or live bandwidth; OceanLens 3D needs a browser; drag in your own CSV or NetCDF files</p>
+      <p>Existing tools (Ocean Navigator, MyOcean Pro, Argovis) need servers, accounts or live bandwidth; OceanLens 3D needs a browser; drag in Argo, ERDDAP or glider files</p>
       <p>Density (EOS-80), sound speed (Mackenzie 1981) and cyclone heat potential computed live in the browser — not pre-rendered pictures</p>
     </div>
   </div>
@@ -161,24 +161,24 @@
   <div class="logo img-logo"></div>
   <div class="h" style="left:32.4pt;top:95.75pt">TECHNOLOGIES USED</div>
   <div class="card tech" style="left:32.4pt"><b>FRONT END</b>HTML5 · vanilla JavaScript<br>Three.js r128 (WebGL)</div>
-  <div class="card tech" style="left:260.6pt"><b>DATA LAYER</b>Python · NumPy<br>NetCDF / CF · OPeNDAP</div>
+  <div class="card tech" style="left:260.6pt"><b>DATA LAYER</b>Python · NumPy<br>NetCDF-3 / CF · OPeNDAP</div>
   <div class="card tech" style="left:488.9pt"><b>OCEANOGRAPHY</b>UNESCO/EOS-80 density<br>Mackenzie 1981 sound speed</div>
   <div class="card tech" style="left:717.1pt"><b>VALIDATION</b>Argo QC flags + density test<br>bias · RMSE at each profile's time</div>
   <div class="h" style="left:32.4pt;top:212.35pt">METHODOLOGY — DATA FLOW</div>
   <div class="flow">
     <div class="box" style="width:182pt;background:var(--navy)"><b>DATA SOURCES</b>HYCOM GOFS 3.1 analysis<br>Argo + BGC-Argo (ERDDAP)<br>ETOPO1 relief<br>IBTrACS best tracks<small>next: INCOIS LAS · Copernicus</small></div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
-    <div class="box" style="width:175pt;background:var(--teal)"><b>INGESTION (Python)</b>OPeNDAP · ERDDAP · CF NetCDF<br>0.5° regrid, 11 depths<br>Argo QC, pressure → depth<br>16-bit quantize</div>
+    <div class="box" style="width:175pt;background:var(--teal)"><b>INGESTION (Python)</b>OPeNDAP · ERDDAP · CF NetCDF-3<br>0.5° regrid, 11 depths<br>Argo QC, pressure → depth<br>16-bit quantize</div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
     <div class="box" style="width:154pt;background:var(--teal2)"><b>PAYLOAD</b>16-bit arrays, base64<br>+ JSON header<br>~2.3 MB for 8 analyses</div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
-    <div class="box" style="width:176pt;background:var(--teal3)"><b>BROWSER CLIENT</b>one .html file<br>CSV + NetCDF import<br>no install, offline</div>
+    <div class="box" style="width:176pt;background:var(--teal3)"><b>SERVER + CLIENT</b>REST · WMS · WCS · OPeNDAP<br>3D client: one .html file<br>CSV + NetCDF-3 import<br>also runs offline</div>
   </div>
   <div class="h" style="left:32.4pt;top:426.95pt">RENDERING METHOD</div>
   <div class="render bl">
     <p>Volume drawn as an opaque sea surface over faint depth layers (alpha blending, back to front) — stable on integrated GPUs where ray-marching fails</p>
     <p>Marching-cubes isosurfaces and D20 / D26 surfaces · log or linear colour scales · particle advection for currents · land masking against ETOPO1</p>
-    <p style="color:var(--teal)">Status: working prototype on real Cyclone Amphan data — volume, slices, sections, isosurfaces, float profiles, file import, plugins, REST / WMS / WCS server</p>
+    <p style="color:var(--teal)">Status: working prototype on real Amphan data — volume, slices, sections, isosurfaces, float profiles, file import, plugins, REST / WMS / WCS / OPeNDAP server</p>
   </div>
   <div class="foot"><span>@SIH Idea submission- Template</span><b>3</b></div>
 </section>
@@ -189,15 +189,15 @@
   <div class="title">FEASIBILITY AND VIABILITY</div>
   <div class="logo img-logo"></div>
   <div class="h" style="left:32.4pt;top:95.9pt;font-size:15pt;line-height:15pt;color:var(--green)">WHY IT IS FEASIBLE</div>
-  <div class="card feas g" style="top:123.8pt"><b>✓&nbsp; Prototype exists</b>Full 3D scene, float comparison and demo mode already run on real Cyclone Amphan data in one ~3 MB file, built by a working Python pipeline and checked by 159 automated tests.</div>
-  <div class="card feas g" style="top:214.5pt"><b>✓&nbsp; Data is free and open</b>HYCOM, Argo GDAC, ETOPO1 and IBTrACS are public: no account needed, free to use with attribution; Copernicus Marine needs only a free registration.</div>
-  <div class="card feas g" style="top:305.2pt"><b>✓&nbsp; Runs on any laptop</b>Browser + WebGL only. No GPU cluster, no cloud bill, no IT deployment for a district office to use it.</div>
-  <div class="card feas g" style="top:395.9pt"><b>✓&nbsp; Built-in quality checks</b>Argo QC flags, a density-inversion test and bias / RMSE against the model run inside the app, so bad data is flagged, not hidden.</div>
+  <div class="card feas g" style="top:123.8pt"><b>✓&nbsp; Prototype exists</b>3D scene, float comparison, file import and server already run on real Cyclone Amphan data, built by a working Python pipeline and checked by 193 automated tests.</div>
+  <div class="card feas g" style="top:214.5pt"><b>✓&nbsp; Data is free and open</b>HYCOM, Argo GDAC, ETOPO1 and IBTrACS are public: no account needed, free to use with attribution. Copernicus Marine files also download without an account (only its toolbox needs one).</div>
+  <div class="card feas g" style="top:305.2pt"><b>✓&nbsp; Built-in quality checks</b>Argo QC flags, a density-inversion test and bias / RMSE against the model run inside the app. Sparse float coverage is shown as measured, never interpolated into a map.</div>
+  <div class="card feas g" style="top:395.9pt"><b>→&nbsp; Next steps</b>Copernicus GLORYS and BGC ingestion · a drift tool for search and rescue · SST-front and chlorophyll maps for fisheries · anomalies against climatology · fields streamed from the server.</div>
   <div class="h" style="left:493.2pt;top:95.9pt;font-size:15pt;line-height:15pt;color:var(--amber)">RISKS → MITIGATION</div>
   <div class="card feas a" style="top:123.8pt"><b>Payload size vs. detail</b>Regional subsetting + vertical regridding + 16-bit quantization keeps 8 analyses of model fields plus 206 Argo profiles to about 2.3 MB.</div>
-  <div class="card feas a" style="top:214.5pt"><b>Weak GPUs on office laptops</b>Layered transparency instead of ray-marching: 11 textured depth layers, cheap on integrated GPUs; Three.js version pinned.</div>
-  <div class="card feas a" style="top:305.2pt"><b>Sparse / gappy float coverage</b>Gaps are shown as gaps, never silently interpolated, so users are not misled about data density.</div>
-  <div class="card feas a" style="top:395.9pt"><b>Long-term maintenance</b>One pinned library and a standard-library build, no npm chain; a plugin API adds sensors and variables without touching the core.</div>
+  <div class="card feas a" style="top:214.5pt"><b>Weak GPUs on office laptops</b>Layered transparency instead of ray-marching: 11 textured depth layers, cheap on integrated GPUs. Browser + WebGL only, no GPU cluster or cloud bill.</div>
+  <div class="card feas a" style="top:305.2pt"><b>NetCDF-4 / HDF5 files</b>NCAR has deprecated PyNIO in favour of xarray. Our zero-dependency reader covers NetCDF-3; NetCDF-4 via xarray in the pipeline is the next step.</div>
+  <div class="card feas a" style="top:395.9pt"><b>Why no React or Vue</b>The PS asks for no client-side dependencies, and the client is built to run on air-gapped machines. One pinned library (Three.js); the plugin API is the component model.</div>
   <div class="foot"><span>@SIH Idea submission- Template</span><b>4</b></div>
 </section>
 
@@ -206,21 +206,21 @@
   <div class="team">ByteForge</div>
   <div class="title">IMPACT AND BENEFITS</div>
   <div class="logo img-logo"></div>
-  <div class="card stat" style="left:32.4pt;background:var(--teal)"><b>0</b><span>installs, logins or servers needed</span></div>
-  <div class="card stat" style="left:337.7pt;background:var(--teal2)"><b>~3 MB</b><span>app + real data, opens offline</span></div>
+  <div class="card stat" style="left:32.4pt;background:var(--teal)"><b>0</b><span>installs or logins needed; server optional</span></div>
+  <div class="card stat" style="left:337.7pt;background:var(--teal2)"><b>~3.4 MB</b><span>client + real data, opens offline</span></div>
   <div class="card stat" style="left:642.9pt;background:var(--navy)"><b>5 → 1</b><span>data sources in a single 3D view</span></div>
   <div class="h" style="left:32.4pt;top:202.35pt">IMPACT ON THE TARGET AUDIENCE</div>
   <div class="aud">
-    <div><b>INCOIS scientists</b>Model–observation comparison in seconds instead of hours; an optional server publishes the same data over REST, OGC WMS/WCS and OPeNDAP.</div>
-    <div><b>Cyclone &amp; disaster cells</b>D26 depth and cyclone heat potential mapped along the storm track and exported for a briefing before landfall; the Amphan 2020 case is built in.</div>
-    <div><b>Coastal &amp; fisheries offices</b>Usable on low-bandwidth or offline machines where existing web portals simply fail to load.</div>
-    <div><b>Students &amp; educators</b>Guided tour mode turns a research tool into an ocean-literacy resource for any classroom.</div>
+    <div><b>INCOIS scientists</b>Model–observation comparison with one click on a float; the server publishes the same data over REST, OGC WMS/WCS and OPeNDAP for GIS tools and portals.</div>
+    <div><b>Cyclone &amp; disaster cells</b>The built-in Amphan 2020 hindcast replays what a cyclone desk would see: D26 depth and cyclone heat potential along the track, exported as PNG for briefings.</div>
+    <div><b>Coastal &amp; fisheries offices</b>The client works on low-bandwidth or offline machines. A fishery product (SST fronts with chlorophyll) is on the roadmap.</div>
+    <div><b>Students &amp; educators</b>An 8-step guided tour of Amphan with short, plain captions, for classrooms, exhibitions and e-learning.</div>
   </div>
   <div class="h" style="left:493.2pt;top:202.35pt">BENEFITS OF THE SOLUTION</div>
   <div class="card ben" style="top:229pt"><b>Social</b>Cyclone-relevant ocean heat information reaches district and coastal users, not only well-connected research labs.</div>
-  <div class="card ben" style="top:290.9pt"><b>Economic</b>No licence fees, hosting or hardware cost; one file replaces a deployed visualization stack for most inspection tasks.</div>
-  <div class="card ben" style="top:352.8pt"><b>Environmental</b>Faster reading of thermocline, eddy and monsoon-reversal structure supports marine and fisheries decision-making.</div>
-  <div class="card ben" style="top:414.7pt"><b>Scientific</b>Validation is built in — GODAE Class 4 metrics and density-inversion checks show how far each view can be trusted.</div>
+  <div class="card ben" style="top:290.9pt"><b>Economic</b>Runs on existing servers and office laptops, with no new hardware; open standards (WMS, WCS, CF, OPeNDAP) avoid lock-in.</div>
+  <div class="card ben" style="top:352.8pt"><b>Environmental</b>Thermocline and eddy structure seen in 3D and checked against floats supports marine planning and research.</div>
+  <div class="card ben" style="top:414.7pt"><b>Scientific</b>Bias and RMSE against every float (GODAE Class 4 style) and density checks are built in; HYCOM assimilates Argo, so it is a consistency check.</div>
   <div class="foot"><span>@SIH Idea submission- Template</span><b>5</b></div>
 </section>
 
@@ -236,6 +236,7 @@
       <p>Argo and BGC-Argo Global Data Assembly Centre, via Ifremer ERDDAP — erddap.ifremer.fr</p>
       <p>ETOPO1 global relief model (NOAA NCEI) — ncei.noaa.gov</p>
       <p>IBTrACS v04 cyclone best tracks (Knapp et al., 2010) — ncei.noaa.gov</p>
+      <p>Glider samples: BoBBLE 2016 Seagliders, OceanGliders GDAC (Webber et al., 2019, BODC)</p>
       <p>Next: INCOIS Live Access Server (las.incois.gov.in) and Copernicus Marine (marine.copernicus.eu)</p>
     </div>
   </div>
@@ -254,7 +255,7 @@
   <div class="card tools">
     <b>EXISTING TOOLS REVIEWED — AND WHAT OCEANLENS 3D DOES DIFFERENTLY</b>
     DFO Ocean Navigator (needs a server deployment) · Copernicus MyOcean Pro (account + connectivity) · Argovis (float profiles, not integrated 3D model volumes) · OceanOPS (network status, not ocean fields)
-    <strong>None of them opens from a pen drive on an offline coastal-office laptop and shows a navigable 3D ocean. That portability is our contribution.</strong>
+    <strong>INCOIS Digital Ocean (do.incois.gov.in) is the national data portal. OceanLens adds model columns and Argo / glider profiles co-located in one 3D scene with misfit statistics, and can feed Digital Ocean through WMS / WCS.</strong>
   </div>
   <div class="foot"><span>@SIH Idea submission- Template</span><b>6</b></div>
 </section>
