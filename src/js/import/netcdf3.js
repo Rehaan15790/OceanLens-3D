@@ -2,7 +2,8 @@
    NETCDF CLASSIC READER (CDF-1, CDF-2 64-bit offset, CDF-5 64-bit data)
    NetCDF3.parse(arrayBuffer) -> {version, numrecs, dims, attrs, vars, read(name), raw(name), attr(var, name)}
    read() unpacks: _FillValue, missing_value, valid_min/max/range and the default fill become NaN,
-   then scale_factor and add_offset apply. Char variables come back as strings.
+   then scale_factor and add_offset apply (no valid range on times and coordinates). Char variables come back
+   as strings.
    ============================================================ */
 const NetCDF3 = (()=>{
   const TYPES = {1:['byte', 1], 2:['char', 1], 3:['short', 2], 4:['int', 4], 5:['float', 4], 6:['double', 8],
@@ -67,15 +68,16 @@ const NetCDF3 = (()=>{
       // the record size: padded vsizes, except a lone record variable, which is not padded
       const perRec = v=>v.shape.slice(1).reduce((a, b)=>a*b, 1)*v.size;
       const recsize = recVars.length===1 ? perRec(recVars[0]) : recVars.reduce((a, v)=>a + v.vsize, 0);
+      const recStart = recVars.length ? Math.min(...recVars.map(v=>v.begin)) : 0;
       if(numrecs >= 0xFFFFFFFF && recVars.length){       // streaming: count the records that fit
-        const first = Math.min(...recVars.map(v=>v.begin));
-        numrecs = recsize ? Math.floor((u8.length - first)/recsize) : 0;
+        numrecs = recsize ? Math.floor((u8.length - recStart)/recsize) : 0;
       }
       recVars.forEach(v=>{ v.shape[0] = numrecs; });
-      // every variable's data must lie inside the file
+      // every variable's data must lie inside the file; with no records (Argo _prof.nc files have N_HISTORY = 0)
+      // the record variables hold nothing, so only the start of the record section is checked
       Object.values(vars).forEach(v=>{
         const per = v.shape.slice(v.record ? 1 : 0).reduce((a, b)=>a*b, 1)*v.size;
-        const end = v.record ? (numrecs ? v.begin + (numrecs-1)*recsize + per : v.begin) : v.begin + per;
+        const end = v.record ? (numrecs ? v.begin + (numrecs-1)*recsize + per : recStart) : v.begin + per;
         if(!(v.begin >= pos) || end > u8.length) throw new Error(`variable ${v.name} points past the end of the file (truncated?)`);
         if(per/v.size*(v.record ? Math.max(1, numrecs) : 1) > 5e7) throw new Error(`variable ${v.name} is too large for the browser`);
       });
@@ -126,13 +128,19 @@ const NetCDF3 = (()=>{
       const at = v.attrs, num = x=>Array.isArray(x) ? x.map(Number) : x===undefined ? [] : [Number(x)];
       const fills = num(at._FillValue).concat(num(at.missing_value));
       if(!('_FillValue' in at) && DEFAULT_FILL[v.type]!==undefined) fills.push(DEFAULT_FILL[v.type]);
-      const vr = num(at.valid_range), lo = vr.length===2 ? vr[0] : num(at.valid_min)[0], hi = vr.length===2 ? vr[1] : num(at.valid_max)[0];
-      const sc = at.scale_factor!==undefined ? Number(at.scale_factor) : 1, off = at.add_offset!==undefined ? Number(at.add_offset) : 0;
       const isFloat = v.type==='float' || v.type==='double';
+      const fill = x=>fills.some(f=>isFloat ? Math.abs(x - f) <= Math.abs(f)*1e-6 : x===f) || (isFloat && Math.abs(x) >= 9.96e36) || Number.isNaN(x);
+      // no valid range on times and coordinates, nor one that rejects every value: both are wrong metadata
+      // (ERDDAP glider tables give time, in seconds since 1970, valid_max 90000)
+      const coord = /\bsince\b/i.test(String(at.units || '')) || /^[TXY]$/i.test(String(at.axis || '')) || (v.dims.length===1 && v.dims[0]===k);
+      const vr = num(at.valid_range);
+      let lo = coord ? undefined : vr.length===2 ? vr[0] : num(at.valid_min)[0], hi = coord ? undefined : vr.length===2 ? vr[1] : num(at.valid_max)[0];
+      const out = x=>(lo!==undefined && x < lo) || (hi!==undefined && x > hi);
+      if((lo!==undefined || hi!==undefined) && a.some(x=>!fill(x)) && a.every(x=>fill(x) || out(x))) lo = hi = undefined;
+      const sc = at.scale_factor!==undefined ? Number(at.scale_factor) : 1, off = at.add_offset!==undefined ? Number(at.add_offset) : 0;
       for(let i=0; i<a.length; i++){
         const x = a[i];
-        if(fills.some(f=>isFloat ? Math.abs(x - f) <= Math.abs(f)*1e-6 : x===f) || (isFloat && Math.abs(x) >= 9.96e36) ||
-           (lo!==undefined && x < lo) || (hi!==undefined && x > hi) || Number.isNaN(x)) a[i] = NaN;
+        if(fill(x) || out(x)) a[i] = NaN;
         else a[i] = x*sc + off;
       }
       return a;

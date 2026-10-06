@@ -150,22 +150,47 @@ const importUI = (()=>{
     let res;
     try{ res = api().importParsed(parsed, opts); }
     catch(err){ setError(err && err.message ? err.message : 'This file could not be added.'); return; }
-    const msg = addedMessage(opts.name, res);
+    const shown = reveal(res), msg = addedMessage(opts.name, res, shown);
     close();
     announce(msg, true);
+    if(shown.inst) openProfile(shown.inst.userData);
   }
-  function addedMessage(name, res){
+  // profiles more than 1.5 days from the analysis are hidden: when none of the new ones shows, go to the analysis
+  // nearest the first that has one, else turn on Show all times; then the first one on the map opens
+  function reveal(res){
+    const out = {moved:false, all:false, date:'', inst:null};
+    if(typeof instrumentsNow!=='function' || typeof dataMode==='undefined' || dataMode!=='real') return out;
+    const d = api().dataset(res.id), at = i=>+String(i.key).split(':').pop();
+    const mine = d ? [].concat(...Object.keys(d.types).map(t=>api().observations(t)))
+      .filter(i=>i.dataset===res.id && !(api().instrument(i.kind) || {}).gridded).sort((a, b)=>at(a) - at(b)) : [];
+    const now = ()=>instrumentsNow().filter(i=>i.dataset===res.id);
+    if(mine.length && !now().length){
+      const near = mine.find(i=>Math.abs(i.gapH) <= 36);
+      if(near){ setTime(near.snap); out.moved = true; }
+      else { setShowAllImported(true); out.all = true; out.date = fmt.analysisTime(mine[0].ms); }
+    }
+    out.inst = now()[0] || null;
+    return out;
+  }
+  function addedMessage(name, res, shown = {}){
     let s = `Added ${plural(res.profiles, 'profile', 'profiles')} from ${name}.`;
     if(res.skipped) s += ` ${plural(res.skipped, 'profile was', 'profiles were')} outside the map and left out.`;
-    if(typeof dataMode!=='undefined' && dataMode!=='real') s += ' Switch to Real data to see it.';
+    if(typeof dataMode!=='undefined' && dataMode!=='real') return s + ' Switch to Real data to see it.';
+    if(shown.moved) s += ` The timeline moved to ${timeLabel(state.time)}, the analysis nearest the new profiles.`;
+    if(shown.all) s += ` No profile is within 1.5 days of an analysis (the first is from ${shown.date}), so Show all times is now on.`;
     else if(typeof state!=='undefined' && !state.showAllImported) s += ' Profiles within 1.5 days of the analysis time are shown; turn on Show all times to see every one.';
+    if(shown.inst) s += ` Profile ${shown.inst.id} is open.`;
     return s;
   }
-  // "Added" stays on screen (it says how to see every profile); other notices are for screen readers only
+  // "Added" stays on screen (it says how to see every profile), scrolled into view under Your data; other notices
+  // are for screen readers only
   function announce(text, visible){
     const vis = $('importAnnounce'), sr = $('importAnnounceSr'), el = visible ? vis : sr;
     vis.textContent = ''; sr.textContent = '';
-    setTimeout(()=>{ el.textContent = text; }, 50);
+    setTimeout(()=>{
+      el.textContent = text;
+      if(visible && getComputedStyle(el).visibility==='visible') el.scrollIntoView({block:'nearest'});
+    }, 50);
   }
   // charts.js updateLegend() calls this on every update: the "Real data only" note follows the data mode
   function syncMode(){

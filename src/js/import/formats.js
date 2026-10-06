@@ -46,16 +46,18 @@
     return null;
   }
   // len flags, one character each, from char variables (any shape; the reader collapses the last
-  // dimension into strings) or numeric flag variables
+  // dimension into strings) or numeric flag variables; null when there is none or not one is set (ERDDAP
+  // glider tables carry flag columns that are all missing)
   function flags(nc, n, len){
     if(!has(nc, n)) return null;
     const r = nc.read(n);
+    let f = null;
     if(r.length && typeof r[0]==='string'){
       const w = len / r.length;
       if(!Number.isInteger(w) || w < 1) return null;
-      return Array.from(r, x=>x.padEnd(w, ' ').slice(0, w)).join('').split('');
-    }
-    return r.length===len ? Array.from(r, v=>Number.isFinite(v) ? String(Math.round(v)) : ' ') : null;
+      f = Array.from(r, x=>x.padEnd(w, ' ').slice(0, w)).join('').split('');
+    } else if(r.length===len) f = Array.from(r, v=>Number.isFinite(v) ? String(Math.round(v)) : ' ');
+    return f && f.some(c=>c!==' ') ? f : null;
   }
   const strs = (nc, n)=>has(nc, n) ? Array.from(nc.read(n), s=>typeof s==='string' ? s.trim() : String(s)) : null;
   function timeMs(nc, n){
@@ -68,6 +70,8 @@
     return Array.from(v, x=>Number.isFinite(x) ? base + x*unit : NaN);
   }
   const iso = ms=>new Date(ms).toISOString().slice(0, 16)+'Z';
+  // one dive or climb from pressures (z: dbar) on 1 m depth bins at the segment's mean latitude (a few hundred levels)
+  const dives = (ks, s)=>diveProfile(ks, s, (p, la)=>Math.round(depthFromPressure(p, la)));
   const inRange = (key, v)=>Number.isFinite(v) && (!key || (v >= RANGE[key][0] && v <= RANGE[key][1]));
 
   // one profile from per-sample arrays: z (m), vars; sorted by depth, repeated depths dropped
@@ -148,39 +152,22 @@
         O = M.map((x,k)=>Number.isFinite(x) && Number.isFinite(T[k]) && Number.isFinite(S[k]) ? x/(1+sigmaT(S[k], T[k])/1000) : NaN);
       }
       const raw = {chl:!has(nc, 'CHLA_ADJUSTED') && anyFinite(C), oxy:!has(nc, 'DOXY_ADJUSTED') && anyFinite(O)};
-      // segments: PHASE_NUMBER when present, else reversals of the pressure direction (5 dbar hysteresis)
-      const seg = new Array(n).fill(-1), phaseNo = num(nc, 'PHASE_NUMBER'), phase = num(nc, 'PHASE');
-      if(phaseNo) for(let k=0;k<n;k++) seg[k] = phase && ![1, 4].includes(phase[k]) ? -1 : phaseNo[k];
-      else {
-        let s = 0, dir = 0, ext = NaN;
-        for(let k=0;k<n;k++){
-          if(!Number.isFinite(P[k])) continue;
-          if(!Number.isFinite(ext)){ ext = P[k]; seg[k] = s; continue; }
-          const d = P[k] - ext;
-          if(dir===0 && Math.abs(d) > 5) dir = Math.sign(d);
-          if(dir!==0 && Math.sign(d)===-dir && Math.abs(d) > 5){ s++; dir = -dir; }
-          if((dir >= 0 && P[k] > ext) || (dir < 0 && P[k] < ext) || dir===0) ext = P[k];
-          seg[k] = s;
-        }
+      // segments: PHASE_NUMBER when present, else reversals of the pressure direction (diveSegments, csv.js)
+      const phaseNo = num(nc, 'PHASE_NUMBER'), phase = num(nc, 'PHASE');
+      let groups = new Map();
+      if(phaseNo) for(let k=0;k<n;k++){
+        const s = phase && ![1, 4].includes(phase[k]) ? -1 : phaseNo[k];
+        if(s >= 0 && Number.isFinite(s)){ if(!groups.has(s)) groups.set(s, []); groups.get(s).push(k); }
       }
-      const groups = new Map();
-      seg.forEach((s,k)=>{ if(s >= 0 && Number.isFinite(s) && Number.isFinite(t[k])){ if(!groups.has(s)) groups.set(s, []); groups.get(s).push(k); } });
+      else groups = diveSegments(P);
       const name = String(nc.attrs.platform_code || nc.attrs.deployment_label || nc.attrs.id || 'GLIDER').trim();
       const profiles = []; let dropped = 0;
-      for(const [s, ks] of groups){
-        const pk = ks.filter(k=>Number.isFinite(P[k]));
-        const la = mean(ks.map(k=>lat[k])), lo = mean(ks.map(k=>lon[k]));
-        if(pk.length < 5 || !Number.isFinite(la) || !Number.isFinite(lo)
-          || Math.max(...pk.map(k=>P[k])) - Math.min(...pk.map(k=>P[k])) < 10){ dropped++; continue; }
-        // 1 m bins keep a dive to a few hundred levels
-        const bins = new Map();
-        pk.forEach(k=>{ const b = Math.round(depthFromPressure(P[k], la)); if(!bins.has(b)) bins.set(b, []); bins.get(b).push(k); });
-        const zs = [...bins.keys()].sort((a,b)=>a-b), vals = {};
-        [['temp', T], ['sal', S], ['chl', C], ['oxy', O]].forEach(([key, arr])=>{
-          if(arr) vals[key] = zs.map(b=>mean(bins.get(b).map(k=>arr[k])));
-        });
-        const times = ks.map(k=>t[k]).sort((a,b)=>a-b);
-        const pr = profile({id:name, lat:la, lon:lo, time:iso(times[times.length>>1]), meta:{platform:name, cycle:s}}, zs, vals);
+      const smp = {ms:t, lat, lon, z:P, vals:{temp:T, sal:S, chl:C, oxy:O}};
+      for(const [s, all] of groups){
+        const ks = all.filter(k=>Number.isFinite(t[k]));
+        if(!ks.length) continue;
+        const d = dives(ks, smp);
+        const pr = d && profile({id:name, lat:d.lat, lon:d.lon, time:iso(d.ms), meta:{platform:name, cycle:s}}, d.z, d.vars);
         if(pr) profiles.push(pr); else dropped++;
       }
       const warnings = dropped ? [left(dropped, 'segment', 'segments', 'too short or without a position')] : [];
@@ -188,7 +175,8 @@
       return {type:'glider', format:'ego_glider', profiles, warnings, notes:[NOTE]};
     }});
 
-  // ---- tables: ERDDAP tabledap .nc ("row" dimension) and CF tables with a profile id
+  // ---- tables: ERDDAP tabledap .nc ("row" dimension) and CF tables with a profile id; a trajectory with no
+  // profile id (OceanGliders ERDDAP) is split into dives and climbs per platform, as an EGO file is
   function readTable(nc, fmt){
     const low = lowerMap(nc), rowDim = nc.vars[find(nc, 'lat') || Object.keys(nc.vars)[0]].dims[0];
     const n = (nc.dims.find(d=>d.name===rowDim) || {size:0}).size;
@@ -196,9 +184,11 @@
     const latN = col('lat'), lonN = col('lon'), timeN = col('time');
     if(!latN || !lonN || !timeN) throw new Error('This table has no latitude, longitude or time column.');
     const lat = num(nc, latN), lon = num(nc, lonN), t = timeMs(nc, timeN);
-    const idN = Object.keys(nc.vars).find(k=>/profile_id|trajectory_id|timeseries_id/.test(String(nc.vars[k].attrs.cf_role || '')))
-      || low.platform_number || low.platform_code || low.station || low.id || low.cast;
+    const role = k=>String(nc.vars[k].attrs.cf_role || '');
+    const idN = Object.keys(nc.vars).find(k=>k!==timeN && /profile_id|trajectory_id|timeseries_id/.test(role(k)))
+      || low.platform_number || low.platform_code || low.platform_deployment || low.station || low.id || low.cast;
     const ids = idN ? strs(nc, idN) : null, cyc = low.cycle_number ? num(nc, low.cycle_number) : null;
+    const byProfile = Object.keys(nc.vars).some(k=>role(k)==='profile_id');
     const base = (key, name)=>{
       const raw = name, adj = name && low[name.toLowerCase()+'_adjusted'];
       const qc = n2=>n2 && (low[n2.toLowerCase()+'_qc'] || null);
@@ -209,34 +199,61 @@
     const C = {}; VARS.forEach(key=>{ const nm = col(key); if(nm && !/_adjusted$/i.test(nm)) C[key] = base(key, nm);
       else if(nm) C[key] = {raw:null, rawQc:null, adj:num(nc, nm), adjQc:flags(nc, low[nm.toLowerCase()+'_qc'], n), adjExists:true}; });
     if(!Pc && !Dc) throw new Error('This table has no depth or pressure column.');
-    const groups = new Map();
-    for(let k=0;k<n;k++){
-      const key = (ids ? ids[k] : '') + '|' + (cyc ? cyc[k] : '') + '|' + t[k];
-      if(!groups.has(key)) groups.set(key, []); groups.get(key).push(k);
-    }
-    const profiles = [], raw = {}; let dropped = 0;
-    for(const ks of groups.values()){
-      const k0 = ks[0];
-      if(!Number.isFinite(lat[k0]) || !Number.isFinite(lon[k0]) || !Number.isFinite(t[k0])){ dropped++; continue; }
-      const c = Pc || Dc;
-      const z = ks.map(k=>{ const v = pick(null, c.raw, c.rawQc, c.adj, c.adjQc, k, false);
-        return Pc && Number.isFinite(v) ? depthFromPressure(v, lat[k0]) : v; });
+    const c = Pc || Dc;
+    const zAt = (k, la)=>{ const v = pick(null, c.raw, c.rawQc, c.adj, c.adjQc, k, false);
+      return Pc && Number.isFinite(v) ? depthFromPressure(v, la) : v; };
+    const raw = {}, valsAt = ks=>{
       const vals = {};
       for(const [key, c] of Object.entries(C)){
         const bgc = key==='chl' || key==='oxy';
         vals[key] = ks.map(k=>pick(key, c.raw, c.rawQc, c.adj, c.adjQc, k, bgc && c.adjExists));
         if(bgc && !c.adjExists && anyFinite(vals[key])) raw[key] = true;
       }
-      const id = ids ? (/^\d{5,7}$/.test(ids[k0]) ? 'ARGO-'+ids[k0] : ids[k0]) : 'P'+(profiles.length+1);
-      const pr = profile({id, lat:lat[k0], lon:lon[k0], time:iso(t[k0]), meta:{platform:ids ? ids[k0] : null,
-        cycle:cyc ? cyc[k0] : null}}, z, vals);
-      if(pr) profiles.push(pr); else dropped++;
+      return vals;
+    };
+    const groups = new Map(), plats = new Map();
+    for(let k=0;k<n;k++){
+      const key = (ids ? ids[k] : '') + '|' + (cyc ? cyc[k] : '') + '|' + t[k];
+      if(!groups.has(key)){
+        groups.set(key, []);
+        const p = ids ? ids[k] : '';
+        if(!plats.has(p)) plats.set(p, []);
+        plats.get(p).push(key);
+      }
+      groups.get(key).push(k);
     }
     const cdm = String(nc.attrs.cdm_data_type || nc.attrs.featureType || '').toLowerCase();
-    const type = low.platform_number ? 'argo' : /trajectory/.test(cdm) ? 'glider' : 'other';
+    const profiles = []; let dropped = 0, cut = 0, dived = 0;
+    for(const [p, keys] of plats){
+      // a trajectory: nearly every sample has its own time, and the depth changes (not a mooring's time series)
+      const ks = [];
+      keys.forEach(g=>groups.get(g).forEach(k=>{ if(Number.isFinite(t[k]) && Number.isFinite(lat[k]) && Number.isFinite(lon[k])) ks.push(k); }));
+      const z = byProfile || /timeseries/.test(cdm) || keys.length < 5 || keys.length < 0.5*ks.length ? null
+        : ks.sort((a, b)=>t[a]-t[b]).map(k=>zAt(k, lat[k]));
+      let z0 = Infinity, z1 = -Infinity;
+      if(z) z.forEach(v=>{ if(Number.isFinite(v)){ z0 = Math.min(z0, v); z1 = Math.max(z1, v); } });
+      if(z && z1 - z0 >= 10){
+        const id = p || String(nc.attrs.platform_code || nc.attrs.id || 'GLIDER').trim(), segs = [...diveSegments(z)];
+        const smp = {ms:ks.map(k=>t[k]), lat:ks.map(k=>lat[k]), lon:ks.map(k=>lon[k]), z, vals:valsAt(ks)};
+        const ds = segs.map(([s, is])=>{ const d = diveProfile(is, smp);
+          return d && profile({id, lat:d.lat, lon:d.lon, time:iso(d.ms), meta:{platform:p || null, cycle:s}}, d.z, d.vars); }).filter(Boolean);
+        if(ds.length){ profiles.push(...ds); dived += ds.length; cut += segs.length - ds.length; continue; }
+      }
+      for(const g of keys){
+        const ks = groups.get(g), k0 = ks[0];
+        if(!Number.isFinite(lat[k0]) || !Number.isFinite(lon[k0]) || !Number.isFinite(t[k0])){ dropped++; continue; }
+        const id = ids ? (/^\d{5,7}$/.test(ids[k0]) ? 'ARGO-'+ids[k0] : ids[k0]) : 'P'+(profiles.length+1);
+        const pr = profile({id, lat:lat[k0], lon:lon[k0], time:iso(t[k0]), meta:{platform:ids ? ids[k0] : null,
+          cycle:cyc ? cyc[k0] : null}}, ks.map(k=>zAt(k, lat[k0])), valsAt(ks));
+        if(pr) profiles.push(pr); else dropped++;
+      }
+    }
+    const type = low.platform_number ? 'argo' : /trajectory/.test(cdm) || dived ? 'glider' : 'other';
     const warnings = dropped ? [left(dropped, 'profile', 'profiles', 'no good position, time or samples')] : [];
+    if(cut) warnings.push(left(cut, 'dive or climb', 'dives and climbs', 'under 5 samples or 10 m'));
     warnings.push(...rawWarnings(raw));
-    return {type, format:fmt, profiles, warnings, notes:[NOTE]};
+    const notes = dived ? [NOTE, `Trajectory split into ${dived===1 ? 'one dive or climb' : dived+' dives and climbs'} where the pressure turns round; 1 m bins.`] : [NOTE];
+    return {type, format:fmt, profiles, warnings, notes};
   }
   OceanLens.registerFormat('erddap_table', {label:'ERDDAP tabledap NetCDF', kind:'netcdf',
     detect:nc=>nc.dims.some(d=>d.name==='row') ? (nc.attrs.cdm_data_type || /erddap/i.test(String(nc.attrs.infoUrl || nc.attrs.history || '')) ? 0.9 : 0.6) : 0,
@@ -277,6 +294,4 @@
       }
       return {type:'other', format:'cf_generic', profiles, warnings:rawWarnings(raw), notes:[NOTE]};
     }});
-
-  function mean(a){ let s = 0, c = 0; a.forEach(x=>{ if(Number.isFinite(x)){ s += x; c++; } }); return c ? s/c : NaN; }
 })();

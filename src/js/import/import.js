@@ -65,7 +65,7 @@ async function readData(name, data){
     if(!g.needsMapping){
       try {
         const ds = tableToDataset(table, g.mapping, {name});
-        out._dataset = ds; out.profiles = ds.profiles.length; out.warnings.push(...ds.warnings);
+        out._dataset = ds; out.profiles = ds.profiles.length; out.type = ds.type; out.warnings.push(...ds.warnings);
       } catch(err){ out.needsMapping = true; out.warnings.push(err.message); }
     }
     return out;

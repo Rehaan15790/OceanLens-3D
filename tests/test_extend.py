@@ -1,6 +1,8 @@
 """Round-6 features in the real page: the public plugin API (a variable and an instrument registered at runtime),
-importing every file in samples/ (markers appear, a click opens the profile), the import dialog, the log colour
-scale, the 3D isosurface, and server mode (the page served by server/serve.py lists the server's datasets)."""
+importing every file in samples/ (markers appear, a click opens the profile), real-world file layouts (Argo GDAC
+multi-profile NetCDF, ERDDAP CSV with a units row, OceanGliders glider tables), the import dialog (new profiles are
+brought into view and opened), the log colour scale, the 3D isosurface, and server mode (the page served by
+server/serve.py lists the server's datasets)."""
 import base64
 import json
 import sys
@@ -17,6 +19,19 @@ API = '!window.OceanLens'
 IMPORT = '!(window.OceanLens && OceanLens.readData && OceanLens.importParsed)'
 ISO3D = "typeof iso3dStats === 'undefined'"
 SAMPLES = sorted(p for p in (REPO / 'samples').glob('*') if p.suffix.lower() in ('.nc', '.csv'))
+# profiles each sample must give (gliders: dives and climbs, not one profile per sample)
+SAMPLE_PROFILES = {'argo-5907326_prof.nc': 4, 'argo-amphan-samples.csv': 3, 'argo-erddap-2020-05-18.csv': 3,
+                   'bgc-argo-2902120-c227.nc': 1, 'ctd-synthetic-cast.csv': 1, 'glider-humpback504-2016-07-05.nc': 4,
+                   'glider-marlin505-2016-07-06.csv': 6}
+READ_SAMPLE = """(async()=>{{ const bin=atob('{b64}'), u8=new Uint8Array(bin.length);
+    for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+    {body} }})()"""
+
+
+def sample_js(path, body):
+    """JS that reads a sample file into `u8` (a Uint8Array) and runs `body` (async; return a value)."""
+    return READ_SAMPLE.format(b64=base64.b64encode(Path(path).read_bytes()).decode(), body=body)
+
 
 # water nodes away from land with a sea floor below 150 m (as in test_render)
 NODES = """(()=>{ const out=[];
@@ -133,6 +148,7 @@ class ImportSamples(AppTestCase):
     @pending('import plumbing (architect import.js, science formats.js)', probe=IMPORT)
     def test_every_sample_file_imports(self):
         self.assertTrue(SAMPLES, 'samples/ has no .nc or .csv files')
+        readme = (REPO / 'samples' / 'README.md').read_text(encoding='utf-8')
         for path in SAMPLES:
             with self.subTest(sample=path.name):
                 b64 = base64.b64encode(path.read_bytes()).decode()
@@ -144,10 +160,16 @@ class ImportSamples(AppTestCase):
                     __ol.actions.setShowAllImported(true); __ol.actions.setOverlay('showOther', true);
                     const ids = instrumentsNow().filter(i=>i.imported && ((i.dataset && i.dataset.id) || i.dataset)===r.id)
                       .map(i=>i.id);
-                    return {{format:p.format, type:p.type, id:r.id, profiles:r.profiles, ids}}; }})()""",
+                    return {{format:p.format, type:p.type, id:r.id, profiles:r.profiles, skipped:r.skipped, ids,
+                      needsMapping:p.needsMapping}}; }})()""",
                             await_promise=True)
                 self.assertNotIn('error', r, f"{path.name}: {r.get('error')}")
+                self.assertIn(f'`{path.name}`', readme, f'{path.name}: not described in samples/README.md')
                 self.assertGreater(r['profiles'], 0, f'{path.name}: no profiles imported')
+                self.assertEqual(r['skipped'], 0, f'{path.name}: profiles outside the map')
+                self.assertFalse(r['needsMapping'], f'{path.name}: the columns were not recognised from the header')
+                if path.name in SAMPLE_PROFILES:
+                    self.assertEqual(r['profiles'], SAMPLE_PROFILES[path.name], f'{path.name}: profile count')
                 self.assertTrue(r['ids'], f'{path.name}: imported profiles are not instruments on the map')
                 open_imported_profile(self, set(r['ids']))
                 self.js(f"OceanLens.removeDataset({json.dumps(r['id'])})")
@@ -242,9 +264,167 @@ class ImportSamples(AppTestCase):
             self.b.wait("document.querySelectorAll('#userDataList button').length", 5)
         except CDPError:
             self.fail('the imported file is not listed')
+        self.b.wait("document.getElementById('importAnnounce').textContent", 5)   # the panel scrolls to the notice
         self.b.click('#userDataList button')
         self.b.pump(0.3)
         self.assertEqual(self.js("OceanLens.datasets().filter(d=>d.source==='import').length"), 0)
+        self.assertNoProblems()
+
+    def test_real_world_file_layouts(self):
+        """Files as the data centres serve them: an Argo GDAC multi-profile file (record variables with N_HISTORY = 0;
+        a copy cut short by even one byte is still refused), ERDDAP's default CSV (a units row under the header) and
+        OceanGliders tables as .nc (time valid_max 90000, no profile id, QC columns all missing) and .csv; a glider
+        becomes whole dives and climbs, each from near the surface to about 1000 m."""
+        want = {'argo-5907326_prof.nc': ('Argo profile NetCDF', 'argo'),
+                'argo-erddap-2020-05-18.csv': ('Delimited text (comma)', 'argo'),
+                'glider-humpback504-2016-07-05.nc': ('ERDDAP tabledap NetCDF', 'glider'),
+                'glider-marlin505-2016-07-06.csv': ('Delimited text (comma)', 'glider')}
+        for name, (label, kind) in want.items():
+            with self.subTest(sample=name):
+                nc = 'NetCDF3.parse(u8.buffer.slice(0))' if name.endswith('.nc') else 'null'
+                r = self.js(sample_js(REPO / 'samples' / name, f"""const nc = {nc};
+                    const p = await OceanLens.readData({json.dumps(name)}, u8.buffer);
+                    if (p.error) return {{error:p.error}};
+                    const r = OceanLens.importParsed(p);
+                    const insts = OceanLens.observations(p.type).filter(i=>i.dataset===r.id);
+                    OceanLens.removeDataset(r.id);
+                    const cut = [];
+                    for (const n of [1, 2000]) cut.push((await OceanLens.readData({json.dumps(name)}, u8.buffer.slice(0, u8.length - n))).error);
+                    return {{label:p.formatLabel, type:p.type, profiles:r.profiles, units:p.units,
+                      warnings:(p.warnings || []).concat(r.warnings || []), ids:[...new Set(insts.map(i=>i.id))],
+                      levels:insts.map(i=>i.levels.length), top:insts.map(i=>i.levels[0]), deepest:insts.map(i=>i.maxDepth), cut,
+                      numrecs:nc && nc.numrecs, history:nc && (nc.dims.find(d=>d.name==='N_HISTORY') || {{}}).size,
+                      times:nc && nc.vars.time ? Array.from(nc.read('time')).every(Number.isFinite) : null}};"""),
+                            await_promise=True)
+                self.assertNotIn('error', r, f"{name}: {r.get('error')}")
+                self.assertEqual((r['label'], r['type'], r['profiles']), (label, kind, SAMPLE_PROFILES[name]))
+                self.assertFalse([w for w in r['warnings'] if 'not recognised' in w], r['warnings'])
+                if name.endswith('_prof.nc'):
+                    self.assertEqual((r['numrecs'], r['history']), (0, 0), 'not the N_HISTORY = 0 layout')
+                    for err in r['cut']:
+                        self.assertRegex(err or '', 'end of the file|ends early', 'a truncated copy was read')
+                    self.assertTrue(all(n >= 50 and t < 10 and z > 1900 for n, t, z in zip(r['levels'], r['top'], r['deepest'])),
+                                    f"not every profile is 0-2000 m: {r['levels']} {r['top']} {r['deepest']}")
+                if name.endswith('.csv'):
+                    self.assertIn('degree_Celsius', r['units'], 'the ERDDAP units row was not read as units')
+                if kind == 'glider':
+                    self.assertEqual(len(r['ids']), 1, f"one glider, not {r['ids'][:5]}")
+                    self.assertTrue(all(n >= 50 and t < 50 and z > 900 for n, t, z in zip(r['levels'], r['top'], r['deepest'])),
+                                    f"not whole dives and climbs: {r['levels']} {r['top']} {r['deepest']}")
+                if name == 'glider-humpback504-2016-07-05.nc':
+                    self.assertTrue(r['times'], 'times masked by the valid range')
+        self.assertNoProblems()
+
+    def test_dense_trajectory_splits_into_dives(self):
+        """A glider sampled every second (steps well under the 5 dbar turn threshold) still splits into its dive,
+        climb and second dive, with or without an id column; one row per time with a fixed depth (a mooring) does not."""
+        ramp = [i * 0.5 for i in range(201)] + [100 - i * 0.5 for i in range(1, 201)] + [i * 0.5 for i in range(1, 121)]
+        rows = [f'G1,2020-05-18T06:{k // 60:02d}:{k % 60:02d}Z,15.5,88.5,{p},{30 - p / 10:.2f}' for k, p in enumerate(ramp)]
+        files = {'with id': 'id,time,lat,lon,pres,temp\n' + '\n'.join(rows),
+                 'no id': 'time,lat,lon,pres,temp\n' + '\n'.join(r.split(',', 1)[1] for r in rows),
+                 'mooring': 'id,time,lat,lon,depth,temp\n' + '\n'.join(
+                     f'M1,2020-05-18T06:{k // 60:02d}:{k % 60:02d}Z,15.5,88.5,50,{28 + k / 100:.2f}' for k in range(30))}
+        got = {}
+        for case, text in files.items():
+            got[case] = self.js(f"""(async()=>{{ const p = await OceanLens.readData('dense.csv', {json.dumps(text)});
+                const d = p._dataset; return p.error || d.profiles.map(x=>x.z.length); }})()""", await_promise=True)
+        self.assertEqual([len(got['with id']), len(got['no id'])], [3, 3], got)
+        self.assertTrue(all(n >= 50 for n in got['with id']), got)
+        self.assertEqual(len(got['mooring']), 30, 'a fixed-depth time series was split as a trajectory')
+        self.assertNoProblems()
+
+    def test_units_and_valid_ranges_as_data_centres_write_them(self):
+        """A units row with CF spellings (degree_Celsius, 1e-3, umol kg-1, m s-1, cm s-1) is read as units and
+        converted. NetCDF valid_min/valid_max mask neither times and coordinates nor every value of a variable (wrong
+        metadata, as in ERDDAP glider tables), but still mask the values outside them otherwise."""
+        import numpy as np
+        import ncio
+        text = ('time,latitude,longitude,depth,temperature,salinity,oxygen,u,v\n'
+                'UTC,degrees_north,degrees_east,m,degree_Celsius,1e-3,umol kg-1,m s-1,cm s-1\n'
+                '2020-05-18T06:00:00Z,15.5,88.5,5,29.5,33.9,200,0.3,10\n'
+                '2020-05-18T06:00:00Z,15.5,88.5,50,28.9,34.1,190,0.2,5\n')
+        r = self.js(f"""(async()=>{{ const p = await OceanLens.readData('units.csv', {json.dumps(text)});
+            const d = p._dataset, v = d && d.profiles[0].vars;
+            return {{needsMapping:p.needsMapping, units:p.units, warnings:p.warnings, temp:v && v.temp, oxy:v && v.oxy,
+                     v:v && v.v}}; }})()""", await_promise=True)
+        self.assertFalse(r['needsMapping'], f"no header found above the units row: {r['warnings']}")
+        self.assertEqual(r['units'][4], 'degree_Celsius')
+        self.assertFalse([w for w in r['warnings'] if 'not recognised' in w], r['warnings'])
+        np.testing.assert_allclose([r['temp'], r['oxy'], r['v']], [[29.5, 28.9], [200, 190], [0.1, 0.05]], atol=1e-6)
+        n = 6
+        f4 = lambda a, **at: {'dims': ('row',), 'data': np.array(a, np.float32), 'attrs': at}
+        data = ncio.write_bytes({'row': n}, {
+            'time': {'dims': ('row',), 'data': 1.5897e9 + 60.0 * np.arange(n),
+                     'attrs': {'units': 'seconds since 1970-01-01T00:00:00Z', 'valid_min': 0.0, 'valid_max': 90000.0}},
+            'latitude': f4([0.5] + [15.5] * (n - 1), units='degrees_north', axis='Y', valid_min=np.float32(-1),
+                           valid_max=np.float32(1)),
+            'TEMP': f4([29.5, 28.9, 25.0, 20.0, 25.1, 28.8], valid_min=np.float32(40), valid_max=np.float32(50)),
+            'PSAL': f4([33.9, 34.1, 36.5, 34.9, 34.8, 34.2], valid_min=np.float32(30), valid_max=np.float32(35)),
+        }, {'cdm_data_type': 'Trajectory'})
+        b64 = base64.b64encode(data).decode()
+        r = self.js(f"""(()=>{{ const bin=atob('{b64}'), u8=new Uint8Array(bin.length);
+            for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+            const nc = NetCDF3.parse(u8.buffer), fin = k=>Array.from(nc.read(k), Number.isFinite);
+            return {{time:fin('time'), lat:fin('latitude'), temp:fin('TEMP'), sal:fin('PSAL')}}; }})()""")
+        self.assertEqual(r, {'time': [True] * n, 'lat': [True] * n, 'temp': [True] * n,
+                             'sal': [True, True, False, True, True, True]})
+        self.assertNoProblems()
+
+    def test_added_profiles_are_brought_into_view(self):
+        """A file chosen in Add data and added with a click is on screen with its first profile open, and the notice
+        under Your data, scrolled into view, says how: the timeline moves to the analysis nearest the first profile
+        (BGC-Argo, 17 May 2020), stays when new profiles already show (Argo CSV, 15-17 May), or Show all times turns
+        on (a 2016 glider)."""
+        self.js("__ol.actions.setShowAllImported(false); __ol.actions.setTime(0); __ol.actions.closePanels()")
+        self.addCleanup(self.js, "(()=>{ shell.closeDialog(); OceanLens.datasets().filter(d=>d.source==='import')"
+                                 ".forEach(d=>OceanLens.removeDataset(d.id)); __ol.actions.setShowAllImported(false);"
+                                 " __ol.actions.setTime(0); })()")
+        cases = (('bgc-argo-2902120-c227.nc', 'moved', 'ARGO-2902120'), ('argo-amphan-samples.csv', 'stays', 'ARGO-2902120'),
+                 ('glider-humpback504-2016-07-05.nc', 'all', 'Humpback_504'))
+        added = []
+        for name, how, first in cases:
+            with self.subTest(sample=name):
+                t0 = self.js('__ol.state.time')
+                self.b.click('#addDataBtn')
+                self.b.pump(0.3)
+                doc = self.b.send('DOM.getDocument')
+                node = self.b.send('DOM.querySelector', nodeId=doc['root']['nodeId'], selector='#importInput')
+                self.b.send('DOM.setFileInputFiles', nodeId=node['nodeId'], files=[str(REPO / 'samples' / name)])
+                self.b.wait("(()=>{ const b=document.getElementById('importAdd');"
+                            " return !b.hidden && b.getBoundingClientRect().width>0; })()", 10)
+                self.click_control('#importAdd')
+                self.b.wait("document.getElementById('importAnnounce').textContent", 5)
+                self.b.pump(0.3)
+                got = self.js(f"""(()=>{{ const d=OceanLens.datasets().find(x=>x.name==={json.dumps(name)});
+                    const el=document.getElementById('importAnnounce'), r=el.getBoundingClientRect(),
+                      L=document.getElementById('left').getBoundingClientRect();
+                    return {{id:d.id, time:__ol.state.time, all:__ol.state.showAllImported,
+                      open:document.getElementById('profile').classList.contains('show') && profileState.inst.dataset===d.id
+                        ? profileState.inst.id : null,
+                      drawn:markerItems.filter(it=>it.userData.data && it.userData.data.inst.dataset===d.id && isShown(it.vis)).length,
+                      now:instrumentsNow().filter(i=>i.dataset===d.id).length,
+                      text:el.textContent, inView:r.height>0 && r.top>=L.top && r.bottom<=L.bottom+1,
+                      rect:[r.top, r.bottom, L.top, L.bottom]}}; }})()""")
+                added.append(got['id'])
+                self.assertEqual(got['open'], first, 'the profile panel did not open on the first new profile')
+                self.assertGreater(got['now'], 0, 'none of the new profiles shows at this time')
+                self.assertGreater(got['drawn'], 0, 'no marker is drawn for the new profiles')
+                self.assertTrue(got['inView'], f"the notice is not on screen: {got['rect']}")
+                self.assertEqual(got['all'], how == 'all')
+                self.assertIn(f'Profile {first} is open', got['text'])
+                if how == 'all':
+                    self.assertEqual(got['time'], t0)
+                    self.assertIn('the first is from 5 Jul 2016, 05:49 UTC), so Show all times is now on', got['text'])
+                elif how == 'moved':
+                    self.assertEqual(got['time'], 4, 'the timeline did not move to 16 May')
+                    self.assertIn('The timeline moved to 16 May 2020, 12:00 UTC', got['text'])
+                else:
+                    self.assertEqual(got['time'], t0, 'the timeline moved although new profiles were showing')
+                    self.assertNotIn('timeline moved', got['text'])
+        for i in added:
+            self.b.click(f'#userDataList button[data-id="{i}"]')
+            self.b.pump(0.3)
+        self.js("__ol.actions.setShowAllImported(false); __ol.actions.setTime(0)")
         self.assertNoProblems()
 
 
