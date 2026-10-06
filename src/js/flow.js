@@ -1,16 +1,20 @@
-/* ---- current arrows (slice mode, variable=cur): one instanced cone set and one line set ----
-   Achromatic, like the floats and the streaks, so the speed colours of the slice cannot hide them; the length
-   shows where the speed sits on the key. */
+/* ---- current arrows (slice mode, variable=cur): one instanced cone set, flat shafts and a flat dark edge ----
+   Achromatic, like the floats and the streaks, so the speed colours of the slice cannot hide them: white with a
+   dark edge (for the light end of the palette); the length shows where the speed sits on the key. The edge is
+   one flat outline of each arrow, a little larger all round, a hair below the shaft and the cone's widest
+   section, so it shows only round them. */
 const ARROW_MAX = 400;
 const arrowGroup = new THREE.Group(); scene.add(Render.register('arrows', arrowGroup));
 const arrowCones = new THREE.InstancedMesh(new THREE.CylinderGeometry(0, 0.5, 1, 6, 1).translate(0, -0.5, 0), Render.flat(0xf4f4f4), ARROW_MAX);
 arrowCones.count = 0;
 arrowCones.frustumCulled = false;
-const arrowShafts = new THREE.LineSegments(new THREE.BufferGeometry(), Render.line(0xf4f4f4));
-arrowGroup.add(arrowCones, arrowShafts);
+const arrowShafts = new THREE.Mesh(new THREE.BufferGeometry(), Render.flat(0xf4f4f4, {side:THREE.DoubleSide}));
+const arrowEdges = new THREE.Mesh(new THREE.BufferGeometry(), Render.flat(0x0b0f13, {side:THREE.DoubleSide}));
+arrowShafts.frustumCulled = arrowEdges.frustumCulled = false;
+arrowGroup.add(arrowEdges, arrowCones, arrowShafts);
 const _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _m = new THREE.Matrix4(), _yUp = new THREE.Vector3(0,1,0);
 function buildArrows(depth){
-  const shaft = [];
+  const shaft = [], edge = [], e = 0.03;
   let n = 0;
   gridPts.forEach((p,idx)=>{
     if(p.i % 3 || p.j % 4 || n >= ARROW_MAX) return;   // subsample to roughly 1.5° × 2°
@@ -21,8 +25,13 @@ function buildArrows(depth){
     const dir = new THREE.Vector3(u, 0, -v).normalize();  // northward flow points to −z
     const sN = Render.rampPos(speed, state.cbMin, state.cbMax), len = 0.25 + sN*1.15, head = len*0.35;
     const [x,z] = toXZ(p.lat, p.lon);
-    const y = -depth * DEPTH_SCALE * state.exagg + 0.03;
-    shaft.push(x, y, z, x + dir.x*(len-head), y, z + dir.z*(len-head));
+    const y = -depth * DEPTH_SCALE * state.exagg + 0.03, w = 0.012 + 0.008*sN, r = len*0.11;
+    // a point s along the flow and t to its side; a quad from s0 to s1, half-width h
+    const at = (s, t, yy)=>[x + dir.x*s - dir.z*t, yy, z + dir.z*s + dir.x*t];
+    const quad = (out, s0, s1, h, yy)=>out.push(...at(s0, h, yy), ...at(s0, -h, yy), ...at(s1, h, yy), ...at(s1, h, yy), ...at(s0, -h, yy), ...at(s1, -h, yy));
+    quad(shaft, 0, len - head, w, y);
+    quad(edge, -e, len - head, w + e, y - 0.003);
+    edge.push(...at(len - head - e, r + 1.4*e, y - 0.003), ...at(len - head - e, -r - 1.4*e, y - 0.003), ...at(len + 2.5*e, 0, y - 0.003));
     _q.setFromUnitVectors(_yUp, dir);
     _m.compose(new THREE.Vector3(x + dir.x*len, y, z + dir.z*len), _q, _s.set(len*0.22, head, len*0.22));
     arrowCones.setMatrixAt(n, _m);
@@ -30,9 +39,11 @@ function buildArrows(depth){
   });
   arrowCones.count = n;
   arrowCones.instanceMatrix.needsUpdate = true;
-  arrowShafts.geometry.dispose();
-  arrowShafts.geometry = new THREE.BufferGeometry();
-  arrowShafts.geometry.setAttribute('position', new THREE.Float32BufferAttribute(shaft, 3));
+  [[arrowShafts, shaft], [arrowEdges, edge]].forEach(([mesh, pos])=>{
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.BufferGeometry();
+    mesh.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  });
 }
 
 /* ---- current streaks: directional particles advected by the model's velocity field ----

@@ -1,7 +1,7 @@
 """Rendering correctness through graphics' test hooks (window.__ol.render): the colours drawn on an opaque surface
 match the colour bar, profiling stems are drawn through the translucent layers, and the look of the 3D view:
-whole float marks, the grid on the heat map, visible current streaks and arrows, unfogged land, a closed seabed
-and a shaded 3D isosurface."""
+whole float marks, the grid on the heat map, visible current streaks and arrows, unfogged land, a seabed closed
+below the sea but open below India's long coast, and a shaded 3D isosurface."""
 import unittest
 
 from helpers import STATE, AppTestCase, pending
@@ -59,11 +59,14 @@ class StemsVisible(AppTestCase):
         self.assertGreaterEqual(diff, 3, 'hiding the stems changed nothing: they are not drawn below the surface')
 
 
-# pixels whose colour changes by more than `over` when the named group is hidden, over the whole canvas (one render each)
-CHANGED = """((name, over, hide)=>{ const t = __ol.render.toggle, off = (hide || []).filter(g=>t(g, false));
+# pixels whose colour changes by more than `over` when the named group is hidden (with `darker`, only those the group
+# darkens), over the whole canvas (one render each)
+CHANGED = """((name, over, hide, darker)=>{ const t = __ol.render.toggle, off = (hide || []).filter(g=>t(g, false));
   const grab = ()=>{ const c = Render.renderForExport(); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
   t(name, true); const a = grab(); t(name, false); const b = grab(); t(name, true); off.forEach(g=>t(g, true));
-  let n = 0; for (let i=0; i<a.length; i+=4) if (Math.max(Math.abs(a[i]-b[i]), Math.abs(a[i+1]-b[i+1]), Math.abs(a[i+2]-b[i+2])) > over) n++;
+  let n = 0;
+  for (let i=0; i<a.length; i+=4) if ((darker ? Math.max(b[i]-a[i], b[i+1]-a[i+1], b[i+2]-a[i+2])
+                                             : Math.max(Math.abs(a[i]-b[i]), Math.abs(a[i+1]-b[i+1]), Math.abs(a[i+2]-b[i+2]))) > over) n++;
   return n; })"""
 
 # rows 1-3 px below the centre of up to 8 Argo marks with no other mark nearby, from one render
@@ -130,6 +133,9 @@ class Look3D(AppTestCase):
         self.pill('modePills', 'slice')
         n = self.js(CHANGED + "('arrows', 60, ['particles'])")
         self.assertGreater(n, 3000, f'the slice arrows change only {n} px by more than 60/255')
+        n = self.js(CHANGED + "('arrows', 60, ['particles'], true)")
+        self.assertGreater(n, 800, f'the slice arrows darken only {n} px by more than 60/255: they have no dark edge '
+                                   'against the light end of the palette')
         self.home()
         self.assertNoProblems()
 
@@ -161,6 +167,24 @@ class Look3D(AppTestCase):
         self.assertIsNotNone(rgb, 'the south face below Sri Lanka is off screen')
         self.assertGreater(max(abs(c - b) for c, b in zip(rgb, (6, 14, 26))), 15,
                            f'below Sri Lanka the box is open: {rgb} is the backdrop')
+
+    def test_basins_show_below_india_from_the_north(self):
+        self.home()
+        self.pill('modePills', 'layers')
+        x, y = self.js("(()=>{ const r = renderer.domElement.getBoundingClientRect(); return [r.left + r.width/2, r.top + r.height/2]; })()")
+        self.b.drag(x, y, x - 480, y, steps=20)          # orbit round to the north
+        self.b.pump(0.3)
+        az = self.js('camAz')
+        # points on the north side below India's coast: the layers behind them show through, as below any coast
+        n = self.js("""(()=>{ const pts = [];
+          for (let lon=74; lon<=86; lon++) for (let d=100; d<=900; d+=100) pts.push([LAT1, lon, d]);
+          const a = __ol.render.pixelsAt(pts), h = __ol.render.pixelsAt(pts, {hide:['layers']});
+          return a.filter((p, k)=>p.rgb && h[k].rgb && Math.max(...p.rgb.map((c, j)=>Math.abs(c - h[k].rgb[j]))) > 8).length; })()""")
+        self.home()
+        self.assertGreater(az, 2.8, f'the drag turned the view only to azimuth {az:.2f}')
+        self.assertGreater(n, 20, f"from the north the layers show at only {n} of 117 points below India's coast: "
+                                  'a wall hides the basins')
+        self.assertNoProblems()
 
     def test_isosurface_3d_is_shaded_by_its_relief(self):
         self.home()

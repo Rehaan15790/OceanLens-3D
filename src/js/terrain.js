@@ -60,15 +60,23 @@ shadeFloor();
 const floorMesh = new THREE.Mesh(floorGeo, Render.terrain({vertexColors:true, roughness:0.97, metalness:0.03}));
 scene.add(Render.register('floor', floorMesh));
 // the seabed's four sides, from its edge down to a common base: without them the shallow edges (south of
-// Sri Lanka, the shelves) open onto empty space and the floor reads as a hanging sheet
-const skirtIdx = [], skirtNrm = [], skirtTri = [];   // floor vertices round the edge: each gives a top and a bottom vertex
+// Sri Lanka, the shelves) open onto empty space and the floor reads as a hanging sheet. Where a side runs along
+// the coast and its shelf (land or water under 150 m) for 3° or more, as the north side does along India, it stays
+// open: the land's own wall closes it, and one dark slab from the shore to the base would hide both basins behind
+// it. Shorter stretches (Sri Lanka's south tip, the Myanmar shelf) stay closed, or the view would run under the
+// land and out through the open side.
+const skirtIdx = [], skirtNrm = [], skirtTri = [], skirtOpen = [];   // floor vertices round the edge: each gives a top and a bottom vertex
 [[0, 1, FLOOR_NX, [0,0,-1]], [FLOOR_NX, FLOOR_NX+1, FLOOR_NZ, [1,0,0]],               // north, east,
  [FLOOR_NZ*(FLOOR_NX+1)+FLOOR_NX, -1, FLOOR_NX, [0,0,1]], [FLOOR_NZ*(FLOOR_NX+1), -(FLOOR_NX+1), FLOOR_NZ, [-1,0,0]]]   // south, west
   .forEach(([i0, step, n, nrm])=>{
+    const shore = Array.from({length:n+1}, (_, k)=>floorLatLon[i0 + k*step][2] < 150);
     for(let k=0;k<=n;k++){
       const v = skirtIdx.length*2;
       if(k) skirtTri.push(v-2, v, v-1, v-1, v, v+1);       // front faces outwards
-      skirtIdx.push(i0 + k*step); skirtNrm.push(...nrm, ...nrm);
+      let a = k, b = k;
+      while(shore[a] && shore[a-1]) a--;
+      while(shore[b] && shore[b+1]) b++;
+      skirtIdx.push(i0 + k*step); skirtNrm.push(...nrm, ...nrm); skirtOpen.push(shore[k] && b - a >= 12);
     }
   });
 const skirtGeo = new THREE.BufferGeometry();
@@ -85,7 +93,10 @@ function positionFloor(){
   floorPos.needsUpdate = true;
   floorGeo.computeVertexNormals();
   const sp = skirtGeo.attributes.position, base = -skirtBase*DEPTH_SCALE*state.exagg - 0.05;
-  skirtIdx.forEach((i, k)=>{ sp.setXYZ(2*k, floorPos.getX(i), floorPos.getY(i), floorPos.getZ(i)); sp.setXYZ(2*k+1, floorPos.getX(i), base, floorPos.getZ(i)); });
+  skirtIdx.forEach((i, k)=>{
+    const x = floorPos.getX(i), y = floorPos.getY(i), z = floorPos.getZ(i);
+    sp.setXYZ(2*k, x, y, z); sp.setXYZ(2*k+1, x, skirtOpen[k] ? y : base, z);
+  });
   sp.needsUpdate = true;
   skirtGeo.computeBoundingSphere();
 }
