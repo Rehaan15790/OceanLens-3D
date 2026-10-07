@@ -14,7 +14,7 @@ const NetCDF3 = (()=>{
 
   function parse(buffer){
     const u8 = new Uint8Array(buffer), dv = new DataView(buffer);
-    if(HDF5.every((b, i)=>u8[i]===b)) throw new Error('NetCDF-4 file: convert with the pipeline or export as NetCDF-3/CSV.');
+    if(HDF5.every((b, i)=>u8[i]===b)) throw new Error('NetCDF-4 file: convert it to NetCDF-3 first (nccopy -k classic) or export it as CSV.');
     if(!(u8[0]===0x43 && u8[1]===0x44 && u8[2]===0x46) || ![1, 2, 5].includes(u8[3])) throw new Error('Not a NetCDF classic file.');
     const version = u8[3];
     let pos = 4;

@@ -459,11 +459,12 @@
     <p>Add data (or a file dropped on the 3D view) reads CSV or tab-separated text and NetCDF-3 files: Argo profile
       files, Ifremer EGO glider files, ERDDAP tabledap downloads and CF profile data. Profiles appear as markers, follow
       the timeline (within 1.5 days of each analysis, unless you show all times) and open in the profile panel against
-      the model column. Files are read in this browser and never uploaded. NetCDF-4 files need converting first, with
-      the data pipeline or by exporting NetCDF-3 or CSV.</p>
-    <p>The <code>samples/</code> folder next to this file has three to try: a real BGC-Argo profile from May 2020
-      as NetCDF-3 from Ifremer ERDDAP, real Argo temperature and salinity samples from this snapshot as CSV, and a
-      made-up CTD cast for testing, which is not real data. <code>samples/README.md</code> says which is which.</p>
+      the model column. Files are read in this browser and never uploaded. NetCDF-4 files need converting to
+      NetCDF-3 first (for example <code>nccopy -k classic</code>) or exporting as CSV.</p>
+    <p>The <code>samples/</code> folder next to this file has files to try: real Argo and BGC-Argo profiles (an
+      Argo data centre profile file, ERDDAP downloads as NetCDF-3 and CSV, and samples from this snapshot), two real
+      Bay of Bengal glider files from 2016, and a made-up CTD cast for testing, which is not real data.
+      <code>samples/README.md</code> says which is which.</p>
 
     <h3>Synthetic demo</h3>
     <p>Analytic fields, floats and gliders generated in the browser to show the tools on data with known behaviour,
@@ -511,8 +512,8 @@
           pressure, and any of temperature, salinity, chlorophyll, oxygen and current (eastward and northward). Surface currents need no depth.</li>
         <li>NetCDF-3 (.nc): Argo profile files, Ifremer EGO glider files, ERDDAP tabledap downloads, CF profile data.</li>
       </ul>
-      <p class="field-note">NetCDF-4 files need converting first: run them through the data pipeline, or export them
-        as NetCDF-3 or CSV.</p>
+      <p class="field-note">NetCDF-4 files need converting first: convert them to NetCDF-3 (for example
+        <code>nccopy -k classic</code>) or export them as CSV.</p>
     </div>
 
     <div id="importReview" hidden>

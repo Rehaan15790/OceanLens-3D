@@ -36,7 +36,7 @@ async function readData(name, data){
   try {
     const u8 = typeof data==='string' ? null : new Uint8Array(data);
     const kind = u8 ? sniffFormat(u8) : 'text';
-    if(kind==='hdf5') throw new Error('NetCDF-4 file: convert with the pipeline or export as NetCDF-3/CSV.');
+    if(kind==='hdf5') throw new Error('NetCDF-4 file: convert it to NetCDF-3 first (nccopy -k classic) or export it as CSV.');
     if(kind==='netcdf3'){
       const nc = NetCDF3.parse(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
       const f = bestFormat('netcdf', nc, name);
@@ -121,7 +121,7 @@ async function loadServerDataset(id){
     return {id, navigating:true, profiles:0, warnings:[]};
   }
   if(id===serverMode.current) return {id, current:true, profiles:0, warnings:[]};
-  if(!(d.profiles > 0)) return {id, profiles:0, warnings:['This dataset has no profiles; its fields are served through WMS and WCS.']};
+  if(!(d.profiles > 0)) return {id, profiles:0, warnings:['This dataset has no profiles; its fields are served through the REST API, WMS, WCS and OPeNDAP, not drawn in 3D.']};
   const bbox = [LON0, LAT0, LON1, LAT1].join(',');
   const j = await serverJSON(`api/v1/datasets/${encodeURIComponent(id)}/profiles?bbox=${bbox}`);
   if(dataMode!=='real') setDataMode('real');
