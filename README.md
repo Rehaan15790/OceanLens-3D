@@ -18,8 +18,9 @@ Two data modes:
 Double-click `OceanLens3D.html`. It is one self-contained file that needs no server, no installation and no
 network connection, so it also runs from a USB drive or an email attachment.
 
-It needs a browser with WebGL and hardware acceleration turned on: current Chrome, Edge or Firefox (tested
-regularly in Edge), or Safari 15 or later. It is built for laptop and desktop screens.
+It needs a browser with WebGL and hardware acceleration turned on: current Chrome, Edge or Firefox, or Safari 15
+or later. The automated tests run in headless Chromium-based browsers; Firefox and Safari have not been tested. It
+is built for laptop and desktop screens.
 
 ## Repository layout
 
@@ -34,7 +35,7 @@ regularly in Edge), or Safari 15 or later. It is built for laptop and desktop sc
 | `server/serve.py` | The optional data server: the app, a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2 (Python + numpy) |
 | `samples/` | Files to try with "Add data". Real: an Argo GDAC multi-profile NetCDF (`argo-5907328_prof.nc`), an ERDDAP Argo CSV with its units row, a BGC-Argo NetCDF, Argo profiles from the snapshot as CSV, and two 2016 BoBBLE Seaglider files (NetCDF and CSV). Synthetic: one CTD cast. `samples/README.md` gives each file's source and citation. |
 | `tools/`, `tests/` | The test runner, the headless-browser client and the tests |
-| `docs/` | `TESTING.md` (tests and harness), `DEPLOY.md` (hosting, releases, the server), `API.md` (REST, WMS, WCS), `EXTENDING.md` (plugins, variables, formats) |
+| `docs/` | `TESTING.md` (tests and harness), `DEPLOY.md` (hosting, releases, the server), `API.md` (REST, WMS, WCS, OPeNDAP), `EXTENDING.md` (plugins, variables, formats) |
 | `REQUIREMENTS.md` | Each requirement of problem statement 26067 mapped to the feature, files and test, with status |
 | `deck/` | The pitch deck (HTML source; the PDF at the root is printed from it) and the SIH portal text (`portal-submission.md`) |
 
@@ -55,6 +56,9 @@ python tools/check.py            # hygiene, build check, fresh build into dist/,
 python tools/check.py --quick    # unit, server and smoke suites: what CI runs
 python tools/run.py --list       # the suites and tests
 ```
+
+A full run has one known failure: the `perf` load budget (ready within 2.5 s at 4× CPU throttling), which our
+runs miss because the test browser renders WebGL in software (`docs/TESTING.md`).
 
 You need Python 3 with numpy and a Chromium-based browser (Edge, Chrome or Chromium). numpy is used by the data
 pipeline, the server and their tests, and by `data-pipeline/facts_reference.py`, which writes the expected numbers
@@ -93,9 +97,9 @@ python server/serve.py                # http://127.0.0.1:8080/: the app, /api/v1
 
 HYCOM GOFS 3.1 (HYCOM Consortium), Argo (Argo GDAC, doi:10.17882/42182), ETOPO1 (NOAA NCEI,
 doi:10.7289/V5C8276M) and IBTrACS v04r01 (NOAA NCEI, doi:10.25921/82ty-9e16; winds from IMD and JTWC). The full
-acknowledgements and citations are in `THIRD_PARTY_NOTICES.md` and in the app's About panel. The sample files
-come from the Argo GDAC (its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE experiment,
-2016); `samples/README.md` gives the queries and citations.
+acknowledgements and citations are in `THIRD_PARTY_NOTICES.md` and in the app's About panel. The real sample
+files come from the Argo GDAC (its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE
+experiment, 2016); `samples/README.md` gives the queries and citations.
 
 ## Possible uses (not implemented as features)
 
@@ -128,9 +132,10 @@ operational one would add:
   (`REQUIREMENTS.md`, row 6a).
 - Authentication, TLS and rate limits, from the institution's reverse proxy (`docs/DEPLOY.md`, section 4).
 - Further data sources: the INCOIS Live Access Server (las.incois.gov.in; no real export has been tried) and
-  Copernicus Marine (GLOBAL_MULTIYEAR_PHY_001_030 and GLOBAL_MULTIYEAR_BGC_001_029). Their raw files and ARCO Zarr
-  stores can be read over HTTPS without an account; only the `copernicusmarine` toolbox needs a free account. The
-  native files are NetCDF-4/HDF5, so they need a conversion to NetCDF-3 or a new reader.
+  Copernicus Marine (GLOBAL_MULTIYEAR_PHY_001_030 and GLOBAL_MULTIYEAR_BGC_001_029). For these two Copernicus
+  products, the raw files and ARCO Zarr stores can be read over HTTPS without an account; only the
+  `copernicusmarine` toolbox needs a free account. The raw files are NetCDF-4/HDF5 and the Zarr stores are another
+  format again, so each needs a conversion to NetCDF-3 or a new reader.
 
 ## Licence
 

@@ -65,8 +65,9 @@ Imported casts behave like Argo floats:
 - they get a marker on the map;
 - a click opens the profile chart against the model column at that point, with the misfit;
 - by default only casts within 1.5 days of the analysis time show, and "Show all times" lifts that filter;
-- after "Add to map" in the dialog, if none of the new profiles shows at the current time, the timeline moves to an
-  analysis within 1.5 days of one of them, or else "Show all times" turns on; then the first new profile opens.
+- in real-data mode, after "Add to map" in the dialog: if none of the new profiles shows at the current time, the
+  timeline moves to an analysis within 1.5 days of one of them, or else "Show all times" turns on; then the first
+  new profile on the map opens.
 
 ## Adding a model variable
 
@@ -88,10 +89,10 @@ It gets a variable button, a colour bar, the colour settings (palette, min/max, 
 
 To serve the same variable over WMS and WCS, put it in the dataset. A CF NetCDF file given to
 `server/serve.py --netcdf` exposes every variable on its latitude/longitude grid. Standard names map onto the app's
-keys where they match. To give a new key its own label, units, palette and default range on the server, add it to
-`VARS` in `server/serve.py`; otherwise the file's `long_name` and `units`, the temperature palette and the 2–98 %
-range of the data are used. Fields served this way do not reach the 3D view, which draws a variable only from its
-sampler.
+keys where they match. To give a new key its own label, palette and default range on the server, add it to `VARS`
+in `server/serve.py` (its units are used only when the file gives none); otherwise the file's `long_name` and
+`units`, the temperature palette and the 2–98 % range of the data are used. Fields served this way do not reach
+the 3D view, which draws a variable only from its sampler.
 
 ## Adding a derived or ML product
 

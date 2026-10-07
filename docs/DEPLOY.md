@@ -14,7 +14,7 @@ host, or creating any account, is the owner's decision.
 ## 1. The single file (release)
 
 ```
-python tools/check.py                       # everything green
+python tools/check.py                       # passes except the perf load budget (docs/TESTING.md)
 python build.py --out OceanLens3D.html      # rebuild the shipped file
 python -c "import hashlib; print(hashlib.sha256(open('OceanLens3D.html','rb').read()).hexdigest())"
 ```
@@ -141,11 +141,11 @@ Notes:
   calling WMS from its own pages).
 - Model data: CF NetCDF-3 files given with `--netcdf`. The server takes every numeric variable on 1-D latitude and
   longitude axes (depth and time axes are optional), so a file with a single variable works. NetCDF-4 files are
-  refused. Copernicus Marine's native files (for example GLOBAL_MULTIYEAR_PHY_001_030) are NetCDF-4/HDF5, so they
-  must be subset and converted to NetCDF-3 first, for example with `nccopy -k classic`, or downloaded with
-  `copernicusmarine subset --netcdf3-compatible`. That toolbox needs a free account. The raw files can also be
-  downloaded over HTTPS without an account, but they are NetCDF-4 and need the same conversion. A real INCOIS LAS
-  export has not been tried.
+  refused. Copernicus Marine's native files (for example GLOBAL_MULTIYEAR_PHY_001_030) are NetCDF-4/HDF5. Download
+  a regional subset with `copernicusmarine subset --netcdf3-compatible` (that toolbox needs a free account), or
+  convert a NetCDF-4 subset with `nccopy -k classic`. The raw files can also be downloaded over HTTPS without an
+  account, but each holds the whole globe for one day, so it must first be cut to the region with another tool and
+  then converted to NetCDF-3. A real INCOIS LAS export has not been tried.
 - `data-pipeline/build_snapshot.py --model-netcdf FILE` makes an app snapshot for `data/`, but it needs more: one
   file holding temperature, salinity and both current components (u and v) on 1-D latitude, longitude and depth
   axes, covering the map down to 1000 m. It uses the first 16 time steps. Files with one variable each must be

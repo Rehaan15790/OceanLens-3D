@@ -100,8 +100,8 @@ replaces HYCOM with one CF NetCDF-3 file. What works today:
   by `standard_name` (then common names such as thetao/so/uo/vo). A file with one variable, as some exports give,
   is refused, so separate files must be merged into one first (`server/serve.py --netcdf` serves such a file as it
   is).
-- Latitude, longitude and depth are 1-D axes (a regular grid). Curvilinear or sigma-coordinate output must be
-  regridded first.
+- Latitude, longitude and depth are 1-D axes (a rectilinear grid; the spacing may vary). Curvilinear or
+  sigma-coordinate output must be regridded first.
 - The grid covers the map (6–22°N, 61–92°E), and the levels reach from the surface (first level at 12 m or less)
   down to 1000 m.
 - Only the file's first 16 time steps are used.
