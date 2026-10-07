@@ -120,7 +120,7 @@
         </div>
       </section>
 
-      <section class="grp" id="tchpNote" style="display:none;" aria-labelledby="grpTchp">
+      <section class="grp" id="tchpNote" hidden aria-labelledby="grpTchp">
         <h2 id="grpTchp" class="grp-label">What the map shows</h2>
         <p class="note">Heat stored in water warmer than 26 °C, from the surface down to the 26 °C isotherm (D26),
           computed from the model's temperature and salinity. The white contour marks 50 kJ/cm², a common threshold
@@ -128,14 +128,14 @@
         <button type="button" id="trackDetailsBtn" data-needs-shell hidden class="btn btn-block">Show Amphan's track details</button>
       </section>
 
-      <section class="grp" id="depthGrp" style="display:none;">
+      <section class="grp" id="depthGrp" hidden>
         <div class="field">
           <label for="depthSlider">Depth <output id="depthVal" for="depthSlider">100 m</output></label>
           <input type="range" id="depthSlider" min="0" max="10" step="1" value="4">
         </div>
       </section>
 
-      <section class="grp" id="isoGrp" style="display:none;">
+      <section class="grp" id="isoGrp" hidden>
         <div class="field">
           <label for="isoSlider">Value <output id="isoVal" for="isoSlider">26.0 °C</output></label>
           <input type="range" id="isoSlider" min="5" max="32" step="0.1" value="26">
@@ -197,13 +197,8 @@
         <fieldset class="field" id="colourScale">
           <legend>Colour scale</legend>
           <label for="paletteSel">Ramp</label>
-          <select id="paletteSel">
-            <option value="temperature">Temperature</option>
-            <option value="salinity">Salinity</option>
-            <option value="speed">Speed</option>
-            <option value="heat">Heat</option>
-            <option value="depth" hidden>Depth</option>
-          </select>
+          <!-- controls.js adds one option per palette (palettes.js); "depth" stays hidden, it is the depth-of-a-value ramp -->
+          <select id="paletteSel"></select>
           <div class="scale-row">
             <span id="lblScale">Scale</span>
             <div id="scaleToggle" class="segmented segmented-small" role="group" aria-labelledby="lblScale">
@@ -464,11 +459,12 @@
     <p>Add data (or a file dropped on the 3D view) reads CSV or tab-separated text and NetCDF-3 files: Argo profile
       files, Ifremer EGO glider files, ERDDAP tabledap downloads and CF profile data. Profiles appear as markers, follow
       the timeline (within 1.5 days of each analysis, unless you show all times) and open in the profile panel against
-      the model column. Files are read in this browser and never uploaded. NetCDF-4 files need converting first, with
-      the data pipeline or by exporting NetCDF-3 or CSV.</p>
-    <p>The <code>samples/</code> folder next to this file has three to try: a real BGC-Argo profile from May 2020
-      as NetCDF-3 from Ifremer ERDDAP, real Argo temperature and salinity samples from this snapshot as CSV, and a
-      made-up CTD cast for testing, which is not real data. <code>samples/README.md</code> says which is which.</p>
+      the model column. Files are read in this browser and never uploaded. NetCDF-4 files need converting to
+      NetCDF-3 first (for example <code>nccopy -k classic</code>) or exporting as CSV.</p>
+    <p>The <code>samples/</code> folder next to this file has files to try: real Argo and BGC-Argo profiles (an
+      Argo data centre profile file, ERDDAP downloads as NetCDF-3 and CSV, and samples from this snapshot), two real
+      Bay of Bengal glider files from 2016, and a made-up CTD cast for testing, which is not real data.
+      <code>samples/README.md</code> says which is which.</p>
 
     <h3>Synthetic demo</h3>
     <p>Analytic fields, floats and gliders generated in the browser to show the tools on data with known behaviour,
@@ -516,8 +512,8 @@
           pressure, and any of temperature, salinity, chlorophyll, oxygen and current (eastward and northward). Surface currents need no depth.</li>
         <li>NetCDF-3 (.nc): Argo profile files, Ifremer EGO glider files, ERDDAP tabledap downloads, CF profile data.</li>
       </ul>
-      <p class="field-note">NetCDF-4 files need converting first: run them through the data pipeline, or export them
-        as NetCDF-3 or CSV.</p>
+      <p class="field-note">NetCDF-4 files need converting first: convert them to NetCDF-3 (for example
+        <code>nccopy -k classic</code>) or export them as CSV.</p>
     </div>
 
     <div id="importReview" hidden>

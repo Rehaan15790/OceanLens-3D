@@ -36,7 +36,7 @@ async function readData(name, data){
   try {
     const u8 = typeof data==='string' ? null : new Uint8Array(data);
     const kind = u8 ? sniffFormat(u8) : 'text';
-    if(kind==='hdf5') throw new Error('NetCDF-4 file: convert with the pipeline or export as NetCDF-3/CSV.');
+    if(kind==='hdf5') throw new Error('NetCDF-4 file: convert it to NetCDF-3 first (nccopy -k classic) or export it as CSV.');
     if(kind==='netcdf3'){
       const nc = NetCDF3.parse(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
       const f = bestFormat('netcdf', nc, name);
@@ -65,7 +65,7 @@ async function readData(name, data){
     if(!g.needsMapping){
       try {
         const ds = tableToDataset(table, g.mapping, {name});
-        out._dataset = ds; out.profiles = ds.profiles.length; out.warnings.push(...ds.warnings);
+        out._dataset = ds; out.profiles = ds.profiles.length; out.type = ds.type; out.warnings.push(...ds.warnings);
       } catch(err){ out.needsMapping = true; out.warnings.push(err.message); }
     }
     return out;
@@ -83,7 +83,7 @@ function finishParsed(out, format, label, ds){
 function importParsed(parsed, opts = {}){
   if(!parsed || parsed.error) throw new Error(parsed ? parsed.error : 'Nothing to import.');
   let ds = parsed._dataset;
-  if(parsed._table && (opts.mapping || !ds)) ds = tableToDataset(parsed._table, opts.mapping || parsed.mapping, {name:parsed.name});
+  if(parsed._table && (opts.mapping || !ds)) ds = tableToDataset(parsed._table, opts.mapping || parsed.mapping, {name:parsed.name, type:opts.type});
   if(!ds) throw new Error('Choose the columns first.');
   const d = Object.assign({}, ds, {id:`imp-${++importSeq}`, name:opts.name || parsed.name, source:'import',
                                    format:parsed.format, type:opts.type || ds.type || parsed.type || 'other'});
@@ -121,7 +121,7 @@ async function loadServerDataset(id){
     return {id, navigating:true, profiles:0, warnings:[]};
   }
   if(id===serverMode.current) return {id, current:true, profiles:0, warnings:[]};
-  if(!(d.profiles > 0)) return {id, profiles:0, warnings:['This dataset has no profiles; its fields are served through WMS and WCS.']};
+  if(!(d.profiles > 0)) return {id, profiles:0, warnings:['This dataset has no profiles; its fields are served through the REST API, WMS, WCS and OPeNDAP, not drawn in 3D.']};
   const bbox = [LON0, LAT0, LON1, LAT1].join(',');
   const j = await serverJSON(`api/v1/datasets/${encodeURIComponent(id)}/profiles?bbox=${bbox}`);
   if(dataMode!=='real') setDataMode('real');

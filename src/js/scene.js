@@ -4,8 +4,9 @@
    ============================================================ */
 const viewport = document.getElementById('viewport');
 const scene = new THREE.Scene();
-// the camera stays at least 0.8 units above the sea (camera.js) and the surface overlays sit
-// 0.01–0.04 apart, so the near plane is as far out as that allows
+// the camera stays at least 0.8 units above the sea (camera.js) and the overlays sit 0.003–0.02 apart (over the
+// sea: grid 0.02, floats 0.05, heat contour 0.07; over a slice: arrow edges +0.027, arrows +0.03, streaks +0.035),
+// so the near plane is as far out as that allows
 const camera = new THREE.PerspectiveCamera(42, 1, 0.3, 100);
 const renderer = Render.createRenderer();
 viewport.appendChild(renderer.domElement);
@@ -18,8 +19,9 @@ scene.add(Render.register('backdrop', new THREE.Mesh(new THREE.SphereGeometry(42
 scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 scene.add(new THREE.HemisphereLight(0x9fd8ff, 0x0a1c14, 0.85));
 const dl = new THREE.DirectionalLight(0xeaf6ff, 0.7); dl.position.set(3, 8, 4); scene.add(dl);
-// depth cue for the terrain only: data, marks and lines ignore fog (render.js)
-scene.fog = new THREE.Fog(0x081525, 20, 62);
+// depth cue for the terrain only: data, marks and lines ignore fog (render.js); updateCamera (camera.js) sets
+// near and far from the camera distance
+scene.fog = new THREE.Fog(0x081525);
 
 Render.attach({
   renderer, scene, camera,

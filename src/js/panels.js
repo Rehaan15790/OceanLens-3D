@@ -161,7 +161,7 @@ function openProfile(x){
   ui.profKind.className = 'kind kind-' + (inst.imported ? type.marker : userData.type==='argo' ? 'argo' : 'glider');
   if(inst.imported){
     const gap = inst.gapH, far = Math.abs(gap) > 36;
-    ui.profMeta.innerHTML = where + `${fmt.esc(inst.datasetName)} · ${fmt.floatTime(inst.time)}<br>` +
+    ui.profMeta.innerHTML = where + `${fmt.esc(inst.datasetName)} · ${far ? fmt.analysisTime(inst.time) : fmt.floatTime(inst.time)}<br>` +
       `${far ? 'Compared with the nearest analysis, ' : 'Model: the analysis '}${fmt.dp(Math.abs(gap)/24, 1)} days ` +
       `${gap >= 0 ? 'before' : 'after'} the profile<br>${sampling}`;
   } else if(userData.type==='argo'){
@@ -200,11 +200,13 @@ function setSelected(b, on){
 }
 
 // A real profile belongs to one analysis. When the time changes, show the same float's profile at
-// the new analysis, or say that it has none within 1.5 days.
+// the new analysis, or say that it has none within 1.5 days. An imported profile still on screen (within
+// 1.5 days, or "show all") stays: the cycles of a float and the dives of a glider share one id.
 function followProfile(){
   if(state.panel!=='profile' || dataMode!=='real' || !profileState.floatId) return;
-  if(profileState.inst && profileState.inst.snap===state.time) return;
-  const match = instrumentsNow().find(p=>p.id===profileState.floatId);
+  const now = instrumentsNow(), cur = profileState.inst;
+  if(cur && (cur.snap===state.time || now.includes(cur))) return;
+  const match = now.find(p=>p.id===profileState.floatId);
   if(match){
     const tab = profileState.tab;
     openProfile(match.userData);

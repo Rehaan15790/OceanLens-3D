@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""OceanLens 3D data server: the built app, a REST API, OGC WMS 1.3.0 and OGC WCS 2.0.1.
+"""OceanLens 3D data server: the built app, a REST API, OGC WMS 1.3.0, OGC WCS 2.0.1 and OPeNDAP DAP2.
 Python standard library and numpy only; NetCDF through data-pipeline/ncio.py.
 
     python server/serve.py                                   app + data/*.json on http://127.0.0.1:8080/
     python server/serve.py --netcdf model.nc --port 8000     add a CF NetCDF-3 model file as a dataset
     python server/serve.py --host 0.0.0.0 --cors '*'         listen on every interface, allow any origin
 
-Routes: / (the app), /api/v1/..., /wms, /wcs, /ows, /healthz. docs/API.md has the details and example URLs.
+Routes: / (the app), /api/v1/..., /wms, /wcs, /ows, /opendap/..., /healthz. docs/API.md has the details and example URLs.
 """
 import argparse, base64, contextlib, gzip, json, math, re, socket, struct, sys, threading, time, zlib
 from datetime import datetime, timezone

@@ -17,31 +17,44 @@ function exportNorth(){ return northAngle(); }
 
 function paintKey(g, spec, x, yBottom, w){
   const th = theme(), lut = keyLUT(spec.palette);
+  // the title wraps as the note does: after the ·, never between a number and its unit (non-breaking spaces)
+  const head = wrapText(g, spec.title, w-20, CHART_FONT_BOLD), dt = (head.length-1)*15;
   const lines = spec.note ? wrapText(g, spec.note, w-20, CHART_FONT) : [];
   const legendH = spec.legend.length ? spec.legend.length*16 + 12 : 0;
-  const h = 24 + 12 + 26 + legendH + lines.length*15 + 8, y = yBottom-h;
+  // an empty key (nothing on screen has a colour) has no bar, ends or marks, as on screen
+  const h = dt + (spec.empty ? 31 : 62) + legendH + lines.length*15 + 8, y = yBottom-h;
   g.fillStyle = '#12181e'; g.fillRect(x, y, w, h);
   g.strokeStyle = th.grid; g.lineWidth = 1; g.strokeRect(x+.5, y+.5, w-1, h-1);
   g.textBaseline = 'alphabetic'; g.textAlign = 'left';
-  g.fillStyle = th.text; g.font = CHART_FONT_BOLD; g.fillText(spec.title, x+10, y+18);
-  const bx = x+10, bw = w-20, by = y+26;
-  for(let i=0;i<bw;i++){
-    const k = Math.min(255, Math.round(i/(bw-1)*255))*3;
-    g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(bx+i, by, 1, 12);
+  g.fillStyle = th.text; g.font = CHART_FONT_BOLD; head.forEach((l,i)=>g.fillText(l, x+10, y+18+i*15));
+  const bx = x+10, bw = w-20, by = y+26+dt, ty = spec.empty ? y+22+dt : by+27;
+  if(!spec.empty){
+    for(let i=0;i<bw;i++){
+      const k = Math.min(255, Math.round(i/(bw-1)*255))*3;
+      g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(bx+i, by, 1, 12);
+    }
+    // the screen's mapping (renderKey): a log key places its ticks and marks by the log of the value
+    const px = v=>bx + rampT(v, spec.min, spec.max, spec.scale || 'linear')*bw, markX = spec.marks.map(m=>px(m.v));
+    // as on screen: a bold mark label is centred on its mark unless it would stand past an end of the bar, when it
+    // starts (or ends) at the mark; marks come first, so an end or tick label that would touch one is left out
+    g.font = CHART_FONT_BOLD;
+    const markL = spec.marks.map((m,i)=>{ const tx = markX[i], mw = g.measureText(m.text).width, c = tx-mw/2;
+      const l = c < bx ? tx : c+mw > bx+bw ? tx-mw : c; return {l, r:l+mw}; });
+    g.font = CHART_FONT; g.fillStyle = th.text2;
+    const free = (l, r)=>markL.every(q=>r < q.l-4 || l > q.r+4), tw = s=>g.measureText(s).width;
+    g.textAlign = 'left'; if(free(bx, bx+tw(spec.ends.min))) g.fillText(spec.ends.min, bx, ty);
+    g.textAlign = 'right'; if(free(bx+bw-tw(spec.ends.max), bx+bw)) g.fillText(spec.ends.max, bx+bw, ty);
+    g.textAlign = 'center';
+    spec.ticks.forEach(t=>{ const tx = px(t.v);
+      if([bx, bx+bw, ...markX].every(o=>Math.abs(o-tx) >= bw*0.12) && free(tx-tw(t.text)/2, tx+tw(t.text)/2)) g.fillText(t.text, tx, ty); });
+    g.font = CHART_FONT_BOLD; g.textAlign = 'left';
+    spec.marks.forEach((m,i)=>{
+      const tx = markX[i];
+      g.fillStyle = th.bg; g.fillRect(tx-2, by-3, 4, 22); g.fillStyle = th.text; g.fillRect(tx-1, by-3, 2, 22);
+      g.fillText(m.text, markL[i].l, ty);
+    });
   }
-  const px = v=>bx + (v-spec.min)/(spec.max-spec.min)*bw, ty = by+27;
-  g.font = CHART_FONT; g.fillStyle = th.text2;
-  g.textAlign = 'left'; g.fillText(spec.ends.min, bx, ty);
-  g.textAlign = 'right'; g.fillText(spec.ends.max, bx+bw, ty);
-  g.textAlign = 'center';
-  const markX = spec.marks.map(m=>px(m.v));
-  spec.ticks.forEach(t=>{ const tx = px(t.v); if([bx, bx+bw, ...markX].every(o=>Math.abs(o-tx) >= bw*0.12)) g.fillText(t.text, tx, ty); });
-  spec.marks.forEach((m,i)=>{
-    const tx = markX[i];
-    g.fillStyle = th.bg; g.fillRect(tx-2, by-3, 4, 22); g.fillStyle = th.text; g.fillRect(tx-1, by-3, 2, 22);
-    g.font = CHART_FONT_BOLD; g.textAlign = tx-bx < 20 ? 'left' : bx+bw-tx < 20 ? 'right' : 'center';
-    g.fillText(m.text, tx, ty); g.font = CHART_FONT; g.fillStyle = th.text2; g.textAlign = 'center';
-  });
+  g.font = CHART_FONT;
   let cy = ty + 10;
   if(legendH){
     g.strokeStyle = th.grid; g.beginPath(); g.moveTo(x+10, cy+.5); g.lineTo(x+w-10, cy+.5); g.stroke();

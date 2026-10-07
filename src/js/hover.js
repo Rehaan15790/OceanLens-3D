@@ -6,7 +6,8 @@ const hoverRay = new THREE.Raycaster();
 const hoverPt = new THREE.Vector3();
 const hoverTip = document.getElementById('hoverTip');
 const fmtDeg = fmt.latLon2;
-const fmtVal = (key, v) => fmt.value(key, v, VAR_META[key].unit);
+// no value (no model water, a gap in the field) reads as a dash, never NaN
+const fmtVal = (key, v) => Number.isFinite(v) ? fmt.value(key, v, VAR_META[key].unit) : '–';
 function worldLatLon(p){ return {lat: -p.z/SCALE_XZ + (LAT0+LAT1)/2, lon: p.x/SCALE_XZ + (LON0+LON1)/2}; }
 function hoverText(e){
   const rect = renderer.domElement.getBoundingClientRect();
@@ -20,7 +21,8 @@ function hoverText(e){
   }
   if(pick){
     const inst = pick.userData.wp ? pick.userData.wp.inst : pick.userData.data.inst;
-    const when = inst.real ? fmt.floatTime(inst.time) : '';
+    // an imported profile far from the analyses (another year, with "show all") gets its year
+    const when = !inst.real ? '' : inst.imported && Math.abs(inst.gapH) > 36 ? fmt.analysisTime(inst.time) : fmt.floatTime(inst.time);
     return `${fmtDeg(inst.lat, inst.lon)}<br>${fmt.esc(inst.id)}${when ? ' · '+when : ''} (click to compare)`;
   }
   // the section curtain, when the pointer is on it
@@ -49,6 +51,8 @@ function hoverText(e){
   if(lat<LAT0||lat>LAT1||lon<LON0||lon>LON1) return null;
   const where = fmtDeg(lat, lon);
   if(isLand(lat, lon)) return `${where}<br>Land`;
+  // no model field to read (real-data chlorophyll): say so, as the header and the key do
+  if(!hasModel(state.variable)) return `${where}<br>No model field: click a float for its profile`;
   const seabed = bathyDepth(lat, lon);
   if(tchp){
     const r = modelTchp(lat, lon, state.time, seabed);

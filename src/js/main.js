@@ -29,9 +29,10 @@ function computeStats(){
   volumeStats = vals.length ? {min, max, mean:sum/vals.length} : {min:NaN, max:NaN, mean:NaN};
 }
 
+// the view first: the key reads what it builds (the iso surface's depth range, the track's visibility)
 function applyMode(){
-  updateLegend();
   applyVolumeView();
+  updateLegend();
 }
 
 // real floats belong to a snapshot: rebuild the markers when the snapshot, the source, the

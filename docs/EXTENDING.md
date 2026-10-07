@@ -2,8 +2,9 @@
 
 New sensors, model variables and derived products plug in through one public object, `window.OceanLens`
 (`src/js/plugins.js`). The built-ins use the same calls: temperature, salinity, current speed, cyclone heat potential,
-chlorophyll and oxygen are registered variables, and Argo floats and gliders are registered instruments. Two example
-plugins ship as their own files: `src/js/plugins/ctd.js` and `src/js/plugins/mooring.js`.
+chlorophyll and oxygen are registered variables, and Argo floats and gliders are registered instruments. Four example
+plugins ship as their own files in `src/js/plugins/`: `ctd.js`, `mooring.js`, `adcp.js` and `hfradar.js`. They are
+tested on synthetic records only.
 
 The app is plain JavaScript in classic scripts (no modules, no npm), so a plugin is one more `<script>` line.
 
@@ -18,7 +19,8 @@ OceanLens.addDataset(ds) / removeDataset(id) / datasets()
 OceanLens.on(event, fn) / off(event, fn)   // 'variable', 'product', 'instrument', 'dataset', 'format', 'server'
 ```
 
-`docs/TESTING.md` and `tests/test_extend.py` show each call used at runtime.
+`tests/test_extend.py` registers a variable and an instrument at runtime, adds and removes datasets, and tests the
+shipped plugins and import formats (`docs/TESTING.md`, the `extend` suite).
 
 ## Worked example: a CTD plugin
 
@@ -47,7 +49,7 @@ To add it to the build:
 Then give it data. Any of these works:
 
 - **A file.** Use "Add data" or drop a file on the map. For example, `samples/ctd-synthetic-cast.csv` (a synthetic
-  cast) has a `type` column set to `ctd`. Without that column, choose "CTD" in the dialog.
+  cast) has a `type` column set to `ctd`. Without that column, choose "CTD cast" under "Instrument" in the dialog.
 - **The server.** Profiles from `/api/v1/datasets/{id}/profiles` carrying `"type": "ctd"`.
 - **Code.**
 
@@ -62,7 +64,10 @@ Imported casts behave like Argo floats:
 
 - they get a marker on the map;
 - a click opens the profile chart against the model column at that point, with the misfit;
-- by default only casts within 1.5 days of the analysis time show, and "Show all imported" lifts that filter.
+- by default only casts within 1.5 days of the analysis time show, and "Show all times" lifts that filter;
+- in real-data mode, after "Add to map" in the dialog: if none of the new profiles shows at the current time, the
+  timeline moves to an analysis within 1.5 days of one of them, or else "Show all times" turns on; then the first
+  new profile on the map opens.
 
 ## Adding a model variable
 
@@ -84,7 +89,10 @@ It gets a variable button, a colour bar, the colour settings (palette, min/max, 
 
 To serve the same variable over WMS and WCS, put it in the dataset. A CF NetCDF file given to
 `server/serve.py --netcdf` exposes every variable on its latitude/longitude grid. Standard names map onto the app's
-keys where they match. A new key also goes into `VARS` in `server/serve.py` (label, units, palette, default range).
+keys where they match. To give a new key its own label, palette and default range on the server, add it to `VARS`
+in `server/serve.py` (its units are used only when the file gives none); otherwise the file's `long_name` and
+`units`, the temperature palette and the 2–98 % range of the data are used. Fields served this way do not reach
+the 3D view, which draws a variable only from its sampler.
 
 ## Adding a derived or ML product
 
@@ -102,14 +110,27 @@ Label ML output as model output, and say in its notes what it was trained on.
 
 Readers turn bytes into the dataset shape above. Two generic readers do the parsing:
 
-- `src/js/import/csv.js` reads delimited text (comma, tab, semicolon). It detects the header, maps columns (`lat`,
-  `lon`, `time`, `depth` or `pres`, `temp`, `sal`, `chl`, `oxy`, `id`, `type`), takes units from the header (`temp_C`)
-  and groups rows into profiles by id and time.
+- `src/js/import/csv.js` reads delimited text (comma, tab, semicolon). It detects the header, also when an ERDDAP
+  units row sits under it (ERDDAP's default `.csv`), and maps columns (`lat`, `lon`, `time`, `depth` or `pres`,
+  `temp`, `sal`, `chl`, `oxy`, `u`, `v`, `id`, `type`). Units come from the header (`temp_C`) or the units row,
+  including CF spellings such as `degree_Celsius`, `1e-3`, `umol kg-1` and `m s-1`. Rows are grouped into profiles
+  by id and time. A trajectory, where nearly every sample has its own time while the depth changes (a glider), is
+  split into dives and climbs where the depth turns round, in 1 m bins. A mooring is never split, whether a `type`
+  column, the header, the file name or the type chosen in the dialog says so.
 - `src/js/import/netcdf3.js` reads NetCDF classic (CDF-1, CDF-2, CDF-5). It applies `_FillValue`, `scale_factor` and
-  `add_offset`. NetCDF-4/HDF5 files get a message telling the user to convert them.
+  `add_offset`. It reads files whose record dimension has no records (many Argo GDAC `<WMO>_prof.nc` files) and
+  refuses a file cut short. `valid_min`/`valid_max` never mask times or coordinates. NetCDF-4/HDF5 files are
+  refused with a message; they must be converted to NetCDF-3 outside the app (the pipeline cannot read them
+  either).
 
-Format mappings sit on top of those readers in `src/js/import/formats.js`: Argo profile NetCDF, Ifremer EGO glider
-NetCDF, ERDDAP tabledap and generic CF. A new one is a `registerFormat` call:
+Format mappings sit on top of those readers in `src/js/import/formats.js`:
+- Argo profile NetCDF: single-cycle files and the GDAC's multi-profile `<WMO>_prof.nc` files;
+- Ifremer EGO glider NetCDF, split into dives and climbs;
+- ERDDAP tabledap `.nc` tables. A trajectory table with no profile id, such as an OceanGliders glider table, is
+  split into dives and climbs per platform; a time series is not split;
+- generic CF profiles.
+
+A new one is a `registerFormat` call:
 
 ```js
 OceanLens.registerFormat('my_buoy', {label:'My buoy NetCDF', kind:'netcdf',
@@ -117,8 +138,10 @@ OceanLens.registerFormat('my_buoy', {label:'My buoy NetCDF', kind:'netcdf',
   read:nc=>({type:'mooring', profiles:[ /* {id, lat, lon, time, z, vars} */ ]})});
 ```
 
-Readers apply QC and units before they hand data over (°C, PSU, mg/m³, µmol/kg, metres). The Argo mapping keeps
-adjusted values with QC flags 1, 2, 5 or 8 only.
+Readers apply QC and units before they hand data over (°C, PSU, mg/m³, µmol/kg, metres). The NetCDF mappings keep
+QC flags 1, 2, 5 or 8 only and take adjusted values wherever a file has them. Raw values are used only where there
+is no adjusted value (real-time data); chlorophyll and oxygen read that way carry a warning. Range checks follow
+(°C −2.5–40, PSU 2–41, mg/m³ −0.1–50, µmol/kg −5–600).
 
 ## Gridded model output
 
@@ -127,7 +150,11 @@ It goes through:
 
 - `python data-pipeline/build_snapshot.py --model-netcdf FILE`: a new snapshot for the app. Standard names are
   mapped and the data regridded to the app grid. `/?dataset=<id>` on the server opens the app with that snapshot.
-- `python server/serve.py --netcdf FILE`: REST, WMS and WCS straight from the file (`docs/API.md`).
+  The file must hold temperature, salinity, u and v on 1-D latitude, longitude and depth axes, cover the map and
+  reach 1000 m; only its first 16 time steps are used. The domain, the 11 depths and the 4 variables are fixed in
+  the pipeline, so a new region or a new model variable in 3D needs code.
+- `python server/serve.py --netcdf FILE`: REST, WMS, WCS and OPeNDAP straight from the file (`docs/API.md`), for
+  any variable on its latitude/longitude grid. These fields are not drawn in the 3D view.
 
 Both need NetCDF-3. Convert NetCDF-4 first, for example with `nccopy -k classic` or
-`copernicusmarine subset --netcdf3-compatible`.
+`copernicusmarine subset --netcdf3-compatible` (the `copernicusmarine` toolbox needs a free account).

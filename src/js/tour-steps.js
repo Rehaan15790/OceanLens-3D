@@ -39,13 +39,13 @@ const TOUR_STEP_DEFS = [
   {id:'currents', variable:'cur', mode:'slice', depthIdx:0, time:0,
    title:{real:'Surface currents', synth:'Surface currents (synthetic)'},
    caption:{
-     real:(f,fmt,t)=>`Surface currents on ${fmt.dayMonth(f.analysis.times[t])}: arrows show direction, colour shows ` +
-       `speed. In HYCOM the East India Coastal Current runs north along the coast at up to about ` +
+     real:(f,fmt,t)=>`Surface currents on ${fmt.dayMonth(f.analysis.times[t])}: the sea's colour shows speed; arrows and ` +
+       `streaks show direction. In HYCOM the East India Coastal Current runs north along the coast at up to about ` +
        `${fmt.dp(f.currents.eiccMaxNorth[t].v,1)} m/s.`,
-     plain:'Surface currents in HYCOM: arrows show direction, colour shows speed. The labels mark where the named ' +
-       'currents usually flow.',
-     synth:'Synthetic currents: arrows show direction, colour shows speed, and the streaks move along the same field. ' +
-       'The labels mark where real currents usually flow; this field does not reproduce them.'}},
+     plain:'Surface currents in HYCOM: the sea\'s colour shows speed; arrows and streaks show direction. The labels mark ' +
+       'where the named currents usually flow.',
+     synth:'Synthetic currents: the sea\'s colour shows speed; arrows and streaks show direction. The labels mark where ' +
+       'real currents usually flow; this field does not reproduce them.'}},
 
   {id:'salinity', variable:'sal', mode:TOUR_DEFAULT_VIEW, time:0,
    title:{real:'Salinity', synth:'Salinity (synthetic)'},

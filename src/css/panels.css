@@ -7,9 +7,10 @@
 .hint{font-size:var(--fs-1);color:var(--text-2);margin:0 0 var(--s-4);}
 .meta{font-size:var(--fs-1);color:var(--text-2);line-height:var(--lh);margin:0 0 var(--s-3);font-variant-numeric:tabular-nums;}
 .meta b{color:var(--text);font-weight:600;}
-.tabbtns{display:flex;gap:var(--s-1);margin:0 0 var(--s-2);}
+/* the row wraps, so a profile with five or six tabs keeps every tab on screen */
+.tabbtns{display:flex;flex-wrap:wrap;gap:var(--s-1);margin:0 0 var(--s-2);}
 .tabbtn{flex:1;min-height:30px;padding:0 var(--s-1);border:1px solid var(--border);border-radius:var(--radius);background:var(--panel-2);
-  color:var(--text-2);font-size:var(--fs-1);}
+  color:var(--text-2);font-size:var(--fs-1);white-space:nowrap;}
 .tabbtn.active{border-color:var(--accent);background:var(--accent-bg);color:var(--text);}
 .chart-legend{display:flex;gap:var(--s-3);font-size:var(--fs-1);color:var(--text-2);margin:0 0 var(--s-1);}
 #profChart,#sectionChart,#trackChart{display:block;width:100%;background:var(--panel-2);border:1px solid var(--border);border-radius:var(--radius);}

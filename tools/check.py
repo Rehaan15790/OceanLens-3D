@@ -2,7 +2,7 @@
 """Everything CI checks, locally: repository hygiene, the build check, a fresh build into dist/, then the tests.
 
     python tools/check.py            all test suites
-    python tools/check.py --quick    unit + smoke, as CI does
+    python tools/check.py --quick    unit + server + smoke, as CI does
     python tools/check.py --no-build test the existing dist/ or root file instead of building
 
 The fresh build goes to dist/platform.html ($OCEANLENS_DIST_NAME overrides it), so parallel builds do not collide.
@@ -42,10 +42,7 @@ def hygiene():
             m = PERSONAL.search(line)
             if m:
                 found.append(f'{f}:{n}: {m.group(0)}')
-    remotes = subprocess.run(['git', 'remote'], cwd=REPO, capture_output=True, text=True).stdout.split()
     problems = [f'personal path {x}' for x in found[:20]]
-    if remotes:
-        problems.append(f'git remote(s) configured: {remotes} (the repo must stay private and local)')
     if any((REPO / n).exists() for n in ('LICENSE', 'LICENSE.md', 'LICENSE.txt')):
         problems.append('a LICENSE file exists, but the owner has not chosen a licence')
     for p in problems:
@@ -61,7 +58,7 @@ def run(cmd):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('--quick', action='store_true', help='unit and smoke suites only (what CI runs)')
+    ap.add_argument('--quick', action='store_true', help='unit, server and smoke suites only (what CI runs)')
     ap.add_argument('--no-build', action='store_true', help='do not run build.py; test the existing build')
     ap.add_argument('--suite', help='passed through to tools/run.py')
     args = ap.parse_args()

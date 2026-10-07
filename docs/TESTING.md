@@ -1,7 +1,11 @@
 # Testing OceanLens 3D
 
-Everything runs with Python 3.12 and a Chromium-based browser (Edge or Chrome). There is no node and nothing to
-install. numpy is needed only for the data-pipeline tests.
+Everything runs with Python 3 (tested with 3.11 and 3.12) and a Chromium-based browser (Edge, Chrome or Chromium).
+There is no node. numpy is the one package to install. It is needed by:
+- the `unit` suite: the data-pipeline tests in `data-pipeline/test_*.py`;
+- the `server` suite, which runs `server/serve.py` and reads NetCDF with `data-pipeline/ncio.py`;
+- the `extend` tests that write NetCDF files or start the server;
+- `data-pipeline/facts_reference.py`, which writes `tests/facts_expected.json` for the facts check.
 
 ```
 python tools/check.py                 # hygiene, build.py --check, build into dist/, all suites
@@ -17,23 +21,40 @@ Browser tests always run against a **built** file:
 - otherwise `dist/OceanLens3D.html`;
 - otherwise the root `OceanLens3D.html`.
 
-The browser is `$OCEANLENS_BROWSER` (or `$CHROME`), else Edge or Chrome in their usual install locations. Output
-goes to `tests/output/` (gitignored): `report.json`, `fingerprint.json`, `sizes/*.png`, `downloads/`.
+The browser is `$OCEANLENS_BROWSER` (or `$CHROME`), else Edge, Chrome or Chromium in their usual install locations.
+With no browser, `tools/run.py` says so: the browser tests then error, but the `server` suite and the data-pipeline
+tests still run. Output goes to `tests/output/` (gitignored): `report.json`, `fingerprint.json`, `sizes/*.png`,
+`downloads/`.
+
+`tools/check.py` runs four steps: repository hygiene, `build.py --check`, a fresh build into `dist/platform.html`
+(`$OCEANLENS_DIST_NAME` changes the name) and the test suites against that build. The hygiene step fails on
+absolute home-folder paths in tracked or new files and on a `LICENSE` file (the owner has not chosen a licence).
+It does not look at git remotes, so it also passes in a GitHub Actions checkout. `.github/workflows/ci.yml` runs
+`tools/check.py --quick` on pull requests and pushes to `main`, and the full set on demand.
 
 ## Suites
 
-| Suite | What it checks |
-|---|---|
-| `unit` | The app's pure functions called inside the real page (EOS-80, TCHP, crossings, contours, misfit, `realAt`); the runtime `facts` against science's independent recomputation (`tests/facts_expected.json`, dotted paths under `__ol.facts`, written by `data-pipeline/facts_reference.py --expected`); the data-pipeline tests in `data-pipeline/test_*.py` |
-| `server` | `server/serve.py` in-process, no browser: REST shapes and values against the snapshot, JSON errors, CORS, the Host check, the busy limit, the `?dataset=` page; OPeNDAP `.ascii` read by the pipeline's own parser, the `.dods` byte layout, DDS/DAS and DAP errors; WMS capabilities, a valid PNG with the palette colour at a known node (linear, log, both axis orders), transparent land, GetFeatureInfo, exceptions; WCS capabilities, DescribeCoverage, a CF NetCDF-3 round trip through `data-pipeline/ncio.py`, CSV; a CF NetCDF model file as a dataset |
-| `smoke` | Real mouse and keyboard input in both data modes: every variable × display mode, depth keys, sections, a float click, a storm-fix click, timeline and playback, overlays, PNG export, Ctrl chords left to the browser, help and about. Any console error or uncaught exception fails the test. No network requests. |
-| `extend` | Round-6 features: a variable and an instrument registered at runtime through `window.OceanLens` (the variable is drawn exactly as sampled); every file in `samples/` imports, shows markers and opens its profile; the import dialog adds and removes; the colour bar editor, opacity and exaggeration controls; the log scale matches the bar; the 3D isosurface builds and rebuilds; the page served by `server/serve.py` lists the server's datasets |
-| `tour` | All eight steps in both modes; the timer races (stop at once, skip the section step, stop before a panel opens, playback paused) |
-| `robust` | No WebGL (a message, no dead button); context loss (a notice, recovery); an error after boot is shown; GPU geometries flat over 20 rebuild cycles |
-| `a11y` | Accessible names, keyboard reachability, no text under 12 px, WCAG AA contrast, dialogs, page language (at 1366×768) |
-| `sizes` | 1024×768, 1280×720, 1366×768, 1536×864, 1920×1080, 1280×720 at DPR 1.5: canvas fills the viewport, header fits, no scrolling, colour key visible; the small-screen notice at 390×844 |
-| `perf` | Splash painted before boot finishes (over `file://`); ready within 2.5 s at 4× CPU throttling. Run on its own. |
-| `fingerprint` | `tools/fingerprint.js` records 84 deterministic outputs (panel text, colour-buffer hashes). `--fp-baseline FILE` compares against a saved fingerprint; a refactor must leave it identical. |
+`python tools/run.py --list` names 134 tests in ten suites, plus the `fingerprint` run. The `unit` suite also runs
+the 59 data-pipeline tests, so there are 193 tests in all. A full run takes them in this order:
+
+| Suite | Tests | What it checks |
+|---|---|---|
+| `unit` | 10 + 59 | The app's pure functions called inside the real page (EOS-80, TCHP, crossings, contours, bias and RMSE, `realAt`); the runtime `facts` against an independent recomputation (`tests/facts_expected.json`, dotted paths under `__ol.facts`, written by `data-pipeline/facts_reference.py --expected`); the 59 data-pipeline tests in `data-pipeline/test_*.py` (2 skip when the raw cache is absent) |
+| `server` | 24 | `server/serve.py` in-process, no browser: REST shapes and values against the snapshot, JSON errors, CORS, the Host check, the busy limit, the `?dataset=` page; OPeNDAP `.ascii` read by the pipeline's own parser, the `.dods` byte layout, DDS/DAS and DAP errors; WMS capabilities, a valid PNG with the palette colour at a known node (linear, log, both axis orders), transparent land, GetFeatureInfo, exceptions; WCS capabilities, DescribeCoverage, a CF NetCDF-3 round trip through `data-pipeline/ncio.py`, CSV; a CF NetCDF model file as a dataset |
+| `smoke` | 51 | The splash and the ready state. Real mouse and keyboard input in both data modes: every variable × display mode, the Depth slider and the depth keys, the iso-value slider and the D20 preset, sections, a float click, the BGC profile tabs, a storm-fix click, timeline and playback, overlays, the cyclone heat note and track legend, the Ramp menu, the colour key in the Surface, Depth slice, Depth of a value, Isosurface (3D) and heat-map views (real end labels, the isosurface value, the empty key for real-data chlorophyll) and in the PNG export, the header readout at 1280, 1366 and 1600 px, the controls the tour names, Ctrl chords left to the browser, help and about. Any console error or uncaught exception fails the test. No network requests. |
+| `extend` | 16 | A variable and an instrument registered at runtime through `window.OceanLens` (the variable is drawn exactly as sampled); the ADCP and HF radar plugins; every file in `samples/` imports with its expected profile count, shows markers and opens its profile; real file layouts (an Argo GDAC `_prof.nc`, copies cut short refused, ERDDAP's units row, whole glider dives and climbs); Argo NetCDF in CDF-2 and CDF-5; EGO glider and CF profile NetCDF; CF units and valid ranges; a dense trajectory split into dives (a mooring is not split); imported profiles brought into view; the import dialog adds and removes; the colour bar editor, opacity and exaggeration controls; the log scale matches the bar; the 3D isosurface builds and follows the value; the page served by `server/serve.py` lists the server's datasets |
+| `tour` | 7 | All eight steps in both modes; captions of 35 words or fewer; the timer races (stop at once, skip the section step, stop before a panel opens, playback paused) |
+| `robust` | 6 | No WebGL (a message, no dead button); context loss (a notice, recovery); an error after boot is shown; GPU geometries flat over 20 rebuild cycles |
+| `render` | 9 | A depth slice matches the colour bar; profiling stems show through the layers; the 3D look (`Look3D`): current streaks and arrows stand out from the field, float marks are whole on the sea and the heat map, the grid shows on the heat-potential map but not on land, the 3D isosurface is shaded by its relief, land keeps its colour when the view is pulled back, the seabed is closed below Sri Lanka, and the basins show below India from the north |
+| `a11y` | 6 | Accessible names, keyboard reachability, no text under 12 px, WCAG AA contrast, dialogs, page language (at 1366×768) |
+| `sizes` | 3 | 1024×768, 1280×720, 1366×768, 1536×864, 1920×1080, 1280×720 at DPR 1.5: canvas fills the viewport, header fits, no scrolling, colour key visible; the small-screen notice at 390×844 |
+| `perf` | 2 | Splash painted before boot finishes (over `file://`); ready within 2.5 s at 4× CPU throttling. Run on its own. See the note below. |
+| `fingerprint` | 1 run | `tools/fingerprint.js` records 84 deterministic outputs (panel text, colour-buffer hashes). `--fp-baseline FILE` compares against a saved fingerprint; a refactor must leave it identical. |
+
+**The `perf` load budget fails on a software renderer.** Every browser test, this one included, starts the browser
+with the default `backend='swiftshader'`, so WebGL runs on the CPU. On 6 October 2026 our headless runs on a
+machine with no GPU were ready in 3.3 to 5.7 s at 4× throttling, so `test_ready_within_2_5_s_at_4x_cpu` failed; it
+was the only failure in the full run. The budget has not been timed with GPU rendering.
 
 **Results.** Every test ends in one of three states:
 - **pass** or **fail**;
@@ -85,6 +106,11 @@ class MyThing(AppTestCase):          # one browser per class; the app is open, i
 `Browser(width, height, args=(), backend='swiftshader'|'gpu'|'warp', offline=True)` starts a headless browser with a
 throwaway profile. `offline=True` makes every host name fail to resolve: that is the USB-drive case, and it stops
 tests from reaching the network.
+- On Linux it adds `--no-sandbox` when it runs as root (a container or WSL), because Chrome refuses to start as
+  root with its sandbox, or when `$CI` is set, because CI runners can restrict the user namespaces the sandbox
+  needs.
+- The browser's stderr goes to a file in the throwaway profile. If the browser exits before it opens its DevTools
+  port, the error message ends with the last lines of that stderr.
 
 | Method | Purpose |
 |---|---|
@@ -104,4 +130,5 @@ tests from reaching the network.
 
 Two warnings:
 - Never run `msedge.exe --version` on Windows: it opens a browser window.
-- SwiftShader renders at about 25 fps. JS timings are real, frame rates are not.
+- SwiftShader renders at about 25 fps. JS timings are real, frame rates are not, and WebGL work such as shader
+  compilation runs on the CPU (see the `perf` note above).
