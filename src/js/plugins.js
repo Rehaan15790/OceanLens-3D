@@ -201,7 +201,7 @@ const OceanLens = window.OceanLens = {
   version:1,
   registerVariable, registerProduct, registerInstrument, registerFormat, addDataset, removeDataset,
   datasets: ()=>[...DATASETS.keys()].map(datasetSummary),
-  dataset: id=>datasetSummary(id),
+  dataset: datasetSummary,
   variable: k=>VAR_META[k] || null, variables: ()=>Object.keys(VAR_META),
   instrument: t=>INSTRUMENT_TYPES[t] || null, instruments: ()=>Object.keys(INSTRUMENT_TYPES),
   formats: ()=>Object.keys(IMPORT_FORMATS),

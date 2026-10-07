@@ -19,13 +19,7 @@ function misfitClass(inst){
   return s ? MISFIT_CLASSES.findIndex(c=>s.rmse < c.max) : MISFIT_CLASSES.length;
 }
 let markerItems = [];      // [{pos:Vector3, kind:instrument type, vis, userData}] for picking and hover
-const instType = kind => typeof instrumentType === 'function' ? instrumentType(kind) : null;
-function markStyle(kind){ const t = instType(kind); return (t && t.marker) || (kind === 'glider' ? 'circle' : 'diamond'); }
-// vis: the instrument (or {kind}) that instrumentVisible() decides on
-function isShown(vis){
-  if(typeof instrumentVisible === 'function') return instrumentVisible(vis);
-  return vis.kind === 'glider' ? state.showGlider : state.showArgo;
-}
+function markStyle(kind){ return instrumentType(kind).marker || (kind === 'glider' ? 'circle' : 'diamond'); }
 const timeOf = inst => typeof inst.time === 'number' ? inst.time : Date.parse(inst.time);
 function marksObject(items, opts){
   const geo = new THREE.BufferGeometry().setFromPoints(items.map(it=>it.pos));
@@ -44,7 +38,7 @@ function buildMarkers(){
   const marks = new Map(), stems = new Map(), tracks = new Map();   // keyed by type (marks: and outline)
   const push = (map, key, v) => { if(!map.has(key)) map.set(key, []); map.get(key).push(v); };
   floats.forEach(inst=>{
-    const kind = inst.kind || 'argo', t = instType(kind);
+    const kind = inst.kind || 'argo', t = instrumentType(kind);
     const [x,z] = toXZ(inst.lat, inst.lon);
     const cls = state.colorMisfit ? misfitClass(inst) : -1;
     const hex = cls < 0 ? FLOAT_DEFAULT.color : cls < MISFIT_CLASSES.length ? MISFIT_CLASSES[cls].color : NO_MISFIT.color;
@@ -95,7 +89,7 @@ function buildMarkers(){
   placeSelection();
 }
 function applyMarkerVisibility(){
-  [markerGroup, stemGroup].forEach(g=>g.children.forEach(o=>{ o.visible = !!o.userData.vis && isShown(o.userData.vis); }));
+  [markerGroup, stemGroup].forEach(g=>g.children.forEach(o=>{ o.visible = !!o.userData.vis && instrumentVisible(o.userData.vis); }));
 }
 
 /* ---- the selected float or waypoint: a static ring ---- */
@@ -125,7 +119,7 @@ function pickAt(clientX, clientY){
     const d = Math.hypot((_pp.x*0.5+0.5)*rect.width - x, (-_pp.y*0.5+0.5)*rect.height - y);
     if(d < bestD){ bestD = d; best = hit; }
   };
-  markerItems.forEach(it=>{ if(isShown(it.vis)) consider(it.pos, it); });
+  markerItems.forEach(it=>{ if(instrumentVisible(it.vis)) consider(it.pos, it); });
   if(trackGroup.visible) trackFixes.forEach(f=>consider(f.pos, {kind:'track', index:f.index}));
   return best;
 }
@@ -145,7 +139,7 @@ function pickableMarks(kind){
     if(_pp.z > 1 || Math.abs(_pp.x) > 1 || Math.abs(_pp.y) > 1) return;
     out.push({kind:k, id, x:rect.left + (_pp.x*0.5+0.5)*rect.width, y:rect.top + (-_pp.y*0.5+0.5)*rect.height});
   };
-  markerItems.forEach(it=>{ if(isShown(it.vis)) add(it.pos, it.kind, it.userData.wp ? it.userData.wp.inst.id : it.userData.data.inst.id); });
+  markerItems.forEach(it=>{ if(instrumentVisible(it.vis)) add(it.pos, it.kind, it.userData.wp ? it.userData.wp.inst.id : it.userData.data.inst.id); });
   if(trackGroup.visible) trackFixes.forEach(f=>add(f.pos, 'track', f.index));
   return kind ? out.filter(m=>m.kind===kind) : out;
 }

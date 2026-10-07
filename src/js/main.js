@@ -105,7 +105,7 @@ function exposeTestSurface(){
   ol.actions = Object.fromEntries(Object.entries({
     setVariable, setMode, setDepth, setIso, setTime, setPlaying, setDataMode, setOverlay, setOpacity, setExaggeration,
     setRange, setPalette, setScale, setShowAllImported, resetRange: ()=>{ resetRange(); requestUpdate('full'); },
-    openPanel, closePanels, openProfile, openWorstFloat, startTour, stopTour, goToTourStep, nextTourStep, setTourAutoplay,
+    openPanel, closePanels:closeSidePanels, openProfile, openWorstFloat, startTour, stopTour, goToTourStep, nextTourStep, setTourAutoplay,
     showSectionPreset, clearSection
   }).map(([k, f])=>[k, now(f)]));
   ol.flush = flushUpdate;
@@ -114,9 +114,6 @@ function exposeTestSurface(){
   ol.fn = {seawaterDensity, sigmaT, tchpColumn, firstCrossing, contourSegments, summarize, misfit, realAt, obsInterp,
            modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow};
   ol.render = Render.test;
-  ol.renderNow = Render.test.renderNow;
-  ol.renderInfo = Render.test.renderInfo;
-  ol.pixelAt = Render.test.pixelAt;
 }
 
 /* ============================================================

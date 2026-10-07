@@ -99,15 +99,14 @@ const TOUR_STEP_DEFS = [
 function tourLandfall(f){ return Date.parse(f.track && f.track.landfall ? f.track.landfall.time : REAL_TRACK[REAL_TRACK.length-1].t); }
 function tourOverBay(f){ const lf = tourLandfall(f); return f.analysis.times.filter(x=>Date.parse(x) <= lf).length-1; }
 function tourDaysAfterLandfall(f, t){ return Math.round((Date.parse(f.analysis.times[t]) - tourLandfall(f))/864e5); }
-function tourDataMode(){ return (typeof state!=='undefined' && state.dataMode) || (typeof dataMode!=='undefined' ? dataMode : 'real'); }
 function tourFacts(){
-  const f = typeof facts==='function' ? facts().real : null;
-  return f && f.analysis ? f : null;
+  const f = facts().real;
+  return f.analysis ? f : null;
 }
 function tourCaption(def){
-  const mode = tourDataMode(), f = tourFacts(), c = def.caption;
+  const mode = dataMode, f = tourFacts(), c = def.caption;
   if(mode!=='real') return c.synth;
-  if(c.real && f && typeof fmt!=='undefined' && fmt.dayMonth){
+  if(c.real && f){
     try{ return c.real(f, fmt, typeof def.time==='function' ? def.time(f) : def.time); }
     catch(e){ console.warn('tour caption', def.id, e); }
   }
@@ -117,7 +116,7 @@ const tourSteps = TOUR_STEP_DEFS.map(def=>{
   const step = {};
   Object.keys(def).forEach(k=>{ if(!['title','caption','time'].includes(k)) step[k] = def[k]; });
   Object.defineProperties(step, {
-    title:  {enumerable:true, get:()=>def.title[tourDataMode()==='real' ? 'real' : 'synth']},
+    title:  {enumerable:true, get:()=>def.title[dataMode==='real' ? 'real' : 'synth']},
     caption:{enumerable:true, get:()=>tourCaption(def)},
     time:   {enumerable:true, get:()=>typeof def.time==='function' ? def.time(tourFacts()) : def.time},
   });

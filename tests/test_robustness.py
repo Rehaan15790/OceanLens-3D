@@ -28,7 +28,7 @@ class NoWebGL(AppTestCase):
 class ContextLoss(AppTestCase):
     def luma(self):
         # works with or without preserveDrawingBuffer: render and read back in the same task
-        return self.js("""(()=>{ if (window.__ol && __ol.renderNow) __ol.renderNow(); else renderer.render(scene, camera);
+        return self.js("""(()=>{ __ol.render.renderNow();
           const c=renderer.domElement, t=document.createElement('canvas'); t.width=c.width; t.height=c.height;
           const g=t.getContext('2d'); g.drawImage(c,0,0); const d=g.getImageData(c.width/2-40,c.height/2-40,80,80).data;
           let s=0; for(let i=0;i<d.length;i+=4) s+=d[i]+d[i+1]+d[i+2]; return s/(d.length/4)/3; })()""")
@@ -64,7 +64,7 @@ class GpuMemory(AppTestCase):
             for (let t=0;t<8;t+=3) { const tl=document.getElementById('timeline'); tl.value=t; tl.dispatchEvent(new Event('input'));
               for (const vv of v) for (const mm of m) { pill(`#varPills .pill[data-v="${vv}"]`); pill(`#modePills .pill[data-m="${mm}"]`); } } }
           pill('#varPills .pill[data-v="temp"]'); pill('#modePills .pill[data-m="layers"]'); })()"""
-        info = "(()=>{const i=(window.__ol&&__ol.renderInfo)?__ol.renderInfo():renderer.info.memory; return [i.geometries, i.textures];})()"
+        info = "(()=>{const i=__ol.render.renderInfo(); return [i.geometries, i.textures];})()"
         self.js(cycle, timeout=120)
         self.b.pump(0.5)
         first = self.js(info)

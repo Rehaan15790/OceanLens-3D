@@ -4,7 +4,6 @@
    QC as in the snapshot: Argo flags 1, 2, 5, 8 kept; adjusted values wherever a file has them (raw values
    only for real-time data); chlorophyll and oxygen from adjusted values only when adjusted columns exist. */
 (function(){
-  if(typeof OceanLens==='undefined' || !OceanLens.registerFormat) return;
   const GOOD = new Set(['1', '2', '5', '8']);
   const RANGE = {temp:[-2.5, 40], sal:[2, 41], chl:[-0.1, 50], oxy:[-5, 600]};
   const VARS = ['temp', 'sal', 'chl', 'oxy'];

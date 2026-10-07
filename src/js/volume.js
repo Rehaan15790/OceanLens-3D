@@ -163,9 +163,8 @@ function layerMask(depth){ return gridPts.map((p,idx)=> gridLand[idx] || depth >
 let layerField = null;
 const fieldKey = v => dataMode+'|'+v+'|'+state.time;
 const isMapOnly = v => v==='tchp' || (VAR_META[v] && VAR_META[v].dims===2);
-const hasField = v => typeof hasModel!=='function' || hasModel(v);
 function updateLayerColors(){
-  if(isMapOnly(state.variable) || !hasField(state.variable)) return;   // 2D fields: updateTchpView / updateField2dView
+  if(isMapOnly(state.variable) || !hasModel(state.variable)) return;   // 2D fields: updateTchpView / updateField2dView
   const levels = [];
   layerMeshes.forEach(mesh=>{
     const depth = mesh.userData.depth, mask = layerMask(depth);
@@ -185,7 +184,7 @@ function updateLayerColors(){
    opaque. TCHP and 2D products: the map, opaque. A variable with no model field (chlorophyll in real
    mode) draws no field. While a section is open everything in front of the curtain turns translucent. */
 function applyVolumeView(){
-  if(typeof viewDescription === 'function') renderer.domElement.setAttribute('aria-label', viewDescription());
+  renderer.domElement.setAttribute('aria-label', viewDescription());
   const view = currentView(), tchp = view==='tchp', map2d = tchp || view==='field2d', mode = state.mode, sec = !!section;
   layerMeshes.forEach(m=>{ m.visible = false; });
   arrowGroup.visible = false;
@@ -199,7 +198,7 @@ function applyVolumeView(){
   if(map2d){
     if(tchp) updateTchpView(); else updateField2dView();
     Render.setSurfaceRole(tchpMesh.material, !sec, 0.5);
-  } else if(!hasField(state.variable)){
+  } else if(!hasModel(state.variable)){
     if(isoMode()) isoInfo = null;
   } else if(mode==='surface' || mode==='layers'){
     layerMeshes.forEach((m, k)=>{

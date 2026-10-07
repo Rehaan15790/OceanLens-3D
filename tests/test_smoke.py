@@ -18,7 +18,7 @@ KEY_LABELS = """[...document.querySelectorAll('#keyTicks .key-tick')].map(e=>{ c
 # the PNG export's key painted on its own canvas: every text with its extent, the bar's columns, and where the
 # spec's marks and ticks belong on the 260 px bar (bar from x 20 to 280)
 EXPORT_KEY = """(()=>{ const c=document.createElement('canvas'); c.width=300; c.height=600; const g=c.getContext('2d'), s=keySpec();
-  const out={text:[], bar:0, empty:!!s.empty}, ft=g.fillText.bind(g), fr=g.fillRect.bind(g), at=v=>20+rampT(v, s.min, s.max, s.scale||'linear')*260;
+  const out={text:[], bar:0, empty:!!s.empty}, ft=g.fillText.bind(g), fr=g.fillRect.bind(g), at=v=>20+Render.rampPos(v, s.min, s.max, s.scale||'linear')*260;
   g.fillText=(t,x,y)=>{ const w=g.measureText(t).width, l=g.textAlign==='center' ? x-w/2 : g.textAlign==='right' ? x-w : x;
     out.text.push([t, l, l+w, g.textAlign, g.font.startsWith('600')]); ft(t,x,y); };
   g.fillRect=(x,y,w,h)=>{ if(w===1 && h===12) out.bar++; fr(x,y,w,h); };

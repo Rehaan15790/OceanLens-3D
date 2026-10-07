@@ -5,11 +5,11 @@
     python tools/check.py --quick    unit + server + smoke, as CI does
     python tools/check.py --no-build test the existing dist/ or root file instead of building
 
-The fresh build goes to dist/platform.html ($OCEANLENS_DIST_NAME overrides it), so parallel builds do not collide.
+The fresh build goes to dist/platform.html.
 
 Exit status is non-zero if any step fails. Nothing here writes the root OceanLens3D.html.
 """
-import argparse, os, re, subprocess, sys, time
+import argparse, re, subprocess, sys, time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -64,14 +64,11 @@ def main():
     args = ap.parse_args()
 
     results = [step('repository hygiene', hygiene)]
-    build_py = REPO / 'build.py'
     target = None
-    if build_py.exists() and not args.no_build:
+    if not args.no_build:
         results.append(step('build.py --check', lambda: run([PY, 'build.py', '--check'])))
-        target = REPO / 'dist' / os.environ.get('OCEANLENS_DIST_NAME', 'platform.html')
+        target = REPO / 'dist' / 'platform.html'
         results.append(step('build into dist/', lambda: run([PY, 'build.py', '--out', str(target)])))
-    elif not build_py.exists():
-        print('\n(build.py not present yet: testing the root OceanLens3D.html)')
     cmd = [PY, 'tools/run.py'] + (['--build', str(target)] if target else []) + \
           (['--quick'] if args.quick else []) + (['--suite', args.suite] if args.suite else [])
     results.append(step('tests', lambda: run(cmd)))

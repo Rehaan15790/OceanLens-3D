@@ -22,15 +22,11 @@ function soundSpeed(T,S,z){
        - 1.025e-2*T*(S-35) - 7.139e-13*T*Math.pow(z,3);
 }
 
-const MODEL_FN = {temp:fieldTemp, sal:fieldSal, chl:fieldChl, cur:currentSpeed};
 // the model is known on its levels only; in between it is linearly interpolated,
 // which is how a Class 4 comparison reads gridded output
 // the registry's sampler (plugin variables too); null when the variable has no model field in this mode
 function modelFn(varKey){
-  if(varKey==='chl' && dataMode==='real') return null;   // HYCOM has no chlorophyll
-  if(typeof hasModel==='function' && !hasModel(varKey)) return null;
-  const meta = typeof VAR_META!=='undefined' ? VAR_META[varKey] : null;
-  return (meta && meta.dims!==2 && meta.sample) || MODEL_FN[varKey] || null;
+  return hasModel(varKey) && VAR_META[varKey].dims!==2 ? VAR_META[varKey].sample : null;
 }
 function modelAt(varKey, lat, lon, z, t){
   if(varKey==='dens'){
@@ -69,16 +65,6 @@ function modelAtObs(inst, varKey, z){
   }
   return null;
 }
-// the model column drawn beside a profile: {z, v}, on the Argo levels when matched in time
-function modelColumn(inst, varKey, t, maxDepth){
-  if(inst.model){
-    const z = inst.levels.filter(d=>d<=maxDepth);
-    return {z, v:z.map(d=>modelAtObs(inst, varKey, d)), matched:true};
-  }
-  const z = DEPTHS.filter(d=>d<maxDepth).concat([maxDepth]);
-  return {z, v:z.map(d=>modelAt(varKey, inst.lat, inst.lon, d, t)), matched:false};
-}
-
 // Density inversion, as in Argo real-time QC test 14: consecutive valid levels, both directions.
 // Top-down flags a level lighter than the one above by more than 0.03 kg/m³; bottom-up flags a level
 // denser than the one below. A dense spike is flagged itself, not the good levels under it.

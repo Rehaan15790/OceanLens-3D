@@ -16,7 +16,7 @@ function exportLabels(){
 function exportNorth(){ return northAngle(); }
 
 function paintKey(g, spec, x, yBottom, w){
-  const th = theme(), lut = keyLUT(spec.palette);
+  const th = theme(), lut = Render.rampLUT(spec.palette);
   // the title wraps as the note does: after the ·, never between a number and its unit (non-breaking spaces)
   const head = wrapText(g, spec.title, w-20, CHART_FONT_BOLD), dt = (head.length-1)*15;
   const lines = spec.note ? wrapText(g, spec.note, w-20, CHART_FONT) : [];
@@ -34,7 +34,7 @@ function paintKey(g, spec, x, yBottom, w){
       g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(bx+i, by, 1, 12);
     }
     // the screen's mapping (renderKey): a log key places its ticks and marks by the log of the value
-    const px = v=>bx + rampT(v, spec.min, spec.max, spec.scale || 'linear')*bw, markX = spec.marks.map(m=>px(m.v));
+    const px = v=>bx + Render.rampPos(v, spec.min, spec.max, spec.scale || 'linear')*bw, markX = spec.marks.map(m=>px(m.v));
     // as on screen: a bold mark label is centred on its mark unless it would stand past an end of the bar, when it
     // starts (or ends) at the mark; marks come first, so an end or tick label that would touch one is left out
     g.font = CHART_FONT_BOLD;
@@ -140,7 +140,7 @@ function exportPNG(){
   paintKey(g, spec, 12, cssH-40, 280);
 
   // caveat along the bottom
-  const added = dataMode==='real' && window.OceanLens && OceanLens.datasets ? OceanLens.datasets().length : 0;
+  const added = dataMode==='real' ? OceanLens.datasets().length : 0;
   const cav = dataSource().export.caveat + (added ? ` Includes ${added===1 ? 'one added data set' : added+' added data sets'}.` : '');
   g.font = CHART_FONT; const cw = g.measureText(cav).width;
   g.fillStyle = '#12181e'; g.fillRect(12, cssH-32, cw+20, 22);

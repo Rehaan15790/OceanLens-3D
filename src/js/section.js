@@ -25,7 +25,7 @@ for(let z=200; z<=1000; z+=25) SECTION_Z.push(z);
 function sectionSpec(){
   // map-only fields (TCHP, 2D products) and variables with no model field: the section shows temperature
   const m = VAR_META[state.variable];
-  if(state.variable==='tchp' || m.dims===2 || (typeof hasModel==='function' && !hasModel(state.variable))){
+  if(state.variable==='tchp' || m.dims===2 || !hasModel(state.variable)){
     return {v:'temp', palette:'temperature', min:VAR_META.temp.defMin, max:VAR_META.temp.defMax, unit:'°C', label:'Temperature', scale:'linear'};
   }
   return {v:state.variable, palette:state.palette, min:state.cbMin, max:state.cbMax, unit:m.unit, label:m.label, scale:state.scale || 'linear'};
@@ -38,7 +38,7 @@ function sectionContours(v){
 // n columns from A to B: position, distance, land / seabed, and the model column
 // (interpolated between model levels, like every other model readout here)
 function sectionColumns(n){
-  const {a, b} = section, fn = MODEL_FN[sectionSpec().v], total = haversineKm(a, b);
+  const {a, b} = section, fn = VAR_META[sectionSpec().v].sample, total = haversineKm(a, b);
   const cols = [];
   for(let i=0;i<n;i++){
     const f = i/(n-1);

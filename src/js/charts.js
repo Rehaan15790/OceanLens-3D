@@ -10,26 +10,14 @@ function theme(){
     model:v('--chart-model'), mark:v('--chart-mark'), flag:v('--flag'), accent:v('--accent'), panel:v('--panel-2'), bg:v('--bg')};
   return chartTheme;
 }
-// readout formats (until fmt.js has them): temperature 1 dp, salinity and speed 2 dp
-const VALUE_DP = {temp:1, sal:2, cur:2, dens:2, chl:2, oxy:0};
 const PROFILE_UNITS = {temp:'°C', sal:'PSU', chl:'mg/m³', oxy:'µmol/kg', dens:'kg/m³', cur:'m/s'};
 const PROFILE_NAMES = {temp:'temperature', sal:'salinity', chl:'chlorophyll', oxy:'oxygen', dens:'density', cur:'current speed'};
-const escapeHtml = s=>String(s).replace(/[&<>"']/g, c=>({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'})[c]);
 // an instrument type's label from the plugin registry, for imported and plugin data
 function instrumentLabel(kind){
-  const reg = window.OceanLens && OceanLens.instrument ? OceanLens.instrument(kind) : null;
+  const reg = OceanLens.instrument(kind);
   return reg && reg.label ? reg.label : kind ? kind.charAt(0).toUpperCase()+kind.slice(1) : 'Observed';
 }
-const ll2 = (lat, lon)=>`${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E`;
-const signed = (v, dp)=>(v >= 0 ? '+' : '−') + Math.abs(v).toFixed(dp);
 
-// a canvas sized in CSS pixels, drawn at device resolution so text stays sharp
-// value -> ramp position, linear or log10 as the GPU does it (graphics' Render.rampPos)
-function scaleNow(){ return state.scale==='log' ? 'log' : 'linear'; }
-function rampT(v, min, max, scale=scaleNow()){
-  if(Render.rampPos) return Render.rampPos(v, min, max, scale);
-  return Math.max(0, Math.min(1, (v-min)/(max-min)));
-}
 // round ticks for a log axis: 1, 2, 5 per decade, thinned to about `target`
 function logTicks(min, max, target=5){
   const lo = min > 0 ? min : max*1e-3, out = [];
@@ -40,6 +28,7 @@ function logTicks(min, max, target=5){
   return decades.length >= 2 ? decades : out.filter((v,i)=>i%2===0);
 }
 const logTickText = v=>v >= 1 ? String(Math.round(v)) : String(+v.toPrecision(1));
+// a canvas sized in CSS pixels, drawn at device resolution so text stays sharp
 function hidpiCanvas(c, cssH){
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const w = c.clientWidth || 272;
@@ -95,7 +84,7 @@ function drawSectionPanel(){
     for(let py=0; py<ih; py++){
       const z = maxD*Math.pow((py+0.5)/ih, 2);
       const rgb = col.land ? [0.34,0.30,0.21] : z > col.seabed ? [0.055,0.075,0.094]
-        : paletteColor(spec.palette, rampT(col.at(z), spec.min, spec.max, spec.scale || scaleNow()));
+        : paletteColor(spec.palette, Render.rampPos(col.at(z), spec.min, spec.max, spec.scale));
       const o = (py*iw+px)*4;
       img.data[o] = rgb[0]*255; img.data[o+1] = rgb[1]*255; img.data[o+2] = rgb[2]*255; img.data[o+3] = 255;
     }
@@ -164,7 +153,7 @@ function drawSectionPanel(){
   ctx.textAlign = 'right'; ctx.fillText('km', pad.l+pw, pad.t+ph+28);
   // colour key, so the plot explains itself whatever else is on screen
   const by = h-22, dp = spec.v==='temp' ? 0 : spec.v==='sal' ? 1 : 2;
-  const lut = keyLUT(spec.palette);
+  const lut = Render.rampLUT(spec.palette);
   for(let x=0; x<pw; x++){
     const k = Math.min(255, Math.round(x/(pw-1)*255))*3;
     ctx.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`;
@@ -183,7 +172,7 @@ function drawSectionPanel(){
   const wet = cols.filter(col=>!col.land);
   const d26 = spec.v==='temp' ? wet.map(col=>firstCrossing(col.at, col.seabed, 26)).filter(d=>d!==null) : [];
   const landKm = (cols.length-wet.length)/cols.length*km;
-  const meta = [`A ${ll2(...section.a)}`, `B ${ll2(...section.b)}`, timeLabel(state.time)];
+  const meta = [`A ${fmt.latLon2(...section.a)}`, `B ${fmt.latLon2(...section.b)}`, timeLabel(state.time)];
   if(d26.length) meta.push(`D26 along the section: ${Math.round(Math.min(...d26))}–${Math.round(Math.max(...d26))} m`);
   if(landKm > 5) meta.push(`Crosses ${Math.round(landKm)} km of land.`);
   document.getElementById('sectionMeta').innerHTML = meta.join('<br>');
@@ -192,7 +181,7 @@ function drawSectionPanel(){
   document.getElementById('sectionFoot').innerHTML =
     (near.length
       ? `<h3 class="grp-label">${real ? 'Argo profiles' : 'Profiles'} within 40 km</h3>` +
-        argoNear.map(o=>`<button type="button" class="misfit" data-k="${near.indexOf(o)}">${escapeHtml(o.inst.id)}` +
+        argoNear.map(o=>`<button type="button" class="misfit" data-k="${near.indexOf(o)}">${fmt.esc(o.inst.id)}` +
           `<span>${Math.round(o.f*km)} km along</span></button>`).join('') +
         (glNear ? `<p>${glNear} glider profile${glNear>1 ? 's' : ''} (circles on the plot).</p>` : '')
       : `<p>${real ? 'No Argo profiles' : 'No floats or gliders'} within 40 km of this line.</p>`) +
@@ -211,10 +200,10 @@ sectionChartEl.addEventListener('mousemove', e=>{
   if(x < 0 || y < 0 || x > P.pw || y > P.ph){ out.textContent = SECTION_HINT; return; }
   const col = P.cols[Math.min(P.cols.length-1, Math.floor(x/P.pw*P.cols.length))];
   const z = P.maxD*Math.pow(y/P.ph, 2);
-  const where = `<b>${Math.round(col.km)} km</b> · ${ll2(col.lat, col.lon)} · <b>${Math.round(z)} m</b>`;
+  const where = `<b>${Math.round(col.km)} km</b> · ${fmt.latLon2(col.lat, col.lon)} · <b>${Math.round(z)} m</b>`;
   out.innerHTML = col.land ? `${where} · land`
     : z > col.seabed ? `${where} · below the sea floor (seabed ${Math.round(col.seabed)} m)`
-    : `${where} · <b>${col.at(z).toFixed(VALUE_DP[P.spec.v] ?? 2)} ${P.spec.unit}</b>`;
+    : `${where} · <b>${col.at(z).toFixed(fmt.decimals(P.spec.v))} ${P.spec.unit}</b>`;
 });
 sectionChartEl.addEventListener('mouseleave', ()=>{ document.getElementById('sectionReadout').textContent = SECTION_HINT; });
 
@@ -322,7 +311,7 @@ function drawProfileChart(){
   const obsName = inst.imported ? instrumentLabel(inst.kind)
     : inst.kind==='argo' ? (real ? 'Argo' : 'Synthetic float') : 'Synthetic glider';
   document.getElementById('obsLegend').innerHTML =
-    `<span><i class="lg lg-obs"></i>${escapeHtml(obsName)}</span>` +
+    `<span><i class="lg lg-obs"></i>${fmt.esc(obsName)}</span>` +
     (hasModel ? `<span><i class="lg lg-model"></i>${real ? 'HYCOM' : 'Model'}</span>` : '') +
     (p.flag.some(f=>f) ? `<span><i class="lg lg-flag"></i>QC flag</span>` : '');
 
@@ -331,7 +320,7 @@ function drawProfileChart(){
   const good = p.z.filter((z,k)=>Number.isFinite(obs[k]) && !p.flag[k]).length;
   const word = s ? misfitWord(tab, s.rmse) : '';
   document.getElementById('profStats').innerHTML = s ? `
-    <div>Bias (observed − model)<b>${signed(s.bias,dp)} ${units[tab]}</b></div>
+    <div>Bias (observed − model)<b>${fmt.signed(s.bias,dp)} ${units[tab]}</b></div>
     <div>RMSE<b>${s.rmse.toFixed(dp)} ${units[tab]}${word ? ' · '+word : ''}</b></div>
     <div>Levels used<b>${good} of ${p.z.length}</b></div>` :
     `<div>Bias and RMSE<b>—</b></div><div>Levels used<b>0 of ${p.z.length}</b></div>`;
@@ -339,18 +328,7 @@ function drawProfileChart(){
 
 /* ---- the colour key, legend, context line and timeline labels in the viewport ----
    Everything here is drawn from state and colorbarSpec(); nothing decides a range or a colour. */
-// the 256 sRGB entries of a palette: graphics' ramp texture data when it exists, else sampled from the palette
-function keyLUT(palette){ return Render.rampLUT(palette); }
-function exaggerationRatio(e){
-  const k = typeof facts==='function' ? facts().real.view.exaggerationPerSlider : 404.4;
-  const r = k*e, p = Math.pow(10, Math.floor(Math.log10(r))-1);
-  return String(Math.round(r/p)*p);                       // two significant figures
-}
-function analysisTimes(){
-  return META.times;
-}
-const demoDay = t=>1+3*t;
-function dayMonth(iso){ return new Date(iso).toLocaleDateString('en-GB', {day:'numeric', month:'short', timeZone:'UTC'}); }
+function exaggerationRatio(e){ return fmt.sig2(facts().real.view.exaggerationPerSlider*e); }   // two significant figures
 
 function keySpec(){
   const c = colorbarSpec();
@@ -393,7 +371,7 @@ function keySpec(){
     if(stormNow.visible && dataSource().legend.now) legend.push({sw:'storm', text:dataSource().legend.now});
   }
   importedLegend().forEach(r=>legend.push(r));
-  const scale = c.scale || (c.editable ? scaleNow() : 'linear');
+  const scale = c.scale || (c.editable ? state.scale : 'linear');
   if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);
   if(scale==='log' && !c.empty) notes.unshift('Log colour scale.');
   notes.push(`Vertical exaggeration ≈\u00a0${exaggerationRatio(state.exagg)}\u00a0:\u00a01; below 1000\u00a0m the sea floor is compressed a further\u00a012×.`);
@@ -421,12 +399,12 @@ function renderKey(spec){
   if(!spec.empty){
     const dpr = Math.min(2, window.devicePixelRatio||1), bw = cv.clientWidth || 236;
     cv.width = Math.round(bw*dpr); cv.height = Math.round(12*dpr);
-    const g = cv.getContext('2d'), lut = keyLUT(spec.palette);
+    const g = cv.getContext('2d'), lut = Render.rampLUT(spec.palette);
     for(let i=0;i<cv.width;i++){
       const k = Math.min(255, Math.round(i/(cv.width-1)*255))*3;
       g.fillStyle = `rgb(${lut[k]},${lut[k+1]},${lut[k+2]})`; g.fillRect(i, 0, 1, cv.height);
     }
-    const pos = v=>rampT(v, spec.min, spec.max, spec.scale || 'linear')*100;
+    const pos = v=>Render.rampPos(v, spec.min, spec.max, spec.scale || 'linear')*100;
     const add = (cls, left, text)=>{ const el = document.createElement('span'); el.className = cls; el.style.left = left+'%';
       if(text!==undefined) el.textContent = text; return row.appendChild(el); };
     // marks (26 °C, 50 kJ/cm², the isosurface's value) get bold labels and come first: an end label that would touch
@@ -476,7 +454,7 @@ let timeLabelsFor = null;
 function renderTimeLabels(){
   if(timeLabelsFor===dataMode) return;
   timeLabelsFor = dataMode;
-  const el = document.getElementById('timeLabels'), times = analysisTimes();
+  const el = document.getElementById('timeLabels'), times = META.times;
   el.textContent = '';
   for(let t=0;t<NT;t++){
     const s = document.createElement('span');
@@ -489,7 +467,7 @@ function renderTimeLabels(){
 // a one-line description of the 3D view, for the canvas's accessible name (graphics calls it)
 function viewDescription(){
   const k = keySpec();
-  const when = dataMode==='real' ? dayMonth(analysisTimes()[state.time]) : `demo day ${demoDay(state.time)}`;
+  const when = dataMode==='real' ? fmt.dayMonth(META.times[state.time]) : `demo day ${fmt.demoDay(state.time)}`;
   return `3D view: ${k.title}, ${when}`;
 }
 
@@ -503,7 +481,7 @@ function updateLegend(){
   if(r) r.textContent = exaggerationRatio(state.exagg);
   const cn = document.getElementById('chlNote'), vars = dataSource().vars;
   if(cn){ cn.textContent = state.variable==='chl' && vars ? vars.chlNote : ''; cn.hidden = !cn.textContent; }
-  if(typeof importUI!=='undefined') importUI.syncMode();
+  importUI.syncMode();
 }
 
 // legend rows for imported instruments whose marker the built-in rows don't cover

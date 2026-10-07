@@ -6,10 +6,7 @@
 // what the profile panel shows: inst is null while the followed float has no profile at this time
 const profileState = {open:false, inst:null, current:null, floatId:null, tab:'temp', depthIdx:undefined};
 const trackState = {open:false};
-const fmtSigned = fmt.signed;
 const VAR_DP = {temp:2, sal:2, dens:2, chl:2, oxy:1, cur:2};
-// RMSE above which a profile's misfit is highlighted (per variable)
-const RMSE_WARN = {temp:0.5, sal:0.15, dens:0.15, chl:0.1, oxy:10, cur:0.1};
 
 function showPanel(which){   // 'empty' | 'profile' | 'track' | 'section'
   state.panel = which;
@@ -40,7 +37,6 @@ function openPanel(name){
   if(name==='section'){ if(section){ showPanel('section'); drawSectionPanel(); } return; }
   closeSidePanels();
 }
-function closePanels(){ closeSidePanels(); }
 // the float that disagrees most with the model; false when there is none to show
 function openWorstFloat(){
   const w = worstArgo();
@@ -61,7 +57,7 @@ function renderValidation(){
     const all = insts.flatMap(inst=>misfit(inst, t, v));
     const rows = bands.map(([z0,z1])=>{
       const s = summarize(all.filter(o=>o.z>z0 && o.z<=z1));
-      return `<tr><td>${z0}–${z1} m</td><td>${s?fmtSigned(s.bias,VAR_DP[v]):'—'}</td>`+
+      return `<tr><td>${z0}–${z1} m</td><td>${s?fmt.signed(s.bias,VAR_DP[v]):'—'}</td>`+
         `<td>${s?s.rmse.toFixed(VAR_DP[v]):'—'}</td><td>${s?s.n:0}</td></tr>`;
     }).join('');
     return `<table class="val-table"><caption>${title}</caption>`+
@@ -219,7 +215,7 @@ function followProfile(){
   showSelection(null);
   ui.profMeta.innerHTML = `${fmt.esc(dataSource().profile.none(profileState.floatId, state.time))}<br>`+
     `<button type="button" class="btn btn-small" id="profBack">Back to comparison</button>`;
-  document.getElementById('profBack').addEventListener('click', closePanels);
+  document.getElementById('profBack').addEventListener('click', closeSidePanels);
   ui.qcBadge.textContent = ''; ui.derivGrid.textContent = '';
   const more = document.getElementById('derivMore');
   if(more) more.textContent = '';

@@ -113,15 +113,14 @@ const shell = (()=>{
 
   // citations come with the data (meta.citations, written by the pipeline)
   function fillCitations(){
-    const list = (typeof REAL_DATA!=='undefined' && REAL_DATA.meta && REAL_DATA.meta.citations) || [];
+    const list = REAL_DATA.meta.citations || [];
     document.querySelectorAll('[data-cite]').forEach(el=>{
       const c = list.find(x=>x.id===el.dataset.cite);
       el.textContent = c ? c.text : '';
     });
   }
   fillCitations();
-  if(typeof facts==='function' && typeof fmt!=='undefined')
-    fillFacts(facts().real, Object.assign({exagDefault:v=>fmt.sig2(v*state.exagg)}, fmt));
+  fillFacts(facts().real, Object.assign({exagDefault:v=>fmt.sig2(v*state.exagg)}, fmt));
   document.querySelectorAll('[data-needs-shell]').forEach(el=>{ el.hidden = false; });
 
   applyWidth();

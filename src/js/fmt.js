@@ -8,7 +8,7 @@ const fmt = (()=>{
   const date = t => t instanceof Date ? t : new Date(t);
   const minus = s => s.replace(/^-/, '−');
   // decimals per variable in readouts; bias and RMSE always use 2
-  const DP = {temp:1, sal:2, cur:2, tchp:0, dens:2, chl:2, depth:0};
+  const DP = {temp:1, sal:2, cur:2, tchp:0, dens:2, chl:2, oxy:0, depth:0};
 
   const dp = (v, n) => minus((Math.abs(v) < 0.5*Math.pow(10, -n) ? 0 : v).toFixed(n));
   const int = v => dp(v, 0);

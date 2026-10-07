@@ -7,9 +7,9 @@ deficiency. Heat and depth keep the app's earlier stops (both already monotone i
 is checked: CIELAB L* must be strictly monotone, and the report lists L*, perceptual step uniformity and
 the lightness order under simulated deuteranopia, protanopia and tritanopia.
 
-    python make_palettes.py [--out ../src/js/palettes.js] [--report palettes-report.json]
+    python make_palettes.py [--out ../src/js/palettes.js]
 """
-import argparse, json, os
+import argparse, os
 import numpy as np
 
 N = 256
@@ -189,7 +189,6 @@ def main(argv=None):
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--out', default=os.path.join(here, '..', 'src', 'js', 'palettes.js'))
-    ap.add_argument('--report', default=None, help='also write the checks as JSON')
     ap.add_argument('--check', action='store_true', help='compare with --out instead of writing it')
     args = ap.parse_args(argv)
     lines, rep = [], {}
@@ -214,9 +213,6 @@ def main(argv=None):
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, 'w', encoding='ascii', newline='\n') as f:
         f.write(js)
-    if args.report:
-        with open(args.report, 'w', encoding='utf-8', newline='\n') as f:
-            json.dump(rep, f, indent=1)
     for k, r in rep.items():
         print(f"{k:12s} L* {r['L_min']:5.1f}..{r['L_max']:5.1f} monotone {r['monotone_L']}  step CV {r['oklab_step_cv']:.2f}"
               f"  deutan/protan/tritan monotone {r['deuteranopia']['monotone_L']}/{r['protanopia']['monotone_L']}/"

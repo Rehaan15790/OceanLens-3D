@@ -92,7 +92,6 @@ function instrumentsNow(){
   return dataMode==='real' && importedInsts.length ? own.concat(importedNow(state.time)) : own;
 }
 function currentTrack(){ return dataSource().fixes(); }
-function caveatText(){ return dataSource().export.caveat; }
 
 /* ---- action: switch the data source ---- */
 function setDataMode(mode){

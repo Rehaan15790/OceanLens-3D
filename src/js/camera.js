@@ -55,7 +55,7 @@ function stepCamera(now, dt){
     if(k >= 1){ camAtHome = !!camTween.home; camTween = null; }
     return true;
   }
-  if(typeof tourRotating !== 'undefined' && tourRotating && !(typeof tourPaused !== 'undefined' && tourPaused)){
+  if(tourRotating && !tourPaused){
     camAz += 0.054*dt;                               // rad/s, the same on any display refresh rate
     updateCamera();
     return true;

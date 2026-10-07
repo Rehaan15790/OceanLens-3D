@@ -34,25 +34,10 @@ function realAt(vi, lat, lon, depth, t){
   return fz===0 ? at(k) : at(k)*(1-fz) + at(k+1)*fz;
 }
 
-// Share of the bilinear weight at (lat, lon, depth) that falls on cells without model water: above
-// about 0.5 a readout is mostly extrapolated from neighbouring water (coast, shelf edge).
-function realDryWeight(lat, lon, depth){
-  if(!REAL.wet) return 0;
-  const m = REAL.meta, D = m.depths;
-  const y = Math.max(0, Math.min(m.nlat-1.000001, (lat-m.lat0)/m.step));
-  const x = Math.max(0, Math.min(m.nlon-1.000001, (lon-m.lon0)/m.step));
-  const i = Math.floor(y), j = Math.floor(x), fy = y-i, fx = x-j;
-  let k = 0;
-  while(k < D.length-1 && depth > D[k]) k++;                 // the level at or below the depth
-  const o = k*REAL.layer + i*m.nlon + j, w = REAL.wet;
-  return (1-w[o])*(1-fx)*(1-fy) + (1-w[o+1])*fx*(1-fy) + (1-w[o+m.nlon])*(1-fx)*fy + (1-w[o+m.nlon+1])*fx*fy;
-}
-
 /* ---- real Argo profiles (REAL_DATA.argo), one set per analysis ----
    Each carries HYCOM at its own position and time when the snapshot has argo.model. A profile whose
    salinity failed delayed-mode QC (sq 0) keeps its temperature; density then uses model salinity.
    C (chlorophyll, mg/m³) and O (oxygen, µmol/kg) come from BGC-Argo adjusted values; NaN = no sensor or failed QC. */
-const ARGO_MODE = {D:'delayed mode (QC\'d)', A:'adjusted', R:'real time'};
 const realProfiles = (()=>{
   const A = REAL_DATA.argo, nL = A.levels.length, miss = REAL_DATA.meta.missing, Q = REAL_DATA.meta.quant;
   const dec = (b64, key)=>{ const q = b64Int16(b64), [off, sc] = Q[key]; return Array.from(q, v=>v===miss ? NaN : off+v*sc); };

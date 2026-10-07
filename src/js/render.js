@@ -50,7 +50,6 @@ const Render = (() => {
 
   /* ---- colour scale: value -> ramp position, linear or log10 ----
      In log mode anything at or below the floor (min, or max/1000 when min <= 0) takes the colour of min. */
-  const currentScale = () => (typeof state === 'object' && state && state.scale === 'log') ? 'log' : 'linear';
   const logFloor = (min, max) => min > 0 ? min : max > 0 ? max*1e-3 : 1e-6;
   // [a, b]: the range in the scale's own units (log10 of the values in log mode)
   function scaleDomain(min, max, scale){
@@ -60,7 +59,7 @@ const Render = (() => {
   }
   // t in [0, 1] for value v on the key min..max; scale defaults to state.scale
   function rampPos(v, min, max, scale){
-    const sc = scale || currentScale(), [a, b] = scaleDomain(min, max, sc);
+    const sc = scale || state.scale, [a, b] = scaleDomain(min, max, sc);
     const x = sc === 'log' ? Math.log10(Math.max(v, logFloor(min, max))) : v, t = (x - a)/((b - a) || 1);
     return Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0));
   }
@@ -461,11 +460,11 @@ const Render = (() => {
 
   const test = {renderNow, renderInfo, pixelAt, pixelsAt, pixelAtScreen:readAt, pixelsAtScreen:readMany,
     expectedColour, groups:() => [...groups.keys()], toggle,
-    marks:kind => typeof pickableMarks === 'function' ? pickableMarks(kind) : []};
+    marks:kind => pickableMarks(kind)};
 
   return {testMode, gpuColor, gpuHex, paletteKey, paletteColor, rampPos, rampLUT, renderForExport, rampTexture, setRange, setPalette,
     ORDER, layerOrder, invalidate, takeDirty, setSurfaceRole, dataSurface, flat, line, vertexColoured, terrain, marks, isoShaded, setIsoColour, backdrop,
     setValues, fillMasked, createRenderer, pixelRatio, applySize, attach, register, test};
 })();
 // the 2D charts, colour bar and export call paletteColor(key, t); palettes.js holds data only
-if(typeof paletteColor !== 'function') window.paletteColor = Render.paletteColor;
+const paletteColor = Render.paletteColor;

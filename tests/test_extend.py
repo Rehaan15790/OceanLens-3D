@@ -429,7 +429,7 @@ class ImportSamples(AppTestCase):
                       swInView:sw.height>0 && sw.top>=L.top && sw.bottom<=L.bottom+1,
                       open:document.getElementById('profile').classList.contains('show') && profileState.inst.dataset===d.id
                         ? profileState.inst.id : null,
-                      drawn:markerItems.filter(it=>it.userData.data && it.userData.data.inst.dataset===d.id && isShown(it.vis)).length,
+                      drawn:markerItems.filter(it=>it.userData.data && it.userData.data.inst.dataset===d.id && instrumentVisible(it.vis)).length,
                       now:instrumentsNow().filter(i=>i.dataset===d.id).length,
                       text:el.textContent, inView:r.height>0 && r.top>=L.top && r.bottom<=L.bottom+1,
                       rect:[r.top, r.bottom, L.top, L.bottom]}}; }})()""")

@@ -777,11 +777,9 @@ def column_on_levels(dep, v):
     return res
 
 
-def fetch_model_at_obs(F, profiles, plan_only=False):
+def fetch_model_at_obs(F, profiles):
     das, lat, lon, dep, tim = hycom_axes(F)
     reqs = [obs_request(p, lat, lon, tim) for p in profiles]
-    if plan_only:
-        return reqs
     shape = [1, 33, 2, 2]
 
     def parse(data):
@@ -1106,20 +1104,9 @@ def main(argv=None):
     ap.add_argument('--model-netcdf', metavar='FILE',
                     help='take the model fields from a CF NetCDF-3 file instead of HYCOM (Argo, bathymetry and track '
                          'still come from the cache)')
-    ap.add_argument('--plan-model-at-obs', action='store_true',
-                    help='print the requests --model-at-obs would make and stop')
     args = ap.parse_args(argv)
 
     try:
-        if args.plan_model_at_obs:
-            F = Fetcher(args.cache)
-            argo, _, _ = fetch_argo(F, args.temperature_only)
-            reqs = fetch_model_at_obs(F, argo, plan_only=True)
-            todo = [r for r in reqs if not os.path.exists(F.path(r[1]))]
-            print(f'{len(reqs)} profiles -> {len(reqs)} requests ({len(todo)} not cached yet)')
-            for url, name, t, ij in reqs[:3]:
-                print(' ', name, url)
-            return 0
         payload, F = build(args.cache, args.fetch, args.ca_bundle, args.temperature_only, args.model_at_obs,
                            allow_hosts=args.allow_host, model_netcdf=args.model_netcdf)
     except CacheMiss as e:

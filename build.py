@@ -4,7 +4,6 @@
     python build.py                           build to dist/OceanLens3D.html (use this while working)
     python build.py --out OceanLens3D.html    rebuild the shipped file at the project root
     python build.py --check                   check the sources and that the root file is up to date
-    python build.py --watch                   rebuild dist/ whenever a source file changes
     python build.py --site dist/site          a static site with security headers (docs/DEPLOY.md)
 
 src/index.html is the manifest. The build
@@ -26,15 +25,12 @@ import json
 import os
 import re
 import sys
-import time
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, 'src')
 SHIPPED = os.path.join(ROOT, 'OceanLens3D.html')
 DEFAULT_OUT = os.path.join(ROOT, 'dist', 'OceanLens3D.html')
 BUDGET = 3_500_000                  # bytes; the pitch promises "about 3 MB"
-# External references allowed in the built page: none. The file must work with no network.
-TEMPORARY_EXTERNAL = ()
 BANNER = '<!-- Built by build.py from src/. Edit the sources, not this file. -->\n'
 # the page's content security policy; script-src gets a hash for every inline script that runs
 CSP = ("default-src 'none'; script-src {scripts}; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; "
@@ -156,7 +152,7 @@ def build():
     # nothing may point outside the file (attributes are checked with script and style bodies left out)
     tags = re.sub(r'(<(script|style)\b[^>]*>).*?(</\2>)', r'\1\3', page, flags=re.S | re.I)
     left = [u for u in re.findall(r'\b(?:src|href)\s*=\s*["\']([^"\']+)["\']', tags)
-            if not u.startswith(('#', 'data:')) and not (TEMPORARY_EXTERNAL and u.startswith(TEMPORARY_EXTERNAL))]
+            if not u.startswith(('#', 'data:'))]
     left += [u for u in re.findall(r'url\(\s*["\']?([^"\')]+)', css) if not u.startswith('data:')]
     if left:
         raise BuildError('references left unresolved: ' + ', '.join(sorted(set(left))))
@@ -257,34 +253,10 @@ def build_site(folder):
     print(f'built site {rel(folder)} {version}: index.html, 404.html, robots.txt, _headers')
 
 
-def watch(out):
-    watched = [SRC, os.path.join(ROOT, 'vendor'), os.path.join(ROOT, 'data')]
-
-    def stamp():
-        times = [os.path.getmtime(os.path.join(d, f)) for base in watched if os.path.isdir(base)
-                 for d, _, files in os.walk(base) for f in files]
-        version_file = os.path.join(ROOT, 'VERSION')
-        if os.path.exists(version_file):
-            times.append(os.path.getmtime(version_file))
-        return max(times)
-    last = None
-    print('watching src/, vendor/, data/ and VERSION; Ctrl+C to stop')
-    while True:
-        now = stamp()
-        if now != last:
-            last = now
-            try:
-                build_once(out)
-            except BuildError as e:
-                print('error: ' + str(e))
-        time.sleep(0.4)
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--out', default=DEFAULT_OUT, help='output file (default: dist/OceanLens3D.html)')
     ap.add_argument('--check', action='store_true', help='check the sources and the shipped file; write nothing')
-    ap.add_argument('--watch', action='store_true', help='rebuild whenever a source changes')
     ap.add_argument('--site', metavar='DIR', help='write a static site: index.html, 404.html, robots.txt, _headers')
     args = ap.parse_args()
     if args.check:
@@ -297,9 +269,6 @@ def main():
             return 1
         return 0
     out = os.path.abspath(args.out)
-    if args.watch:
-        watch(out)
-        return 0
     try:
         build_once(out)
     except BuildError as e:

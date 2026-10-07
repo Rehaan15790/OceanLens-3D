@@ -17,7 +17,6 @@ const importUI = (()=>{
     ['id', 'Profile or platform id'], ['type', 'Instrument type']
   ];
   const api = ()=>window.OceanLens || null;
-  const typeLabel = t=>typeof instrumentLabel==='function' ? instrumentLabel(t) : t;
   const plural = (n, one, many)=>`${n} ${n===1 ? one : many}`;
   let parsed = null, busy = false, isOpen = false;
   const autoAll = new Set();       // datasets whose import turned Show all times on
@@ -85,10 +84,10 @@ const importUI = (()=>{
     });
     renderMapping();
     // built-ins first, then any type a plugin registered at runtime
-    const sel = $('importType'), reg = api() && api().instruments ? api().instruments() : [];
+    const sel = $('importType'), reg = api().instruments();
     const types = TYPES.concat(reg.filter(t=>!TYPES.includes(t)));
     sel.textContent = '';
-    types.forEach(t=>sel.add(new Option(typeLabel(t), t)));
+    types.forEach(t=>sel.add(new Option(instrumentLabel(t), t)));
     sel.value = types.includes(p.type) ? p.type : 'other';
     $('importName').value = p.name;
   }
@@ -160,7 +159,7 @@ const importUI = (()=>{
   // nearest the first that has one, else turn on Show all times; then the first one on the map opens
   function reveal(res){
     const out = {moved:false, all:false, date:'', inst:null};
-    if(typeof instrumentsNow!=='function' || typeof dataMode==='undefined' || dataMode!=='real') return out;
+    if(dataMode!=='real') return out;
     const d = api().dataset(res.id), at = i=>+String(i.key).split(':').pop();
     const mine = d ? [].concat(...Object.keys(d.types).map(t=>api().observations(t)))
       .filter(i=>i.dataset===res.id && !(api().instrument(i.kind) || {}).gridded).sort((a, b)=>at(a) - at(b)) : [];
@@ -178,7 +177,7 @@ const importUI = (()=>{
     if(res.skipped) s += ` ${plural(res.skipped, 'profile was', 'profiles were')} outside the map and left out.`;
     if(shown.moved) s += ` The timeline moved to ${timeLabel(state.time)}, the analysis nearest the new profiles.`;
     if(shown.all) s += ` No profile is within 1.5 days of an analysis (the first is from ${shown.date}), so Show all times is now on.`;
-    else if(typeof state!=='undefined' && !state.showAllImported) s += ' Profiles within 1.5 days of the analysis time are shown; turn on Show all times to see every one.';
+    else if(!state.showAllImported) s += ' Profiles within 1.5 days of the analysis time are shown; turn on Show all times to see every one.';
     if(shown.inst) s += ` Profile ${shown.inst.id} is open.`;
     return s;
   }
@@ -197,12 +196,12 @@ const importUI = (()=>{
   }
   // charts.js updateLegend() calls this on every update: the "Real data only" note follows the data mode
   function syncMode(){
-    $('userDataMode').hidden = !$('userDataEmpty').hidden || typeof dataMode==='undefined' || dataMode==='real';
+    $('userDataMode').hidden = !$('userDataEmpty').hidden || dataMode==='real';
   }
 
   /* ---- "Your data" list ---- */
   function renderList(){
-    const list = $('userDataList'), sets = api() && api().datasets ? api().datasets().filter(d=>d.source!=='builtin') : [];
+    const list = $('userDataList'), sets = api().datasets().filter(d=>d.source!=='builtin');
     list.textContent = '';
     sets.forEach(ds=>{
       const li = document.createElement('li'), text = document.createElement('div');
@@ -210,7 +209,7 @@ const importUI = (()=>{
       text.className = 'data-item'; name.className = 'data-name'; meta.className = 'data-meta';
       const n = ds.profiles || 0;
       name.textContent = ds.name || ds.id; name.title = ds.name || ds.id;
-      meta.textContent = [typeLabel(ds.type), plural(n, 'profile', 'profiles'),
+      meta.textContent = [instrumentLabel(ds.type), plural(n, 'profile', 'profiles'),
         ds.source==='server' ? 'from the server' : (ds.format || '').toUpperCase()].filter(Boolean).join(' · ');
       text.append(name, meta);
       const rm = document.createElement('button');
@@ -223,7 +222,7 @@ const importUI = (()=>{
     const any = sets.length > 0;
     $('userDataEmpty').hidden = any;
     $('userDataOpts').hidden = !any;
-    $('userDataMode').hidden = !any || typeof dataMode==='undefined' || dataMode==='real';
+    $('userDataMode').hidden = !any || dataMode==='real';
     const other = sets.some(ds=>Object.keys(ds.types || {}).some(t=>!['argo', 'glider'].includes(t)));
     $('rowOther').hidden = !other;
     // Show all times that imports turned on goes off with the last of those datasets
@@ -298,10 +297,8 @@ const importUI = (()=>{
   });
   ov.addEventListener('click', e=>{ if(e.target===ov && !busy) close(); });
 
-  if(api() && api().on){
-    api().on('dataset', renderList);
-    api().on('server', renderServer);
-  }
+  api().on('dataset', renderList);
+  api().on('server', renderServer);
   renderList();
   renderServer();
   return {open, renderList, renderServer, readFile, syncMode};

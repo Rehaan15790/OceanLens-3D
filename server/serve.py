@@ -90,19 +90,6 @@ def parse_iso(s):
     return datetime(y, mo, d, h, mi, se, tzinfo=timezone.utc).timestamp()
 
 
-def cf_times(values, units):
-    """CF 'X since Y' numbers -> epoch seconds."""
-    m = re.match(r'\s*(\w+)\s+since\s+(\d{1,4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?', units or '')
-    if not m:
-        raise ValueError(f'time units {units!r} are not "<unit> since <date>"')
-    per = {'second': 1, 'minute': 60, 'hour': 3600, 'day': DAY}
-    unit = m.group(1).lower().rstrip('s')
-    if unit not in per:
-        raise ValueError(f'time unit {m.group(1)!r} is not supported')
-    base = datetime(*(int(g) if g else 0 for g in m.groups()[1:]), tzinfo=timezone.utc).timestamp()
-    return base + np.asarray(values, float) * per[unit]
-
-
 # ---- datasets ------------------------------------------------------------------------------------------------
 class Dataset:
     """A gridded ocean state on a rectilinear grid, with optional profiles and a storm track.
@@ -334,7 +321,7 @@ def load_netcdf(path):
     depth = np.asarray(V[zn]['data'], float) if zn else np.array([0.0])
     if zn and (str(V[zn]['attrs'].get('positive', '')).lower() == 'up' or (depth <= 0).all() and (depth < 0).any()):
         depth = -depth
-    tsec = cf_times(V[tn]['data'], V[tn]['attrs'].get('units')) if tn else np.array([0.0])
+    tsec = ncio.cf_time_epoch(V[tn]['data'], V[tn]['attrs'].get('units', ''), V[tn]['attrs'].get('calendar', 'standard')) if tn else np.array([0.0])
     axes = {V[la]['dims'][0]: 'y', V[lo]['dims'][0]: 'x'}
     if zn:
         axes[V[zn]['dims'][0]] = 'z'
