@@ -65,7 +65,7 @@ pipeline, the server and their tests, and by `data-pipeline/facts_reference.py`,
 that the `unit` suite checks against the app.
 
 The browser tests drive the built file in headless Chromium through the DevTools protocol, with a client written
-against the Python standard library. There are 193 automated tests: the 134 that `tools/run.py --list` names, plus
+against the Python standard library. There are 194 automated tests: the 135 that `tools/run.py --list` names, plus
 the 59 data-pipeline tests that the `unit` suite runs. The checks also run as root (in a container or WSL, the
 client starts the browser with `--no-sandbox`) and on GitHub Actions, where `.github/workflows/ci.yml` runs
 `tools/check.py --quick`. See `docs/TESTING.md`.

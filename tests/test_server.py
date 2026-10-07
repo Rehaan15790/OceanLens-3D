@@ -208,6 +208,7 @@ class ServerTest(unittest.TestCase):
         for path, status, code in [('/api/v1/datasets/nope', 404, 'NoSuchDataset'),
                                    ('/api/v1/datasets/amphan-2020/field?var=xyz', 400, 'InvalidParameterValue'),
                                    ('/api/v1/datasets/amphan-2020/field?var=temp&depth=5000', 400, 'InvalidDimensionValue'),
+                                   ('/api/v1/datasets/amphan-2020/field?var=temp&depth=-50', 400, 'InvalidDimensionValue'),
                                    ('/api/v1/datasets/amphan-2020/field?var=temp&time=2021-01-01', 400, 'InvalidDimensionValue'),
                                    ('/api/v1/datasets/amphan-2020/column?lat=40&lon=80', 400, 'InvalidParameterValue'),
                                    ('/api/v1/datasets/cf-model/snapshot', 404, 'NoSnapshot'),
@@ -251,6 +252,14 @@ class ServerTest(unittest.TestCase):
         embedded = json.loads(swapped[a:swapped.index('</script>', a)])
         self.assertEqual(embedded, json.loads(SNAP.read_bytes()))
         self.assertEqual(self.get('/?dataset=cf-model')[0], 404)
+
+    def test_page_cache_drops_old_builds(self):
+        if not self.app:
+            self.skipTest('no built app to serve')
+        stale = [('app', -1.0), ('page', -1.0, 'copy-2020')]
+        self.srv.gz_cache.update({k: (0, b'') for k in stale})
+        self.get('/')
+        self.assertFalse(set(stale) & set(self.srv.gz_cache), 'compressed pages of an older build must be dropped')
 
     def test_cors(self):
         self.assertIsNone(self.get('/api/v1/datasets', {'Origin': 'https://example.org'})[1]['Access-Control-Allow-Origin'])

@@ -156,7 +156,9 @@ class Dataset:
     def layer(self, key, ti, depth):
         """2D field at one depth (m, positive down), linear between levels."""
         f, D = self.fields[key][ti], self.depths
-        if not np.isfinite(depth) or depth > D[-1] + 1e-6:
+        if not np.isfinite(depth) or depth < 0:
+            raise ApiError(400, 'InvalidDimensionValue', f'depth {depth:g} m: depth is in metres, positive down', 'depth')
+        if depth > D[-1] + 1e-6:
             raise ApiError(400, 'InvalidDimensionValue', f'depth {depth:g} m is below the deepest level ({D[-1]:g} m)', 'depth')
         if len(D) == 1 or depth <= D[0]:
             return f[0]
@@ -581,6 +583,9 @@ class Handler(BaseHTTPRequestHandler):
                              'or start the server with <code>--app FILE</code>. The API is at <a href="/api/v1">/api/v1</a>.',
                              'text/html; charset=utf-8')
         mtime, ds_id = Path(app).stat().st_mtime, self.param(q, 'dataset')
+        # drop compressed copies of earlier builds, so rebuilding while the server runs does not grow memory
+        self.server.gz_cache = {k: v for k, v in self.server.gz_cache.copy().items()
+                                if k[0] == 'snap' or k[1] == mtime}
         if ds_id in (None, self.server.default_id):
             return self.send(Path(app).read_bytes(), 'text/html; charset=utf-8', cache_key=('app', mtime))
         ds = self.server.datasets.get(ds_id)
