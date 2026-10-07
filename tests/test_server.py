@@ -3,15 +3,18 @@ WCS 2.0.1 (CF NetCDF-3 round trip through data-pipeline/ncio.py, CSV) and a CF N
 
 No browser. Expected values come from the snapshot and src/js/palettes.js decoded here, independently of the server.
 """
-import base64, gzip, http.client, json, re, shutil, struct, sys, threading, unittest, zlib
+import base64, gzip, hashlib, http.client, json, re, shutil, socket, struct, subprocess, sys, tempfile, threading, time, unittest, zlib
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / 'server'))
 sys.path.insert(0, str(REPO / 'data-pipeline'))
+sys.path.insert(0, str(REPO / 'tools'))
+import cdp                      # noqa: E402
 import ncio                     # noqa: E402
 import serve                    # noqa: E402
 
@@ -484,6 +487,313 @@ class ServerTest(unittest.TestCase):
         b = self.get('/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=cf-model.temp')[2]
         back = ncio.read_bytes(b)['vars']['temp']['data']
         np.testing.assert_allclose(back, temp[:, :, ::-1, :], rtol=0, atol=1e-6)
+
+
+class ServerSecurityTest(unittest.TestCase):
+    """Attacks on the server over raw sockets, so what is sent is not normalised. Each of these got a 500, froze
+    the server, left a smuggled request in the stream or let a peer use unbounded memory before it was fixed."""
+    longMessage = False
+    WCS = '/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=amphan-2020.temp'
+
+    @classmethod
+    def setUpClass(cls):
+        WORK.mkdir(parents=True, exist_ok=True)
+        cls.srv = serve.make_server('127.0.0.1', 0, [SNAP], [], app='', quiet=True)
+        cls.port = cls.srv.server_address[1]
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def raw(self, data, timeout=5, port=None):
+        """Send bytes; everything the server sends back until it closes the connection."""
+        s = socket.create_connection(('127.0.0.1', port or self.port), timeout=timeout)
+        out = b''
+        try:
+            s.sendall(data)
+            while True:
+                c = s.recv(65536)
+                if not c:
+                    break
+                out += c
+        finally:
+            s.close()
+        return out
+
+    def request(self, path, headers=None, method='GET', version='HTTP/1.1', timeout=5, port=None):
+        """(status, {lower-case name: [values]}, body) of the one response to a request that asks for the connection to close."""
+        hd = {'Host': 'localhost', 'Connection': 'close', **(headers or {})}
+        head = f'{method} {path} {version}\r\n' + ''.join(f'{k}: {v}\r\n' for k, v in hd.items()) + '\r\n'
+        head, _, body = self.raw(head.encode('latin-1'), timeout, port).partition(b'\r\n\r\n')
+        lines = head.decode('latin-1').split('\r\n')
+        h = {}
+        for line in lines[1:]:
+            k, _, v = line.partition(':')
+            h.setdefault(k.strip().lower(), []).append(v.strip())
+        return int(lines[0].split()[1]), h, body
+
+    def test_wcs_subset_has_no_regex_blowup(self):
+        # the old pattern put \s* beside [^,()]*? twice: cubic, so 1500 blanks froze every thread for 10 s
+        t = time.time()
+        s, h, b = self.request(self.WCS + '&SUBSET=Lat(' + '+' * 3000 + 'x', timeout=8)
+        self.assertEqual(s, 400)
+        self.assertLess(time.time() - t, 3, 'a long run of blanks must be refused at once')
+        base = self.WCS + '&FORMAT=text/csv&SUBSET=Long(80,82)&SUBSET='
+        plain, spaced = self.request(base + 'Lat(10,12)'), self.request(base + 'Lat(%20%2010%20,%20%2012%20%20)')
+        self.assertEqual((plain[0], spaced[0]), (200, 200))
+        self.assertEqual(plain[2], spaced[2], 'blanks inside the brackets are still allowed')
+
+    def test_odd_time_values_are_400_not_500(self):
+        for t in ('%C2%B2', '%D9%A3', '9' * 5000, '0' * 5000, '9' * 12):
+            s, h, b = self.request(f'/api/v1/datasets/amphan-2020/field?var=temp&time={t}')
+            self.assertEqual(s, 400, t[:20])
+            self.assertEqual(json.loads(b)['error']['code'], 'InvalidDimensionValue', t[:20])
+        self.assertEqual(self.request('/api/v1/datasets/amphan-2020/field?var=temp&time=1')[0], 200)
+
+    def test_getmap_background_colour_with_blanks_is_400(self):
+        # bytes.fromhex skips blanks, so 'ab  cd' was two bytes and the fill of the dry cells raised ValueError
+        s, h, b = self.request('/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=amphan-2020.temp&CRS=CRS:84'
+                               '&BBOX=61,6,92,22&WIDTH=4&HEIGHT=4&BGCOLOR=ab++cd')
+        self.assertEqual(s, 400)
+
+    def test_request_body_cannot_smuggle_a_second_request(self):
+        smuggled = b'GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+        n = b'%d' % len(smuggled)
+        for name, head in [('POST', b'POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: ' + n),
+                           ('GET', b'GET /healthz HTTP/1.1\r\nHost: localhost\r\nContent-Length: ' + n),
+                           ('two Content-Length', b'GET /healthz HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nContent-Length: ' + n),
+                           ('Transfer-Encoding', b'GET /healthz HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: identity\r\nContent-Length: ' + n)]:
+            out = self.raw(head + b'\r\n\r\n' + smuggled)
+            self.assertEqual(out.count(b'HTTP/1.1 '), 1, f'{name}: the body must not be answered as a request')
+            self.assertIn(b'Connection: close', out, name)
+        # pipelined requests without a body are still served on one connection
+        two = b'GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n' * 2 + smuggled
+        self.assertEqual(self.raw(two).count(b'HTTP/1.1 200'), 3)
+
+    def test_host_header_is_checked_strictly(self):
+        for host in ('localhost:80@evil.example', 'evil.example', 'localhost.evil.example', 'localhost:99999x', ''):
+            self.assertEqual(self.request('/healthz', {'Host': host})[0], 421, host)
+        for host in ('localhost', 'LOCALHOST:8080', f'127.0.0.1:{self.port}', '[::1]:8080'):
+            self.assertEqual(self.request('/healthz', {'Host': host})[0], 200, host)
+        twice = self.raw(b'GET /healthz HTTP/1.1\r\nHost: localhost\r\nHost: evil.example\r\nConnection: close\r\n\r\n')
+        self.assertTrue(twice.startswith(b'HTTP/1.1 421'), 'two Host headers')
+        for target in ('http://evil.example/healthz', 'http://localhost@evil.example/healthz', 'http://['):
+            self.assertEqual(self.request(target)[0], 421, target)
+        self.assertEqual(self.request(f'http://localhost:{self.port}/healthz')[0], 200)
+        self.srv.check_host = False                  # as behind --public-url: a malformed target is a 400, not a dropped connection
+        try:
+            self.assertEqual(self.request('http://[')[0], 400)
+        finally:
+            self.srv.check_host = True
+
+    def test_security_headers_on_every_response(self):
+        csp = ("frame-ancestors 'none'", "base-uri 'none'", "object-src 'none'", "form-action 'none'")
+        for cors, corp in (((), 'same-origin'), (('*',), 'cross-origin')):
+            self.srv.cors = cors
+            try:
+                for path, kw in [('/healthz', {}), ('/', {}), ('/nothing', {}), ('/api/v1/datasets', {'method': 'POST'}),
+                                 ('/x', {'method': 'BREW'})]:        # the last is the standard library's own 501 page
+                    s, h, b = self.request(path, **kw)
+                    self.assertEqual(h['x-content-type-options'], ['nosniff'], (path, kw))
+                    self.assertEqual(h['referrer-policy'], ['no-referrer'], (path, kw))
+                    self.assertEqual(h['cross-origin-resource-policy'], [corp], (path, kw))
+                    policy = h['content-security-policy'][0]
+                    self.assertTrue(all(d in policy for d in csp), policy)
+                    self.assertFalse('default-src' in policy or 'script-src' in policy, 'the page carries its own policy')
+            finally:
+                self.srv.cors = ()
+        self.assertEqual(self.request('/nothing')[1]['cache-control'], ['no-store'], 'an error must not be cached')
+        self.assertEqual(self.request('/healthz')[1]['cache-control'], ['public, max-age=300'])
+
+    def test_cors_varies_on_origin(self):
+        self.srv.cors = ('https://good.example',)
+        try:
+            for origin, allowed in (('https://good.example', True), ('https://evil.example', False), ('null', False),
+                                    ('https://good.example.evil.example', False), (None, False)):
+                s, h, b = self.request('/api/v1/datasets', {'Origin': origin} if origin else {})
+                self.assertEqual(h.get('access-control-allow-origin'), ['https://good.example'] if allowed else None, origin)
+                self.assertIn('Origin', ','.join(h.get('vary', [])), f'{origin}: caches must key on Origin')
+                self.assertNotIn('access-control-allow-credentials', h)
+        finally:
+            self.srv.cors = ()
+
+    def test_connection_cap(self):
+        srv = serve.make_server('127.0.0.1', 0, [SNAP], [], app='', quiet=True)
+        srv.conn_slots = threading.BoundedSemaphore(3)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        port, idle = srv.server_address[1], []
+
+        def status():
+            c = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
+            try:
+                c.request('GET', '/healthz')
+                r = c.getresponse()
+                r.read()
+                return r.status
+            finally:
+                c.close()
+        try:
+            for _ in range(3):                       # three half-sent requests hold the three slots
+                s = socket.create_connection(('127.0.0.1', port))
+                s.sendall(b'GET /healthz HTTP/1.1\r\nHost: localhost\r\nX-A: ')
+                idle.append(s)
+            self.assertEqual(status(), 503, 'a connection past the cap is refused at once')
+            idle.pop().close()                       # a slot frees when its connection ends
+            end, code = time.time() + 5, None
+            while code != 200 and time.time() < end:
+                code = status()
+                time.sleep(0.05)
+            self.assertEqual(code, 200)
+        finally:
+            for s in idle:
+                s.close()
+            srv.shutdown()
+            srv.server_close()
+
+    def test_lingering_close_ends_even_if_the_client_keeps_sending(self):
+        a, b = socket.socketpair()
+        stop = threading.Event()
+
+        def chatter():
+            while not stop.is_set():
+                try:
+                    b.send(b'x')
+                except OSError:
+                    return
+                time.sleep(0.05)
+        threading.Thread(target=chatter, daemon=True).start()
+        old, serve.LINGER_SECONDS = getattr(serve, 'LINGER_SECONDS', 5), 0.5
+        try:
+            th = threading.Thread(target=self.srv.shutdown_request, args=(a,), daemon=True)
+            th.start()
+            th.join(3)
+            self.assertFalse(th.is_alive(), 'the drain after a response is bounded, whatever the client sends')
+        finally:
+            serve.LINGER_SECONDS = old
+            stop.set()
+            th.join(3)
+            b.close()
+
+    def test_dap_refuses_before_copying_values(self):
+        calls, real = [], serve.dap_part
+
+        def spy(ds, grid, name, dims, idx, *values):
+            calls.append((name, values[0] if values else True))
+            return real(ds, grid, name, dims, idx, *values)
+        with mock.patch.object(serve, 'dap_part', spy), mock.patch.object(serve, 'MAX_CELLS', 100):
+            s, h, b = self.request('/opendap/amphan-2020.dods?temp')
+            self.assertEqual(s, 400)
+            self.assertIn(b'values requested', b)
+            self.assertEqual([c for c in calls if c[0] == 'temp'], [], 'a projection over the limit must not copy model values')
+        calls.clear()
+        with mock.patch.object(serve, 'dap_part', spy):
+            s, h, b = self.request('/opendap/amphan-2020.dds')
+            self.assertEqual(s, 200)
+            self.assertTrue(calls and not any(v for _, v in calls), 'a .dds is declarations only: no values are copied')
+
+    def test_non_latin1_variable_name_gives_one_clean_response(self):
+        # a model file may call a variable anything: Content-Disposition must stay ASCII or the reply is two replies
+        f = WORK / 'hostile-name.nc'
+        ncio.write(str(f), {'time': None, 'lat': 2, 'lon': 2}, {
+            'time': {'dims': ('time',), 'data': np.array([0.0]), 'attrs': {'standard_name': 'time', 'units': 'days since 2020-05-01 00:00:00'}},
+            'lat': {'dims': ('lat',), 'data': np.array([0.0, 1.0]), 'attrs': {'standard_name': 'latitude', 'units': 'degrees_north'}},
+            'lon': {'dims': ('lon',), 'data': np.array([0.0, 1.0]), 'attrs': {'standard_name': 'longitude', 'units': 'degrees_east'}},
+            '温度': {'dims': ('time', 'lat', 'lon'), 'dtype': 'f4', 'data': np.ones((1, 2, 2), np.float32),
+                             'attrs': {'units': 'degC', 'long_name': '</Title><x>"&'}},
+        }, {'Conventions': 'CF-1.8', 'title': 'hostile'})
+        srv = serve.make_server('127.0.0.1', 0, [], [f], app='', quiet=True)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            for fmt, ext in (('text/csv', 'csv'), ('application/netcdf', 'nc')):
+                path = f'/wcs?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=hostile-name.%E6%B8%A9%E5%BA%A6&FORMAT={fmt}'
+                out = self.raw(f'GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'.encode(), port=srv.server_address[1])
+                self.assertEqual(out.count(b'HTTP/1.1 '), 1, fmt)
+                s, h, b = self.request(path, port=srv.server_address[1])
+                self.assertEqual(s, 200, fmt)
+                self.assertRegex(h['content-disposition'][0], r'^attachment; filename="[A-Za-z0-9_.-]+\.' + ext + '"$')
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+    def test_warnings_when_exposed(self):
+        self.assertEqual(serve.exposure_warnings('127.0.0.1', []), [])
+        self.assertEqual(serve.exposure_warnings('localhost', ['https://portal.example']), [])
+        self.assertEqual(len(serve.exposure_warnings('0.0.0.0', [])), 1)
+        self.assertEqual(len(serve.exposure_warnings('127.0.0.1', ['*'])), 1)
+        self.assertEqual(len(serve.exposure_warnings('0.0.0.0', ['*'])), 2)
+        p = subprocess.Popen([sys.executable, str(REPO / 'server' / 'serve.py'), '--port', '0', '--cors', '*', '--quiet',
+                              '--data', str(SNAP)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            p.stdout.readline()                      # the banner: the server is up
+            time.sleep(0.5)
+        finally:
+            p.kill()
+            out, err = p.communicate(timeout=10)
+        self.assertIn("--cors '*'", err, 'start-up says plainly that any web page can read the data')
+
+
+class DevToolsClientTest(unittest.TestCase):
+    """tools/cdp.py: a browser (and so a page) is on the other end of the DevTools socket; it must not make the client
+    buffer without limit, and a start-up that fails must not leave the browser running."""
+
+    def peer(self, behave):
+        """A one-shot WebSocket server on loopback; behave(conn, accept_line) runs after the upgrade request is read."""
+        srv = socket.socket()
+        srv.bind(('127.0.0.1', 0))
+        srv.listen(1)
+
+        def run():
+            c, _ = srv.accept()
+            try:
+                buf = b''
+                while b'\r\n\r\n' not in buf:
+                    buf += c.recv(4096)
+                key = re.search(rb'Sec-WebSocket-Key: (\S+)', buf).group(1).decode()
+                accept = base64.b64encode(hashlib.sha1((key + cdp.GUID).encode()).digest()).decode()
+                behave(c, f'HTTP/1.1 101 Switching Protocols\r\nSec-WebSocket-Accept: {accept}\r\n\r\n'.encode())
+                time.sleep(6)           # silent and open: an unbounded client waits for more, a bounded one has refused
+            except OSError:
+                pass
+            finally:
+                c.close()
+                srv.close()
+        threading.Thread(target=run, daemon=True).start()
+        return f'ws://127.0.0.1:{srv.getsockname()[1]}/x'
+
+    def test_frame_length_is_bounded(self):
+        def behave(c, accept):
+            c.sendall(accept + bytes([0x81, 127]) + struct.pack('>Q', 1 << 40) + b'z' * 1000)
+        ws = cdp.WebSocket(self.peer(behave), timeout=5)
+        with self.assertRaises(cdp.CDPError):
+            ws.recv(3)
+
+    def test_upgrade_reply_is_bounded(self):
+        def behave(c, accept):                      # a status line, then 100 KB of headers
+            c.sendall(b'HTTP/1.1 101 Switching Protocols\r\n' + (b'X-Junk: ' + b'a' * 1000 + b'\r\n') * 100 + b'\r\n')
+        with self.assertRaisesRegex(cdp.CDPError, 'over 64 KiB'):
+            cdp.WebSocket(self.peer(behave), timeout=5)
+
+    def test_failed_start_leaves_no_browser_running(self):
+        started = []
+
+        def start_then_fail(self_, *a, **k):
+            self_.profile = tempfile.mkdtemp(prefix='oceanlens-cdp-test-')
+            self_.proc = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])
+            started.append((self_.proc, self_.profile))
+            raise cdp.CDPError('no page target')
+        try:
+            with mock.patch.object(cdp.Browser, '_start', start_then_fail):
+                with self.assertRaises(cdp.CDPError):
+                    cdp.Browser(browser=sys.executable)
+            self.assertIsNotNone(started[0][0].poll(), 'the browser process must be stopped when start-up fails')
+            self.assertFalse(Path(started[0][1]).exists(), 'and its throwaway profile removed')
+        finally:
+            for p, profile in started:
+                if p.poll() is None:
+                    p.kill()
+                shutil.rmtree(profile, ignore_errors=True)
 
 
 if __name__ == '__main__':

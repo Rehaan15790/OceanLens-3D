@@ -29,6 +29,10 @@ MAX_PIXELS, MAX_SIDE, MAX_CELLS = 4_194_304, 2048, 5_000_000
 HEAVY_SLOTS = 4                   # GetMap and GetCoverage requests served at once; more get 503
 MAP_BLOCK_ROWS = 256              # GetMap samples this many rows at a time, to bound memory
 LOOPBACK = ('127.0.0.1', '::1', 'localhost')
+MAX_CONNECTIONS = 256             # connections served at once (one thread each); more get an immediate 503
+LINGER_SECONDS = 5                # after a response, the most time in all to wait for the client to close first
+HOST_RE = re.compile(r'(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?', re.I)    # the Host values a loopback bind answers
+CSP = "frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'none'"   # header-only: the page has its own policy
 DAY = 86400.0
 
 # Known variables. Keys match the app; units are CF/UDUNITS strings, `uom` is the UCUM code WCS wants.
@@ -145,7 +149,7 @@ class Dataset:
         if value is None or str(value).strip().lower() in ('', 'current', 'default'):
             return 0
         value = str(value).strip()
-        if value.isdigit():
+        if value.isascii() and value.isdigit() and len(value) <= 9:       # '²' is a digit to isdigit() but not to int()
             i = int(value)
             if i >= len(self.times):
                 raise ApiError(400, 'InvalidDimensionValue', f'time index {i} is past the last of {len(self.times)} times', 'time')
@@ -415,18 +419,45 @@ class OceanServer(ThreadingHTTPServer):
         self.gz_cache, self.pages = {}, {}
         self.default_id = embedded_id(self.datasets, app)
         self.heavy = threading.BoundedSemaphore(HEAVY_SLOTS)
+        self.conn_slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         # on a loopback bind, only loopback Host names: a page on another site cannot reach the API through a
         # DNS name rebound to 127.0.0.1
         self.check_host = addr[0] in LOOPBACK and not public_url
 
+    def process_request(self, request, client_address):
+        # a thread per connection, so a flood of idle connections is cut off: past MAX_CONNECTIONS, answer 503 and close
+        if not self.conn_slots.acquire(blocking=False):
+            try:
+                request.settimeout(0.05)             # this is the accept loop: wait for nothing longer
+                request.sendall(b'HTTP/1.1 503 Service Unavailable\r\nRetry-After: 1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
+                request.shutdown(socket.SHUT_WR)
+                request.recv(65536)                  # take the request it sent: unread data would make the close a reset that can eat the 503
+            except OSError:
+                pass
+            return self.close_request(request)
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.conn_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.conn_slots.release()
+
     def shutdown_request(self, request):
-        # Lingering close: send FIN, then wait (up to 5 s) for the client to finish reading and close. Closing at
-        # once can reset the connection on Windows and cut off the tail of a large response.
+        # Lingering close: send FIN, then wait (up to LINGER_SECONDS in all, however the client behaves) for it to
+        # finish reading and close. Closing at once can reset the connection on Windows and cut off the tail of a
+        # large response.
         try:
             request.shutdown(socket.SHUT_WR)
-            request.settimeout(5)
-            while request.recv(65536):
-                pass
+            end = time.monotonic() + LINGER_SECONDS
+            while end > time.monotonic():
+                request.settimeout(max(end - time.monotonic(), 0.001))
+                if not request.recv(65536):
+                    break
         except OSError:
             pass
         self.close_request(request)
@@ -474,16 +505,34 @@ class Handler(BaseHTTPRequestHandler):
     do_PUT = do_DELETE = do_PATCH = do_POST
 
     # -- responses
-    def _common_headers(self):
+    def parse_request(self):
+        ok = super().parse_request()
+        if ok:
+            h = self.headers
+            # no route reads a request body: answer, then close, so its bytes are never taken for the next request
+            if 'Transfer-Encoding' in h or any(v.strip() != '0' for v in h.get_all('Content-Length', ())):
+                self.close_connection = True
+        return ok
+
+    def end_headers(self):
+        # on every response, the stdlib's own error pages included
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
+        self.send_header('Cross-Origin-Resource-Policy', 'cross-origin' if self.server.cors else 'same-origin')
+        self.send_header('Content-Security-Policy', CSP)
+        super().end_headers()
+
+    def _common_headers(self):
         origin = self.headers.get('Origin')
         allowed = self.server.cors
+        if allowed:
+            self.send_header('Vary', 'Origin')            # the answer depends on the Origin: caches must key on it
         if allowed and origin and ('*' in allowed or origin in allowed):
             self.send_header('Access-Control-Allow-Origin', '*' if '*' in allowed else origin)
             self.send_header('Access-Control-Expose-Headers', 'X-OceanLens-Shape, X-OceanLens-Offset, '
                              'X-OceanLens-Scale, X-OceanLens-Missing, X-OceanLens-Time, X-OceanLens-Depth')
-            self.send_header('Vary', 'Origin')
+        if self.close_connection:
+            self.send_header('Connection', 'close')
 
     def send(self, body, ctype, status=200, headers=None, cache_key=None):
         """Write a response. Text over 1400 bytes is gzipped when the client accepts it; cache_key keeps the
@@ -503,7 +552,7 @@ class Handler(BaseHTTPRequestHandler):
         self._common_headers()
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-cache' if 'html' in ctype else 'public, max-age=300')
+        self.send_header('Cache-Control', 'no-store' if status >= 400 else 'no-cache' if 'html' in ctype else 'public, max-age=300')
         if gz:
             self.send_header('Content-Encoding', 'gzip')
             self.send_header('Vary', 'Accept-Encoding')
@@ -528,12 +577,18 @@ class Handler(BaseHTTPRequestHandler):
         return f'http://{host}'
 
     def host_ok(self):
-        """False when bound to loopback and the Host header names another host (DNS rebinding)."""
+        """False when bound to loopback and the request names another host (DNS rebinding): there must be one Host
+        header, exactly localhost, 127.0.0.1 or [::1] (optionally with a port), and an absolute-form request target
+        must name the same."""
         if not self.server.check_host:
             return True
-        host = (self.headers.get('Host') or '').lower()
-        name = host[1:host.index(']')] if host.startswith('[') and ']' in host else host.rsplit(':', 1)[0]
-        return name in LOOPBACK
+        hosts = self.headers.get_all('Host', ())
+        try:
+            target = urlsplit(self.path).netloc
+        except ValueError:
+            return False
+        return len(hosts) == 1 and HOST_RE.fullmatch(hosts[0].strip()) is not None and \
+            (not target or HOST_RE.fullmatch(target) is not None)
 
     def misdirected(self):
         """HTTP 421 for a request host_ok() refused."""
@@ -555,7 +610,10 @@ class Handler(BaseHTTPRequestHandler):
         self._head = head
         if not self.host_ok():
             return self.misdirected()
-        url = urlsplit(self.path)
+        try:
+            url = urlsplit(self.path)
+        except ValueError:                 # e.g. "GET http://[ HTTP/1.1"
+            return self.send_json({'error': {'code': 'BadRequest', 'message': 'malformed request target'}}, 400)
         path = re.sub(r'/+', '/', url.path).rstrip('/') or '/'
         try:
             q = {k.lower(): v for k, v in parse_qs(url.query, keep_blank_values=True).items()}
@@ -774,15 +832,13 @@ class Handler(BaseHTTPRequestHandler):
         hdr = {'XDODS-Server': 'dods/2.0', 'XOPeNDAP-Server': f'OceanLens/{VERSION}'}
         if ext == 'das':
             return self.send(dap_das(ds), 'text/plain; charset=utf-8', headers=dict(hdr, **{'Content-Description': 'dods-das'}))
-        items = dap_projection(ds, query)
-        cells = sum(it['cells'] for it in items)
-        limit = MAX_CELLS // 5 if ext in ('ascii', 'asc') else MAX_CELLS
-        if cells > limit:
-            raise ApiError(400, 'TooLarge', f'{cells} values requested; the limit for .{ext} is {limit}')
-        dds = dap_dds(ds, items)
-        if ext == 'dds':
-            return self.send(dds, 'text/plain; charset=utf-8', headers=dict(hdr, **{'Content-Description': 'dods-dds'}))
-        with self.busy():
+        limit = (MAX_CELLS // 5 if ext in ('ascii', 'asc') else MAX_CELLS, ext)
+        if ext == 'dds':                 # shapes only: no values are copied, so no heavy slot
+            return self.send(dap_dds(ds, dap_projection(ds, query, limit, False)), 'text/plain; charset=utf-8',
+                             headers=dict(hdr, **{'Content-Description': 'dods-dds'}))
+        with self.busy():                # the values are copied here, so only HEAVY_SLOTS requests hold them at once
+            items = dap_projection(ds, query, limit)
+            dds = dap_dds(ds, items)
             if ext == 'dods':
                 body = dds.encode('utf-8') + b'Data:\n' + b''.join(dap_xdr(c) for it in items for c in it['parts'])
                 return self.send(body, 'application/octet-stream', headers=dict(hdr, **{'Content-Description': 'dods-data'}))
@@ -880,6 +936,8 @@ class Handler(BaseHTTPRequestHandler):
             bg = (self.param(q, 'bgcolor') or '0xFFFFFF').lower().replace('0x', '').replace('#', '')
             try:
                 rgb = np.frombuffer(bytes.fromhex(bg[-6:].rjust(6, 'f')), np.uint8)
+                if rgb.size != 3:                  # fromhex skips blanks: 'ab  cd' is two bytes
+                    raise ValueError
             except ValueError:
                 raise ApiError(400, 'InvalidParameterValue', 'BGCOLOR must be 0xRRGGBB', 'bgcolor')
         lons = box[0] + (np.arange(w) + 0.5) * (box[2] - box[0]) / w
@@ -1066,7 +1124,7 @@ class Handler(BaseHTTPRequestHandler):
                  'lat': 'lat', 'latitude': 'lat', 'y': 'lat', 'long': 'lon', 'lon': 'lon', 'longitude': 'lon', 'x': 'lon'}
         sel = {a: np.arange(len(v)) for a, v in axes.items()}
         for s in q.get('subset', []):
-            m = re.fullmatch(r'\s*(\w+)\s*\(\s*([^,()]*?)\s*(?:,\s*([^,()]*?)\s*)?\)\s*', s)
+            m = re.fullmatch(r'\s*(\w+)\s*\(([^,()]*)(?:,([^,()]*))?\)\s*', s)     # no \s* beside a [^,()]*: that was cubic
             axis = names.get(m.group(1).lower()) if m else None
             if not axis:
                 raise ApiError(400, 'InvalidAxisLabel' if m else 'InvalidSubsetting',
@@ -1075,7 +1133,7 @@ class Handler(BaseHTTPRequestHandler):
             axis = 'depth' if axis == 'elevation' else axis
 
             def val(v):
-                v = v.strip('"\'')
+                v = v.strip().strip('"\'')
                 if v in ('*', ''):
                     return None
                 try:
@@ -1119,7 +1177,7 @@ class Handler(BaseHTTPRequestHandler):
         """The selected cells as CF NetCDF-3 (the default) or CSV."""
         data = ds.fields[key][np.ix_(it, ik, iy, ix)]
         fmt = (self.param(q, 'format') or 'application/netcdf').lower()
-        name = f'{ds.id}.{key}'
+        name = re.sub(r'[^A-Za-z0-9_.-]', '_', f'{ds.id}.{key}')      # for Content-Disposition: ASCII only, whatever the file called the variable
         if fmt in ('text/csv', 'csv'):
             if cells > MAX_CELLS // 5:
                 raise ApiError(400, 'InvalidSubsetting', f'{cells} cells requested; CSV is limited to {MAX_CELLS // 5}', 'subset')
@@ -1205,9 +1263,11 @@ def dap_slabs(text, sizes, term):
     return out
 
 
-def dap_projection(ds, query):
+def dap_projection(ds, query, limit=None, values=True):
     """A DAP2 projection -> items to send, in request order. An item is a top-level axis array, or a model
-    variable as a Grid (array and its four maps) or as a Structure of the parts asked for."""
+    variable as a Grid (array and its four maps) or as a Structure of the parts asked for. limit is (most values,
+    extension): a larger projection is refused before any value is copied. values=False builds the declarations
+    only (a .dds)."""
     ce = unquote(query or '').strip()
     proj, _, sel = ce.partition('&')
     if sel.strip():
@@ -1227,7 +1287,7 @@ def dap_projection(ds, query):
         if name in C and part is None:
             idx = dap_slabs(slab, [len(C[name])], term)[0]
             items.append({'kind': 'array', 'name': name, 'cells': len(idx),
-                          'parts': [dap_part(ds, name, name, name, [idx])]})
+                          'parts': [dap_part(ds, name, name, name, [idx], values)]})
             continue
         if name not in ds.fields or (part is not None and part != name and part not in C):
             raise ApiError(404, 'NoSuchVariable', f'no variable {term.split("[")[0]!r}; see the .dds')
@@ -1243,27 +1303,32 @@ def dap_projection(ds, query):
             g['sel'][name] = dap_slabs(slab, shape, term)
         else:
             g['sel'][part] = dap_slabs(slab, [len(C[part])], term)
+    for g in (it for it in items if it['kind'] == 'grid'):      # count the values before copying any
+        g['cells'] = sum(int(np.prod([len(i) for i in idx])) for idx in g['sel'].values())
+    cells = sum(it['cells'] for it in items)
+    if limit and cells > limit[0]:
+        raise ApiError(400, 'TooLarge', f'{cells} values requested; the limit for .{limit[1]} is {limit[0]}')
     for g in (it for it in items if it['kind'] == 'grid'):
         order = [x for x in (g['name'],) + AXES if x in g['sel']]
-        g['parts'] = [dap_part(ds, g['name'], x, AXES if x == g['name'] else (x,), g['sel'][x]) for x in order]
+        g['parts'] = [dap_part(ds, g['name'], x, AXES if x == g['name'] else (x,), g['sel'][x], values) for x in order]
         array = g['parts'][0] if order[0] == g['name'] else None
         g['grid'] = len(order) == 5 and array is not None and \
             all(len(g['sel'][a][0]) == n for a, n in zip(AXES, array['shape']))
-        g['cells'] = sum(int(np.prod(c['shape'])) for c in g['parts'])
     return items
 
 
-def dap_part(ds, grid, name, dims, idx):
-    """One array to send: its declaration and its values (float32 with fill for model data, float64 for axes)."""
-    if name in ds.fields:
+def dap_part(ds, grid, name, dims, idx, values=True):
+    """One array to send: its declaration and its values (float32 with fill for model data, float64 for axes);
+    values=False leaves the values out (data is None)."""
+    kind = 'Float32' if name in ds.fields else 'Float64'
+    data = None
+    if values and kind == 'Float32':
         data = ds.fields[name][np.ix_(*idx)]
         data = np.where(np.isfinite(data), data, FILL).astype('>f4')
-        kind = 'Float32'
-    else:
+    elif values:
         data = coords(ds)[name][idx[0]].astype('>f8')
-        kind = 'Float64'
     dims = (dims,) if isinstance(dims, str) else dims
-    return {'grid': grid, 'name': name, 'kind': kind, 'dims': dims, 'shape': data.shape, 'data': data}
+    return {'grid': grid, 'name': name, 'kind': kind, 'dims': dims, 'shape': tuple(len(i) for i in idx), 'data': data}
 
 
 def dap_decl(c, indent):
@@ -1415,6 +1480,19 @@ def make_server(host='127.0.0.1', port=8080, snapshots=None, netcdfs=(), app=Non
     return OceanServer((host, port), datasets, app if app is not None else default_app(), cors, public_url, quiet)
 
 
+def exposure_warnings(host, cors):
+    """What to tell the user when the server is reachable beyond this machine's own pages: a bind other than
+    loopback, or --cors '*'."""
+    out = []
+    if not (host in LOOPBACK or host.startswith('127.')):
+        out.append(f'listening on {host or "every interface"}: anyone who can reach this machine can read the data. '
+                   'Use --host 127.0.0.1 unless you mean to share it.')
+    if '*' in cors:
+        out.append("--cors '*': any web page you open can read this server's data. Name the origins instead "
+                   "(--cors https://portal.example) unless this is a demo.")
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0], formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split('\n', 2)[2])
@@ -1430,6 +1508,8 @@ def main(argv=None):
     srv = make_server(a.host, a.port, a.data, a.netcdf, a.app, a.cors, a.public_url, a.quiet)
     print(f'OceanLens 3D server {VERSION} on http://{a.host}:{srv.server_address[1]}/  '
           f'({len(srv.datasets)} datasets: {", ".join(srv.datasets)}; app {srv.app or "not built"})', flush=True)
+    for w in exposure_warnings(a.host, a.cors):
+        print('warning: ' + w, file=sys.stderr, flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

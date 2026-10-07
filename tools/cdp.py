@@ -19,6 +19,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+MAX_HEAD = 64 << 10      # the WebSocket upgrade reply
+MAX_FRAME = 64 << 20     # one DevTools message (a full-page screenshot is a few MB); a page cannot make the client buffer more
 
 BROWSER_CANDIDATES = [
     r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
@@ -83,6 +85,8 @@ class WebSocket:
             if not chunk:
                 raise CDPError('connection closed during the WebSocket handshake')
             self.buf += chunk
+            if len(self.buf) > MAX_HEAD and b'\r\n\r\n' not in self.buf:
+                raise CDPError('WebSocket handshake reply is over %d KiB' % (MAX_HEAD >> 10))
         head, self.buf = self.buf.split(b'\r\n\r\n', 1)
         lines = head.decode('latin-1').split('\r\n')
         if ' 101 ' not in lines[0]:
@@ -123,6 +127,8 @@ class WebSocket:
             if len(b) < 10:
                 return None
             n, p = struct.unpack('>Q', b[2:10])[0], 10
+        if n > MAX_FRAME:
+            raise CDPError('DevTools frame of %d bytes is over the %d MiB limit' % (n, MAX_FRAME >> 20))
         if masked:
             p += 4
         if len(b) < p + n:
@@ -146,6 +152,8 @@ class WebSocket:
                     raise CDPError('DevTools closed the connection')
                 elif op in (0x0, 0x1, 0x2):
                     self.parts.append(payload)
+                    if sum(map(len, self.parts)) > MAX_FRAME:
+                        raise CDPError('DevTools message is over the %d MiB limit' % (MAX_FRAME >> 20))
                     if fin:
                         msg, self.parts = b''.join(self.parts), []
                         return msg.decode('utf-8', 'replace')
@@ -204,11 +212,26 @@ class Browser:
             try:
                 self._start(exe, width, height, args, headless, backend, offline, network_log, profile)
                 break
-            except CDPError:
+            except BaseException as e:      # whatever went wrong, the browser must not be left running
+                self._kill()
                 if not profile:
                     shutil.rmtree(getattr(self, 'profile', ''), ignore_errors=True)
-                if i == len(candidates) - 1:
+                if not isinstance(e, CDPError) or i == len(candidates) - 1:
                     raise
+
+    def _kill(self):
+        """Stop the browser and its child processes."""
+        proc = getattr(self, 'proc', None)
+        if proc is None or proc.poll() is not None:
+            return
+        if os.name == 'nt':
+            subprocess.run(['taskkill', '/PID', str(proc.pid), '/T', '/F'], capture_output=True)
+        else:
+            proc.kill()
+        try:
+            proc.wait(10)
+        except subprocess.TimeoutExpired:
+            pass
 
     def _stderr_tail(self, n=3):
         """The browser's last stderr lines, for an error message."""
@@ -228,7 +251,7 @@ class Browser:
             port_file.unlink()
         cmd = [self.exe, '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-sync',
                '--disable-component-update', '--disable-background-networking', f'--user-data-dir={self.profile}',
-               '--remote-debugging-port=0', '--hide-scrollbars', f'--window-size={width},{height}',
+               '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1', '--hide-scrollbars', f'--window-size={width},{height}',
                '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
                '--disable-backgrounding-occluded-windows']
         if headless:
@@ -479,10 +502,7 @@ class Browser:
         try:
             self.proc.wait(10)
         except subprocess.TimeoutExpired:
-            if os.name == 'nt':
-                subprocess.run(['taskkill', '/PID', str(self.proc.pid), '/T', '/F'], capture_output=True)
-            else:
-                self.proc.kill()
+            self._kill()
         if not self.keep_profile:
             for _ in range(10):
                 try:
