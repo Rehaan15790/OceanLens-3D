@@ -32,8 +32,9 @@ SHIPPED = os.path.join(ROOT, 'OceanLens3D.html')
 DEFAULT_OUT = os.path.join(ROOT, 'dist', 'OceanLens3D.html')
 BUDGET = 3_500_000                  # bytes; the pitch promises "about 3 MB"
 BANNER = '<!-- Built by build.py from src/. Edit the sources, not this file. -->\n'
-# the page's content security policy; script-src gets a hash for every inline script that runs
-CSP = ("default-src 'none'; script-src {scripts}; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; "
+# the page's content security policy; script-src and style-src get a hash for every inline script and style that runs,
+# so neither allows 'unsafe-inline' (nothing here uses eval, inline handlers, javascript: URLs or style="" markup)
+CSP = ("default-src 'none'; script-src {scripts}; style-src {styles}; img-src data: blob:; font-src 'none'; "
        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")
 SITE_HEADERS = ['Referrer-Policy: no-referrer', 'X-Content-Type-Options: nosniff',
                 'Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()', 'Cache-Control: no-cache']
@@ -58,6 +59,11 @@ def read_text(path):
     # line endings are normalised the way the HTML parser does, so script hashes match what it sees
     with open(path, encoding='utf-8', newline='') as f:
         return f.read().replace('\r\n', '\n')
+
+
+def hash_of(text):
+    """A CSP source for an inline element whose text is `text`."""
+    return "'sha256-" + base64.b64encode(hashlib.sha256(text.encode('utf-8')).digest()).decode('ascii') + "'"
 
 
 def rel(path):
@@ -97,7 +103,10 @@ def build():
     for ref in links:
         path = src_path(ref)
         listed.append(path)
-        css.append(inline_assets(read_text(path), path))
+        text = read_text(path)
+        if re.search(r'</style|<!--', text, re.I):
+            raise BuildError(f'{rel(path)} contains "</style" or "<!--", which would end or confuse the inlined <style>')
+        css.append(inline_assets(text, path))
     css = ''.join(css)
     sizes['css'] = len(css.encode('utf-8'))
     first = [True]
@@ -130,6 +139,9 @@ def build():
             code += '\n'
         if '</script' in code.lower():
             raise BuildError(f'{rel(path)} contains "</script", which would end the inlined element')
+        if re.search(r'<!--|<script', code, re.I):
+            # "<!--" then "<script" puts the HTML parser in a state where "</script>" no longer ends the element
+            raise BuildError(f'{rel(path)} contains "<!--" or "<script", which can swallow the rest of the page')
         key = 'vendor' if rel(path).startswith('vendor/') else 'js'
         if key == 'vendor':
             # MIT and similar licences require the notice in every copy: vendor/<name>.LICENSE goes on top
@@ -182,8 +194,12 @@ def build():
         attrs, body = m.group(1), m.group(2)
         if 'src=' in attrs or ('type=' in attrs and 'javascript' not in attrs and 'module' not in attrs):
             continue
-        hashes.append("'sha256-" + base64.b64encode(hashlib.sha256(body.encode('utf-8')).digest()).decode('ascii') + "'")
-    csp = CSP.format(scripts=' '.join(hashes))
+        hashes.append(hash_of(body))
+    # the one inlined <style> is hashed too, so the policy needs no 'unsafe-inline': nothing writes style="" markup (the
+    # build refuses it above and the scripts only set element.style, which a policy does not restrict)
+    styles = [hash_of(m.group(1)) for m in re.finditer(r'<!--.*?-->|<style\b[^>]*>(.*?)</style>', page, re.S | re.I)
+              if not m.group(0).startswith('<!--')]
+    csp = CSP.format(scripts=' '.join(hashes), styles=' '.join(styles) or "'none'")
     marker = f'<meta name="version" content="{version}">\n'
     page = page.replace(marker, marker + f'<meta http-equiv="Content-Security-Policy" content="{csp}">\n', 1)
 

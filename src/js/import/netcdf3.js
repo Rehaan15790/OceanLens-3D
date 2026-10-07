@@ -76,12 +76,17 @@ const NetCDF3 = (()=>{
       recVars.forEach(v=>{ v.shape[0] = numrecs; });
       // every variable's data must lie inside the file; with no records (Argo _prof.nc files have N_HISTORY = 0)
       // the record variables hold nothing, so only the start of the record section is checked
+      let claimed = 0;
       Object.values(vars).forEach(v=>{
         const per = v.shape.slice(v.record ? 1 : 0).reduce((a, b)=>a*b, 1)*v.size;
         const end = v.record ? (numrecs ? v.begin + (numrecs-1)*recsize + per : recStart) : v.begin + per;
         if(!(v.begin >= pos) || end > u8.length) throw new Error(`variable ${v.name} points past the end of the file (truncated?)`);
         if(per/v.size*(v.record ? Math.max(1, numrecs) : 1) > 5e7) throw new Error(`variable ${v.name} is too large for the browser`);
+        claimed += per*(v.record ? numrecs : 1);
       });
+      // a real file holds each byte once: variables that overlap, or records that a tiny stride makes overlap, would
+      // each unpack to a Float64Array of tens of millions of values from a few kilobytes
+      if(claimed > u8.length) throw new Error('NetCDF file whose variables claim more data than the file holds (corrupt, or sharing the same bytes).');
       return makeFile(u8, dv, version, numrecs, dims, attrs, vars, recsize);
     } catch(err){
       if(err instanceof RangeError) throw new Error('The NetCDF file ends early (truncated or not NetCDF).');

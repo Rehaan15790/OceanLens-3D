@@ -4,7 +4,7 @@
    datasets added at run time. The built-in variables and the Argo and glider types below are
    registered through the same calls a plugin makes. The test surface (window.__ol) is separate.
    ============================================================ */
-const INSTRUMENT_TYPES = {};
+const INSTRUMENT_TYPES = Object.create(null);   // no inherited keys: a file's type "constructor" or "__proto__" is an unknown type
 const IMPORT_FORMATS = {};
 const DATASETS = new Map();          // id -> {dataset, insts}
 let importedInsts = [];              // the instruments of every added dataset
@@ -103,6 +103,7 @@ const asNum = v => v===null || v===undefined || v==='' ? NaN : +v;
 // text from a file shown in the UI: no control characters, bounded length
 const cleanText = (v, max) => String(v).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, max);
 const MAX_PROFILES = 20000;
+const MAX_DEPTH_M = 12000;           // deeper than any ocean (Challenger Deep: 10 935 m); a bogus depth would stall the heat-content loop
 // index of the analysis time nearest to ms (ms since 1970)
 function nearestAnalysis(ms){
   let best = 0, bestD = Infinity;
@@ -124,7 +125,7 @@ function datasetInstrument(raw, ds, n){
   const src = p.vars || p, keys = [...new Set(Object.keys(OBS_ARRAYS).concat(Object.keys(VAR_META)))];
   // levels with a finite depth, sorted shallow to deep
   const order = Array.from(z, (d, k)=>[fromPres ? depthFromPressure(asNum(d), lat) : asNum(d), k])
-    .filter(([d])=>Number.isFinite(d) && d >= 0).sort((a, b)=>a[0]-b[0]);
+    .filter(([d])=>Number.isFinite(d) && d >= 0 && d <= MAX_DEPTH_M).sort((a, b)=>a[0]-b[0]);
   const levels = order.map(([d])=>+d.toFixed(2)), vars = {};
   keys.forEach(k=>{
     const a = src[k];

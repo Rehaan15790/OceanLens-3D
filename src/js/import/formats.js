@@ -109,6 +109,9 @@
         A[n] = num(nc, n); A[n+'_A'] = num(nc, n+'_ADJUSTED');
         Q[n] = flags(nc, n+'_QC', nP*nL); Q[n+'_A'] = flags(nc, n+'_ADJUSTED_QC', nP*nL);
       });
+      // N_PROF x N_LEVELS must be what the data variables hold: dimensions that claim more would only make the loop spin
+      const held = Math.max(0, ...Object.values(A).map(a=>a ? a.length : 0));
+      if(nP*nL > held) throw new Error(`The file says ${nP} profiles of ${nL} levels but its variables hold only ${held} values.`);
       const profiles = [], warnings = [], raw = {}; let dropped = 0;
       for(let p=0;p<nP;p++){
         if((posQc && !GOOD.has(posQc[p])) || (tQc && !GOOD.has(tQc[p])) || !Number.isFinite(t[p])
@@ -140,16 +143,19 @@
       && has(nc, 'TIME') ? 0.95 : (has(nc, 'PHASE') && has(nc, 'TIME') && has(nc, 'PRES') ? 0.7 : 0),
     read(nc){
       const t = timeMs(nc, 'TIME'), n = t.length, lat = num(nc, 'LATITUDE'), lon = num(nc, 'LONGITUDE');
-      const v = (name, key)=>pick.bind(null, key, num(nc, name), flags(nc, name+'_QC', n),
-        num(nc, name+'_ADJUSTED'), flags(nc, name+'_ADJUSTED_QC', n));
-      const P = Array.from({length:n}, (_,k)=>v('PRES', null)(k, false));
-      const T = Array.from({length:n}, (_,k)=>v('TEMP', 'temp')(k, false));
-      const S = Array.from({length:n}, (_,k)=>v('PSAL', 'sal')(k, false));
-      const C = has(nc, 'CHLA') ? Array.from({length:n}, (_,k)=>v('CHLA', 'chl')(k, has(nc, 'CHLA_ADJUSTED'))) : null;
+      // each variable is read once (not once per sample, which made a long file quadratic)
+      const v = (name, key, adjOnly)=>{
+        const f = pick.bind(null, key, num(nc, name), flags(nc, name+'_QC', n), num(nc, name+'_ADJUSTED'), flags(nc, name+'_ADJUSTED_QC', n));
+        return Array.from({length:n}, (_,k)=>f(k, adjOnly));
+      };
+      const P = v('PRES', null, false);
+      const T = v('TEMP', 'temp', false);
+      const S = v('PSAL', 'sal', false);
+      const C = has(nc, 'CHLA') ? v('CHLA', 'chl', has(nc, 'CHLA_ADJUSTED')) : null;
       let O = null;
-      if(has(nc, 'DOXY')) O = Array.from({length:n}, (_,k)=>v('DOXY', 'oxy')(k, has(nc, 'DOXY_ADJUSTED')));
+      if(has(nc, 'DOXY')) O = v('DOXY', 'oxy', has(nc, 'DOXY_ADJUSTED'));
       else if(has(nc, 'MOLAR_DOXY')){          // µmol/L -> µmol/kg with the sample's density
-        const M = Array.from({length:n}, (_,k)=>v('MOLAR_DOXY', 'oxy')(k, false));
+        const M = v('MOLAR_DOXY', 'oxy', false);
         O = M.map((x,k)=>Number.isFinite(x) && Number.isFinite(T[k]) && Number.isFinite(S[k]) ? x/(1+sigmaT(S[k], T[k])/1000) : NaN);
       }
       const raw = {chl:!has(nc, 'CHLA_ADJUSTED') && anyFinite(C), oxy:!has(nc, 'DOXY_ADJUSTED') && anyFinite(O)};

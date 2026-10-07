@@ -47,7 +47,8 @@ function niceTicks(min, max, target=5){
   const raw = span/(target-1), p = Math.pow(10, Math.floor(Math.log10(raw)));
   const step = [1, 2, 2.5, 5, 10].map(m=>m*p).find(s=>span/s <= target) || 10*p;
   const out = [], eps = step*1e-6;
-  for(let v = Math.ceil((min-eps)/step)*step; v <= max+eps; v += step) out.push(+v.toFixed(10));
+  // at most target+2 ticks fit the span; the cap stops values so large that v += step changes nothing from looping for ever
+  for(let v = Math.ceil((min-eps)/step)*step, k = 0; v <= max+eps && k < 3*target; v += step, k++) out.push(+v.toFixed(10));
   return out;
 }
 // the decimals that write v exactly (to 6 significant figures): 2 for 0.25, 1 for 2.5 and 32.5, 0 for 25

@@ -43,7 +43,7 @@ single.
 
 ```
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'sha256-…' 'sha256-…' …; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'sha256-…' 'sha256-…' …; style-src 'sha256-…'; img-src data: blob:; font-src 'none'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()

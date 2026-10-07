@@ -24,6 +24,7 @@ SUITES = {
     'extend':      ['test_extend'],
     'tour':        ['test_tour'],
     'robust':      ['test_robustness'],
+    'security':    ['test_security_web'],
     'render':      ['test_render'],
     'a11y':        ['test_a11y'],
     'sizes':       ['test_sizes'],

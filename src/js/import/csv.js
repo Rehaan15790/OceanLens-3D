@@ -6,6 +6,8 @@
    ============================================================ */
 const CSV_FIELDS = ['lat', 'lon', 'time', 'depth', 'pres', 'temp', 'sal', 'chl', 'oxy', 'u', 'v', 'id', 'type'];
 const CSV_MEASURED = ['temp', 'sal', 'chl', 'oxy', 'u', 'v'];
+const CSV_MAX_COLUMNS = 2000;
+const CSV_MAX_HEADER = 200;        // longer header text is not "name (unit)"; the patterns below backtrack cubically on it
 // header names per field, compared after lower-casing and dropping units; first match wins, so
 // adjusted (delayed-mode) columns come before raw ones
 const CSV_NAMES = {
@@ -27,15 +29,17 @@ const CSV_UNIT_TOKENS = /^(c|degc|°c|deg_c|degree_c|degrees_c|degree_celsius|de
 const isNumCell = c => c!=='' && Number.isFinite(+c);
 // one line split on delimiter d; double quotes may hold the delimiter and "" for a quote
 function splitLine(line, d){
-  const out = []; let cur = '', q = false;
+  // blank: the cell so far is empty or white space, so a quote opens a quoted cell. Tracked per character, not by
+  // trimming the cell at each quote, which made a line of a"a"a"... quadratic (200 000 pairs took 20 s)
+  const out = []; let cur = '', q = false, blank = true;
   for(let i=0; i<line.length; i++){
     const ch = line[i];
     if(q){
-      if(ch==='"'){ if(line[i+1]==='"'){ cur += '"'; i++; } else q = false; }
-      else cur += ch;
-    } else if(ch==='"' && cur.trim()==='') { q = true; cur = ''; }
-    else if(ch===d){ out.push(cur.trim()); cur = ''; }
-    else cur += ch;
+      if(ch==='"'){ if(line[i+1]==='"'){ cur += '"'; blank = false; i++; } else q = false; }
+      else { cur += ch; if(blank && !/\s/.test(ch)) blank = false; }
+    } else if(ch==='"' && blank) { q = true; cur = ''; }
+    else if(ch===d){ out.push(cur.trim()); cur = ''; blank = true; }
+    else { cur += ch; if(blank && !/\s/.test(ch)) blank = false; }
   }
   out.push(cur.trim());
   return out;
@@ -53,6 +57,8 @@ function parseDelimited(text){
     if(n[0] > best && same >= Math.max(2, 0.7*n.length)){ best = n[0]; delimiter = d; }
   });
   if(!delimiter) throw new Error('No consistent comma, tab or semicolon columns found.');
+  // the mapping step lists every column in thirteen menus: a file of tens of thousands of columns would freeze the page
+  if(best > CSV_MAX_COLUMNS) throw new Error(`The file has ${best} columns; the most that can be read is ${CSV_MAX_COLUMNS}. Export one row per sample.`);
   let rows = lines.map(l=>splitLine(l, delimiter));
   const width = rows[0].length;
   const all = rows.length;
@@ -70,10 +76,10 @@ function parseDelimited(text){
   // units written into headers: temp_C, temp (degC), pres[dbar]
   const names = header.map((h, j)=>{
     let name = h, unit = units[j];
-    const br = h.match(/^(.*?)\s*[([]\s*([^)\]]+)\s*[)\]]\s*$/);
+    const br = h.length <= CSV_MAX_HEADER && h.match(/^(.*?)\s*[([]\s*([^)\]]+)\s*[)\]]\s*$/);
     if(br){ name = br[1]; unit = unit || br[2]; }
     else {
-      const us = h.match(/^(.+?)[_ ]([^_ ]+)$/);
+      const us = h.length <= CSV_MAX_HEADER && h.match(/^(.+?)[_ ]([^_ ]+)$/);
       if(us && CSV_UNIT_TOKENS.test(us[2]) && !/^(degrees_(north|east))$/i.test(h)){ name = us[1]; unit = unit || us[2]; }
     }
     units[j] = unit || '';
@@ -131,7 +137,7 @@ function unitConverter(field, unit){
          'ml/l':x=>x*44.661/1.025, ml_l:x=>x*44.661/1.025, 'mg/l':x=>x*31.252/1.025, mg_l:x=>x*31.252/1.025}
   }[field];
   if(!table) return same;
-  return table[u] || null;
+  return Object.prototype.hasOwnProperty.call(table, u) ? table[u] : null;     // a unit named "constructor" is not a converter
 }
 const TYPE_WORDS = {adcp:'adcp', radar:'hfradar', hfr:'hfradar', argo:'argo', float:'argo', 'bgc-argo':'argo', glider:'glider',
                     ctd:'ctd', cast:'ctd', mooring:'mooring', buoy:'mooring'};
