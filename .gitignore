@@ -9,3 +9,25 @@ dist/
 tests/output/
 __pycache__/
 *.pyc
+# secrets, keys and certificates (a --ca-bundle PEM stays on the machine) and per-user credential files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.crt
+*.cer
+*.jks
+*.keystore
+.npmrc
+.pypirc
+.netrc
+.aws/
+.ssh/
+id_rsa*
+id_ed25519*
+secrets.*
+*credentials*.json
+service-account*.json

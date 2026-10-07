@@ -273,7 +273,7 @@ class Packing(unittest.TestCase):
 
 class FakeResponse:
     def __init__(self, data):
-        self.data = data
+        self.data, self.pos = data, 0
 
     def __enter__(self):
         return self
@@ -281,8 +281,10 @@ class FakeResponse:
     def __exit__(self, *a):
         return False
 
-    def read(self):
-        return self.data
+    def read(self, n=-1):
+        end = len(self.data) if n is None or n < 0 else self.pos + n
+        chunk, self.pos = self.data[self.pos:end], min(end, len(self.data))
+        return chunk
 
 
 def http_error(code):
@@ -323,8 +325,8 @@ class Fetching(unittest.TestCase):
         def urlopen(*a, **k):
             calls.append(1)
             raise http_error(404)
-        F = B.Fetcher(self.cache, fetch=True, sleep=lambda s: None)
-        with mock.patch.object(B.urllib.request, 'urlopen', urlopen):
+        F = B.Fetcher(self.cache, fetch=True, sleep=lambda s: None, allow_hosts=['example.test'])
+        with mock.patch.object(B.urllib.request.OpenerDirector, 'open', urlopen):
             with self.assertRaises(B.FetchError):
                 F.get('https://example.test/x', 'x.txt', B.parse_ascii)
         self.assertEqual(len(calls), 1)
@@ -338,8 +340,8 @@ class Fetching(unittest.TestCase):
             if isinstance(r, Exception):
                 raise r
             return r
-        F = B.Fetcher(self.cache, fetch=True, sleep=lambda s: None)
-        with mock.patch.object(B.urllib.request, 'urlopen', urlopen):
+        F = B.Fetcher(self.cache, fetch=True, sleep=lambda s: None, allow_hosts=['example.test'])
+        with mock.patch.object(B.urllib.request.OpenerDirector, 'open', urlopen):
             out = F.get('https://example.test/x', 'sub/x.txt', B.parse_ascii)
         self.assertEqual(list(out['x']), [1.0, 2.0])
         with open(os.path.join(self.cache, 'sub', 'x.txt'), 'rb') as f:
@@ -352,13 +354,13 @@ class Fetching(unittest.TestCase):
 
     def test_hosts_outside_the_allow_list_are_never_contacted(self):
         F = B.Fetcher(self.cache, fetch=True, sleep=lambda s: None, allow_hosts=['tds.hycom.org'])
-        with mock.patch.object(B.urllib.request, 'urlopen', side_effect=AssertionError('network used')):
+        with mock.patch.object(B.urllib.request.OpenerDirector, 'open', side_effect=AssertionError('network used')):
             with self.assertRaises(B.FetchError):
                 F.get('https://erddap.ifremer.fr/erddap/x.csv', 'x.csv', B.parse_argo_csv)
 
     def test_garbage_download_is_not_cached(self):
-        F = B.Fetcher(self.cache, fetch=True, sleep=lambda s: None)
-        with mock.patch.object(B.urllib.request, 'urlopen', lambda *a, **k: FakeResponse(b'<html>maintenance</html>')):
+        F = B.Fetcher(self.cache, fetch=True, sleep=lambda s: None, allow_hosts=['example.test'])
+        with mock.patch.object(B.urllib.request.OpenerDirector, 'open', lambda *a, **k: FakeResponse(b'<html>maintenance</html>')):
             with self.assertRaises(ValueError):
                 F.get('https://example.test/x', 'x.txt', B.parse_ascii)
         self.assertEqual(os.listdir(self.cache), [])

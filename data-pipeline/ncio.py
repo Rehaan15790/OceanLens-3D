@@ -18,7 +18,7 @@ On write a variable may carry 'dtype' ('i1', 'S1', 'i2', 'i4', 'f4', 'f8'; CDF-5
 attrs, float data is packed; NaN becomes _FillValue. NaN in float data is written as _FillValue when
 the variable has one. NetCDF-4 (HDF5) files are refused with a message.
 """
-import os, re, struct
+import math, os, re, struct
 from datetime import datetime, timezone
 
 import numpy as np
@@ -145,35 +145,43 @@ def read_bytes(data, raw=False):
 
     def slab(s):
         shape = [dims[i][1] for i in s[1][1:]] if s in rec else [dims[i][1] for i in s[1]]
-        return int(np.prod(shape, dtype=np.int64)) * np.dtype(s[3]).itemsize
+        return math.prod(shape) * np.dtype(s[3]).itemsize       # Python ints: sizes from the file cannot wrap
 
     recsize = slab(rec[0]) if len(rec) == 1 else sum(slab(s) + pad4(slab(s)) for s in rec)
     if rec and streaming:
-        numrecs = (len(data) - min(s[5] for s in rec)) // recsize if recsize else 0
+        numrecs = max(0, (len(data) - min(s[5] for s in rec)) // recsize) if recsize else 0
     if unlimited is not None:
         for d in dims:
             if d[0] == unlimited:
                 d[1] = numrecs
 
     out = {'dims': {d[0]: d[1] for d in dims}, 'unlimited': unlimited, 'attrs': gattrs, 'vars': {}}
+    claimed = 0                                      # bytes the variables claim; in a real file they never overlap
     for s in specs:
         nm, ids, attrs, t, vsize, begin = s
         shape = [dims[i][1] for i in ids]
         dt = np.dtype('>' + t) if t != 'S1' else np.dtype('S1')
+        per = slab(s)
         if s in rec:
-            per = slab(s)
             if begin + (numrecs - 1) * recsize + per > len(data) and numrecs:
                 raise NetCDFError(f'file ends inside record variable {nm}')
-            buf = b''.join(data[begin + k * recsize: begin + k * recsize + per] for k in range(numrecs))
+        elif begin + per > len(data):
+            raise NetCDFError(f'file ends inside variable {nm}')
+        claimed += per * (numrecs if s in rec else 1)
+        if claimed > len(data):                      # overlapping variables would multiply a small file into gigabytes
+            raise NetCDFError(f'variables overlap or claim more data than the file holds (at {nm})')
+        if s in rec:
+            # no bytes per record (a zero-size inner dimension): nothing to copy, and numrecs may be absurd
+            buf = b''.join(data[begin + k * recsize: begin + k * recsize + per] for k in range(numrecs)) if per else b''
         else:
-            per = slab(s)
-            if begin + per > len(data):
-                raise NetCDFError(f'file ends inside variable {nm}')
             buf = data[begin:begin + per]
-        a = np.frombuffer(buf, dt).reshape(shape)
-        a = a.astype(t) if t != 'S1' else a
-        out['vars'][nm] = {'dims': tuple(dims[i][0] for i in ids), 'attrs': attrs,
-                           'data': a.copy() if raw else _unpack(a, t, attrs)}
+        try:
+            a = np.frombuffer(buf, dt).reshape(shape)
+            a = a.astype(t) if t != 'S1' else a
+            value = a.copy() if raw else _unpack(a, t, attrs)
+        except (TypeError, ValueError, IndexError, OverflowError) as e:      # e.g. a text scale_factor
+            raise NetCDFError(f'variable {nm} cannot be decoded ({type(e).__name__}: {e})') from e
+        out['vars'][nm] = {'dims': tuple(dims[i][0] for i in ids), 'attrs': attrs, 'data': value}
     return out
 
 
@@ -479,7 +487,10 @@ def cf_times(var):
     """A time variable from read() -> list of timezone-aware datetimes (NaN -> None)."""
     a = var['attrs']
     secs = cf_time_epoch(var['data'], a.get('units', ''), a.get('calendar', 'standard'))
-    return [None if not np.isfinite(s) else datetime.fromtimestamp(float(s), timezone.utc) for s in np.ravel(secs)]
+    try:
+        return [None if not np.isfinite(s) else datetime.fromtimestamp(float(s), timezone.utc) for s in np.ravel(secs)]
+    except (OverflowError, OSError, ValueError) as e:                 # a time far outside the calendar
+        raise NetCDFError(f'time values outside the supported calendar range ({type(e).__name__}: {e})') from e
 
 
 def cf_depth(var):

@@ -44,6 +44,11 @@ ARGO = 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.csv'
 ETOPO = 'https://upwell.pfeg.noaa.gov/erddap/griddap/etopo180.csv'
 IBTRACS = ('https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/'
            'v04r01/access/csv/ibtracs.NI.list.v04r01.csv')
+# Downloads go over https to these hosts only (keep in step with the URLs above and BGC below; --allow-host
+# replaces this list), redirects included, and a response may not exceed MAX_DOWNLOAD bytes (the largest raw file is
+# 7 MB, the whole cache 43 MB).
+DEFAULT_HOSTS = frozenset({'tds.hycom.org', 'erddap.ifremer.fr', 'upwell.pfeg.noaa.gov', 'www.ncei.noaa.gov'})
+MAX_DOWNLOAD = 128 * 1024 * 1024
 # the files in the original cache were downloaded on this date; later downloads record their own in manifest.json
 DEFAULT_ACCESSED = '2026-09-27'
 
@@ -131,23 +136,41 @@ def write_atomic(path, data):
     os.replace(tmp, path)
 
 
+class _ConfinedRedirects(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to https on an allowed host (urllib would also follow http and ftp, and any host)."""
+    max_redirections = 4
+
+    def __init__(self, hosts):
+        self.hosts = hosts
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        u = urllib.parse.urlsplit(newurl)
+        if u.scheme != 'https' or u.hostname not in self.hosts:
+            raise FetchError(f'refusing a redirect from {req.full_url} to {u.scheme}://{u.hostname}/ (https and allowed hosts only)')
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 class Fetcher:
     """Reads raw responses from the cache; downloads a missing one only when fetching is on.
 
     Every response goes through `parse` before it is cached, so an error page or a truncated body never
-    lands in the cache. Client errors (4xx) fail at once; timeouts, resets and 5xx are retried."""
+    lands in the cache. Client errors (4xx) fail at once; timeouts, resets and 5xx are retried. A cached file
+    whose sha256 differs from the one recorded in manifest.json is refused."""
 
     def __init__(self, cache, fetch=False, cafile=None, sleep=time.sleep, allow_hosts=None):
         self.cache, self.fetch, self.cafile, self.sleep = cache, fetch, cafile, sleep
-        self.allow_hosts = set(allow_hosts or [])
+        self.allow_hosts = {h.lower() for h in allow_hosts} if allow_hosts else set(DEFAULT_HOSTS)
         self.used = {}              # cache name -> sha256, for provenance
         self.downloaded = 0
         self._lock = threading.Lock()
-        self._ctx = None
+        self._ctx = self._opener = self._man = None
 
     def path(self, name):
-        """Where a cache name lives on disk ('/' in a name is a subfolder)."""
-        return os.path.join(self.cache, *name.split('/'))
+        """Where a cache name lives on disk ('/' in a name is a subfolder); ValueError for a name that could leave the cache."""
+        parts = name.split('/')
+        if any(not p or p in ('.', '..') or '\\' in p or ':' in p or '\0' in p for p in parts):
+            raise ValueError(f'unsafe cache file name {name!r}')
+        return os.path.join(self.cache, *parts)
 
     def get(self, url, name, parse, headers=None, timeout=180, retries=4):
         """Parsed content of one raw file: from the cache, else downloaded (with --fetch only), parsed and
@@ -156,6 +179,10 @@ class Fetcher:
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 data = f.read()
+            want = self._recorded_hash(name)
+            if want and sha256(data) != want:
+                raise ValueError(f'cached file {name} differs from the sha256 in manifest.json (modified or damaged); '
+                                 f'move it aside and rerun with --fetch')
             try:
                 out = parse(data)
             except Exception as e:
@@ -171,19 +198,51 @@ class Fetcher:
             self.used[name] = sha256(data)
         return out
 
+    def _recorded_hash(self, name):
+        """The sha256 manifest.json holds for a cache name, or None (files cached before the manifest existed)."""
+        with self._lock:
+            if self._man is None:
+                self._man = read_json(os.path.join(self.cache, 'manifest.json'), {})
+            entry = self._man.get(name)
+        return entry.get('sha256') if isinstance(entry, dict) else None
+
+    def _read_body(self, r, url, timeout):
+        """All of a response, FetchError past MAX_DOWNLOAD bytes; a body that drips in slower than 4 x timeout times out."""
+        headers = getattr(r, 'headers', None)
+        size = headers.get('Content-Length') if headers is not None else None
+        if size and size.isdigit() and int(size) > MAX_DOWNLOAD:
+            raise FetchError(f'{url} announces {size} bytes (limit {MAX_DOWNLOAD})')
+        chunks, total, deadline = [], 0, time.monotonic() + max(60, 4 * timeout)
+        while True:
+            chunk = r.read(1 << 20)
+            if not chunk:
+                return b''.join(chunks)
+            total += len(chunk)
+            if total > MAX_DOWNLOAD:
+                raise FetchError(f'{url} sent more than {MAX_DOWNLOAD} bytes; stopping')
+            if time.monotonic() > deadline:
+                raise TimeoutError(f'{url} is arriving too slowly')
+            chunks.append(chunk)
+
     def download(self, url, headers=None, timeout=180, retries=4):
-        """The body of url, retried with back-off; FetchError on a 4xx or after the last attempt."""
-        host = urllib.parse.urlsplit(url).hostname
-        if self.allow_hosts and host not in self.allow_hosts:
-            raise FetchError(f'{host} is not in --allow-host; not downloading {url}')
+        """The body of url, retried with back-off; FetchError on a 4xx or after the last attempt. https only,
+        from an allowed host, and redirects stay on both."""
+        parts = urllib.parse.urlsplit(url)
+        host = (parts.hostname or '').lower()
+        if parts.scheme != 'https':
+            raise FetchError(f'only https is downloaded, not {url}')
+        if host not in self.allow_hosts:
+            raise FetchError(f'{host} is not in --allow-host (default: the pipeline\'s own sources); not downloading {url}')
         if self._ctx is None:
             self._ctx = ssl.create_default_context(cafile=self.cafile) if self.cafile else ssl.create_default_context()
+            self._opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self._ctx),
+                                                       _ConfinedRedirects(self.allow_hosts))
         last = None
         for attempt in range(retries):
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'OceanLens3D-snapshot/2', **(headers or {})})
-                with urllib.request.urlopen(req, context=self._ctx, timeout=timeout) as r:
-                    data = r.read()
+                with self._opener.open(req, timeout=timeout) as r:
+                    data = self._read_body(r, url, timeout)
                 with self._lock:
                     self.downloaded += len(data)
                 return data
@@ -206,6 +265,7 @@ class Fetcher:
             man[name] = {'url': url, 'sha256': sha256(data), 'bytes': len(data),
                          'fetched': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
             write_atomic(mpath, json.dumps(man, indent=1, sort_keys=True).encode())
+            self._man = man
 
     def manifest(self):
         return read_json(os.path.join(self.cache, 'manifest.json'), {})
@@ -262,7 +322,7 @@ def parse_ascii(data):
     if not out:
         raise ValueError('no arrays in the OPeNDAP response')
     for k in [k for k in out if not k.endswith('_shape')]:
-        n = int(np.prod(out[k + '_shape']))
+        n = math.prod(out[k + '_shape'])                 # Python ints: a huge declared shape cannot wrap to 0
         if out[k].size != n:
             raise ValueError(f'{k}: {out[k].size} values for shape {out[k + "_shape"]} (truncated response?)')
     return out
@@ -529,7 +589,7 @@ def select_argo(names, rows, temperature_only=False, snaps=None):
     out = []
     for (wmo, cyc, tstr), rs in sorted(profs.items()):
         r0 = rs[0]
-        if not re.fullmatch(r'\d{5,7}', wmo):
+        if not re.fullmatch(r'[0-9]{5,7}', wmo):         # ASCII digits only: this goes into a cache file name
             raise ValueError(f'unexpected Argo platform number {wmo!r}')
         mode = r0[ix['data_mode']].strip()
         if mode not in ('R', 'A', 'D'):
@@ -1105,7 +1165,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
 def serialise(payload):
     """Compact, ASCII-only JSON with '</' escaped, so the text can sit inside a <script> element."""
     text = json.dumps(payload, separators=(',', ':'), ensure_ascii=True, allow_nan=False)
-    return (text.replace('</', '<\\/') + '\n').encode('ascii')
+    return (text.replace('</', '<\\/').replace('<!--', '<\\u0021--') + '\n').encode('ascii')
 
 
 def main(argv=None):
@@ -1137,7 +1197,7 @@ def main(argv=None):
     except CacheMiss as e:
         print(f'error: {e} is not in the cache ({args.cache}); rerun with --fetch to download it', file=sys.stderr)
         return 2
-    except (InvariantError, FetchError, ValueError) as e:
+    except (InvariantError, FetchError, ValueError, ArithmeticError, csv.Error) as e:
         print(f'error: {e}', file=sys.stderr)
         return 1
     except (KeyError, IndexError) as e:

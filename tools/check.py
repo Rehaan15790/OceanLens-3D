@@ -9,11 +9,19 @@ The fresh build goes to dist/platform.html.
 
 Exit status is non-zero if any step fails. Nothing here writes the root OceanLens3D.html.
 """
-import argparse, re, subprocess, sys, time
+import argparse, hashlib, re, subprocess, sys, time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 PY = sys.executable
+
+# well-known token formats and private keys (no generic "password=" rule: it would flag test fixtures)
+SECRETS = re.compile(r'AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|xox[abprs]-[A-Za-z0-9-]{10,}|'
+                     r'AIza[0-9A-Za-z_-]{35}|(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{32,}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{36}|'
+                     r'-----BEGIN [A-Z ]*PRIVATE KEY-----')
+# the vendored library must stay byte-for-byte the official three@0.128.0 (npm build/three.min.js and LICENSE)
+VENDORED = {'vendor/three.r128.min.js': '9274bbcec8d96168626c732b5d31c775aa8cfb7eaa0599bec0c175908a2c1ce2',
+            'vendor/three.LICENSE': '7dddf7c5b8fd10ee654db8857d75d104b5557889aa5a91fc4ca545ea7c07062f'}
 
 # absolute paths into someone's home folder must not be committed (docs use placeholders)
 PERSONAL = re.compile(r'(?i)(?:[a-z]:[\\/]{1,2}users[\\/]{1,2}(?!public\b)[^\\/\s"\'<>]+|/home/[a-z][^/\s"\'<>]*/|/Users/(?!Public/|Shared/)[A-Za-z][^/\s"\'<>]*/)')
@@ -32,10 +40,26 @@ def step(name, fn):
     return ok
 
 
+def workflow_problems():
+    """Weak spots in .github/workflows: no read-only top-level permissions, untrusted-code triggers, kept credentials."""
+    out = []
+    for wf in sorted((REPO / '.github' / 'workflows').glob('*.y*ml')):
+        t = wf.read_text(encoding='utf-8')
+        perm = re.search(r'(?m)^permissions:[^\n]*(?:\n[ \t]+[^\n]*)*', t)
+        if not perm or 'write' in perm.group(0):
+            out.append(f'{wf.name}: needs a top-level permissions: block without write access')
+        if re.search(r'(?m)^\s*(?:pull_request_target|workflow_run)\s*:', t):
+            out.append(f'{wf.name}: pull_request_target / workflow_run run with secrets; do not use them here')
+        if len(re.findall(r'(?m)^\s*-?\s*uses:\s*actions/checkout@', t)) != len(re.findall(r'(?m)^\s*persist-credentials:\s*false\b', t)):
+            out.append(f'{wf.name}: every actions/checkout step needs persist-credentials: false')
+    return out
+
+
 def hygiene():
-    """No home-folder paths in tracked files, and no LICENSE file until the owner chooses a licence."""
+    """No home-folder paths or secrets in tracked files, vendored library and workflows as pinned, and no LICENSE
+    file until the owner chooses a licence."""
     files = subprocess.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], cwd=REPO, capture_output=True, text=True, check=True).stdout.split('\n')
-    found = []
+    found, leaked = [], []
     for f in filter(None, files):
         p = REPO / f
         if p.suffix.lower() not in TEXT_SUFFIXES or not p.exists() or p.stat().st_size > 8e6:
@@ -44,7 +68,15 @@ def hygiene():
             m = PERSONAL.search(line)
             if m:
                 found.append(f'{f}:{n}: {m.group(0)}')
-    problems = [f'personal path {x}' for x in found[:20]]
+            s = SECRETS.search(line)
+            if s:
+                leaked.append(f'{f}:{n}: {s.group(0)[:6]}...')            # never print the secret itself
+    problems = [f'personal path {x}' for x in found[:20]] + [f'possible secret {x}' for x in leaked[:20]]
+    for rel, want in VENDORED.items():
+        p = REPO / rel
+        if not p.exists() or hashlib.sha256(p.read_bytes()).hexdigest() != want:
+            problems.append(f'{rel} is not the pinned official release (missing, or its sha256 changed)')
+    problems += workflow_problems()
     if any((REPO / n).exists() for n in ('LICENSE', 'LICENSE.md', 'LICENSE.txt')):
         problems.append('a LICENSE file exists, but the owner has not chosen a licence')
     for p in problems:

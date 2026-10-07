@@ -10,25 +10,38 @@ import struct
 import zlib
 
 
+MAX_PIXELS = 1 << 26                  # 64 megapixels: far above any screenshot the tests take
+
+
 def decode(path):
     """(width, height, bytes per pixel, rows) for an 8-bit, non-interlaced RGB or RGBA PNG."""
-    data = open(path, 'rb').read()
+    with open(path, 'rb') as f:
+        data = f.read()
     if data[:8] != b'\x89PNG\r\n\x1a\n':
         raise ValueError(f'{path} is not a PNG')
     pos, idat, w = 8, b'', None
-    while pos < len(data):
+    while pos + 8 <= len(data):
         n, typ = struct.unpack('>I4s', data[pos:pos + 8])
         body = data[pos + 8:pos + 8 + n]
         if typ == b'IHDR':
+            if len(body) < 13:
+                raise ValueError(f'{path}: truncated PNG header')
             w, h, depth, ctype, _, _, interlace = struct.unpack('>IIBBBBB', body[:13])
             if depth != 8 or ctype not in (2, 6) or interlace:
                 raise ValueError(f'{path}: unsupported PNG (depth {depth}, colour type {ctype}, interlace {interlace})')
+            if not 0 < w * h <= MAX_PIXELS:                          # the header decides how much memory follows
+                raise ValueError(f'{path}: {w} x {h} pixels is outside what this reader accepts')
             bpp = 3 if ctype == 2 else 4
         elif typ == b'IDAT':
             idat += body
         pos += 12 + n
-    raw = zlib.decompress(idat)
+    if w is None:
+        raise ValueError(f'{path}: no PNG header')
     stride = w * bpp
+    d = zlib.decompressobj()
+    raw = d.decompress(idat, h * (stride + 1))                       # never more than the header promises
+    if len(raw) != h * (stride + 1) or d.decompress(d.unconsumed_tail, 1):       # short, or more still to come
+        raise ValueError(f'{path}: image data is not the size its header promises')
     rows, prev = [], bytearray(stride)
     for y in range(h):
         f = raw[y * (stride + 1)]
