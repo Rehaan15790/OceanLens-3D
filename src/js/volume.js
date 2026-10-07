@@ -1,4 +1,5 @@
 /* ---- layer meshes: one plane per model level, coloured by value through a palette ramp ---- */
+// two triangles per grid cell, row-major over gridPts
 function gridIndices(){
   const indices = [];
   for(let i=0;i<LAT_N-1;i++){
@@ -9,6 +10,7 @@ function gridIndices(){
   }
   return indices;
 }
+// a flat LAT_N x LON_N mesh at height y; Render.setValues puts the data on it
 function gridGeometry(y){
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(gridPts.flatMap(p=>{ const [x,z]=toXZ(p.lat,p.lon); return [x,y,z]; }), 3));
@@ -44,6 +46,7 @@ function firstCrossing(at, seabed, target){
   }
   return null;
 }
+// the depth where the model column at (lat, lon) first reaches target; null when it never does above the seabed
 function isoCrossDepth(varKey, lat, lon, seabed, target, t){
   return firstCrossing(z=>getVal(varKey, lat, lon, z, t), seabed, target);
 }
@@ -85,6 +88,7 @@ function buildIsoMesh(varKey, target, asNeutral){
   }
   return {mesh, info};
 }
+// take a mesh out of the scene and free its GPU buffers
 function disposeMesh(m){
   if(!m) return;
   scene.remove(m); m.geometry.dispose();
@@ -92,6 +96,7 @@ function disposeMesh(m){
   m.material.dispose();
 }
 let isoMesh = null, isoInfo = null;
+// rebuild the depth-of-a-value surface for state.variable at state.isoVal
 function buildIsoGeometry(){
   disposeMesh(isoMesh);
   const built = buildIsoMesh(state.variable, state.isoVal, false);
@@ -127,10 +132,11 @@ function contourSegments(vals, level){
   }
   return pts;
 }
+// recolour the TCHP map and rebuild D26 and the 50 kJ/cm² contour for the time on screen
 function updateTchpView(){
   const g = tchpGrid(state.time);
   const mask = g.map(c=>c && c.q!==null ? 1 : 0);
-  Render.setValues(tchpGeo(), Render.fillMasked(g.map(c=>c ? c.q : NaN), mask, LON_N, LAT_N), mask);
+  Render.setValues(tchpMesh.geometry, Render.fillMasked(g.map(c=>c ? c.q : NaN), mask, LON_N, LAT_N), mask);
   Render.setPalette(tchpMesh.material, state.palette);
   Render.setRange(tchpMesh.material, state.cbMin, state.cbMax, state.scale);
   // D26 underneath, drawn neutral so the colour bar stays about heat
@@ -144,12 +150,11 @@ function updateTchpView(){
   tchpContour.renderOrder = Render.ORDER.surfaceLines;
   scene.add(Render.register('tchpContour', tchpContour));
 }
-function tchpGeo(){ return tchpMesh.geometry; }
 // other map-only fields (2D products): the same surface, no D26 and no threshold line
 function updateField2dView(){
   const g = field2dGrid(state.variable, state.time);
   const mask = g.map(v=>v!==null && Number.isFinite(v) ? 1 : 0);
-  Render.setValues(tchpGeo(), Render.fillMasked(g.map(v=>v===null ? NaN : v), mask, LON_N, LAT_N), mask);
+  Render.setValues(tchpMesh.geometry, Render.fillMasked(g.map(v=>v===null ? NaN : v), mask, LON_N, LAT_N), mask);
   Render.setPalette(tchpMesh.material, state.palette);
   Render.setRange(tchpMesh.material, state.cbMin, state.cbMax, state.scale);
 }
@@ -163,6 +168,7 @@ function layerMask(depth){ return gridPts.map((p,idx)=> gridLand[idx] || depth >
 let layerField = null;
 const fieldKey = v => dataMode+'|'+v+'|'+state.time;
 const isMapOnly = v => v==='tchp' || (VAR_META[v] && VAR_META[v].dims===2);
+// sample the variable at every node of every level and recolour the layers: the slow part of a full update
 function updateLayerColors(){
   if(isMapOnly(state.variable) || !hasModel(state.variable)) return;   // 2D fields: updateTchpView / updateField2dView
   const levels = [];

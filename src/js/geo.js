@@ -22,6 +22,7 @@ for(let i=0;i<LAT_N;i++){
    depth; both come with the real-data snapshot (REAL_DATA.alt) and are used in
    either data mode. */
 const ETOPO = {g:REAL_DATA.altGrid, a:b64Int16(REAL_DATA.alt)};
+// ETOPO1 altitude in metres (negative at sea), bilinear between the 0.1° samples
 function altitudeAt(lat, lon){
   const {g, a} = ETOPO;
   const y = Math.max(0, Math.min(g.nlat-1.000001, (lat-g.lat0)/g.step));
@@ -30,6 +31,7 @@ function altitudeAt(lat, lon){
   return (a[o]*(1-fx) + a[o+1]*fx)*(1-fy) + (a[o+g.nlon]*(1-fx) + a[o+g.nlon+1]*fx)*fy;
 }
 function isLand(lat, lon){ return altitudeAt(lat, lon) > 0; }
+// sea-floor depth in metres, positive down, at least 5
 function bathyDepth(lat, lon){ return Math.max(5, -altitudeAt(lat, lon)); }
 // below the deepest data layer (1000 m) depth is visually compressed, otherwise
 // a 3800 m basin would dwarf the model volume at high vertical exaggeration
@@ -66,6 +68,7 @@ function nearestWater(lat, lon, minDepth){
   return [lat,lon];
 }
 
+// great-circle distance in km between [lat, lon] pairs
 function haversineKm(a, b){
   const toR = Math.PI/180, dLat = (b[0]-a[0])*toR, dLon = (b[1]-a[1])*toR;
   const h = Math.sin(dLat/2)**2 + Math.cos(a[0]*toR)*Math.cos(b[0]*toR)*Math.sin(dLon/2)**2;

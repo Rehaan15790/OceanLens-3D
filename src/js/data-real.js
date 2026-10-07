@@ -56,7 +56,7 @@ const realProfiles = (()=>{
     for(let k=first;k<=last;k++) if(!ok[k]) missing[k] = 1;
     inst.obs = {z:A.levels, T:Tn.map((v,k)=>ok[k]?v:NaN), S:Sn.map((v,k)=>ok[k]?v:NaN), C:Cn, O:On, D,
       flag:inversionFlags(D), missing};
-    inst.userData = {type:'argo', data:{id:inst.id, cycle:p.c, lastSurfacing:p.t, inst}};
+    inst.userData = {type:'argo', data:{id:inst.id, cycle:p.c, inst}};
     return inst;
   });
 })();

@@ -426,7 +426,7 @@
       <dt>Argo</dt>
       <dd><span data-fact="argo.profiles" data-fmt="int"></span> profiles from
         <span data-fact="argo.floats" data-fmt="int"></span> floats, from the Argo GDAC via Ifremer ERDDAP. Delayed-mode
-        or adjusted values where they exist; only QC flags 1, 2, 5 and 8 kept. <span data-copy="about.argoMatch"></span></dd>
+        or adjusted values where they exist; only QC flags 1, 2, 5 and 8 kept.</dd>
       <dt>BGC-Argo</dt>
       <dd>Chlorophyll-a (mg/m³) and dissolved oxygen (µmol/kg) from <span data-fact="argo.bgc.profiles" data-fmt="int"></span>
         profiles of <span data-fact="argo.bgc.floats" data-fmt="int"></span> biogeochemical floats, from the synthetic
@@ -549,7 +549,10 @@
 </div>
 
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
-<!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element. -->
+<!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element.
+     They are classic scripts sharing one global scope. Code that runs while a file loads may use only what the files
+     above it define; functions called later (events, updates) may use any of them. main.js comes last and boots the
+     app. An error at load time shows boot-guard.js's error screen and is listed in window.__ol.errors. -->
 <script src="js/config.js"></script>
 <script src="js/palettes.js"></script>
 <script src="js/plugins.js"></script>

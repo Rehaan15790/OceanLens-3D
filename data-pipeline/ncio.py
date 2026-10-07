@@ -37,11 +37,13 @@ class NetCDFError(ValueError):
 
 
 def pad4(n):
+    """Bytes of padding that bring n up to a multiple of 4."""
     return (4 - n % 4) % 4
 
 
 # ------------------------------------------------------------------ reading
 class _Reader:
+    """A big-endian cursor over the header bytes."""
     def __init__(self, data):
         self.b, self.o = data, 0
 
@@ -66,6 +68,7 @@ class _Reader:
 
 
 def _attr_value(t, raw):
+    """Raw attribute bytes -> str, a scalar or an array."""
     if t == 'S1':
         return raw.decode('utf-8', 'replace').rstrip('\x00')
     a = np.frombuffer(raw, '>' + t).astype(t)
@@ -73,6 +76,7 @@ def _attr_value(t, raw):
 
 
 def _read_attrs(r, nsz):
+    """One attribute list from the header -> dict."""
     tag, n = r.i4(), r.u(nsz)
     if tag == 0 and n == 0:
         return {}
@@ -93,6 +97,7 @@ def _read_attrs(r, nsz):
 
 
 def read_bytes(data, raw=False):
+    """NetCDF classic bytes -> the dict described at the top of this module; NetCDFError for anything else."""
     data = bytes(data)
     if data[:4] == b'\x89HDF' or data[:8] == b'\x89HDF\r\n\x1a\n':
         raise NetCDFError('NetCDF-4 file: convert it to NetCDF-3 first (e.g. nccopy -k classic, or '
@@ -173,11 +178,14 @@ def read_bytes(data, raw=False):
 
 
 def read(path, raw=False):
+    """read_bytes of a file."""
     with open(path, 'rb') as f:
         return read_bytes(f.read(), raw)
 
 
 def _unpack(a, t, attrs):
+    """Stored values -> what read() returns: fill and out-of-range values become NaN, then scale_factor
+    and add_offset apply. Char arrays become strings."""
     if t == 'S1':
         if a.ndim == 0:
             return np.array(a.tobytes().decode('utf-8', 'replace').rstrip('\x00 '))
@@ -215,6 +223,7 @@ def _unpack(a, t, attrs):
 
 # ------------------------------------------------------------------ writing
 def _attr_bytes(name, value, vtype=None):
+    """An attribute -> (type, count, bytes); _FillValue and valid_* take the variable's type."""
     if isinstance(value, (str, bytes)):
         b = value.encode('utf-8') if isinstance(value, str) else value
         return 'S1', len(b), b
@@ -236,6 +245,7 @@ def _attr_bytes(name, value, vtype=None):
 
 
 def _var_type(v, fmt):
+    """The type a variable is written as: its 'dtype', else from the data; NetCDFError if fmt lacks it."""
     t = v.get('dtype')
     a = v['data']
     if t is None:
@@ -259,6 +269,7 @@ def _var_type(v, fmt):
 
 
 def _encode(name, v, t, shape):
+    """A variable's data as big-endian bytes, packed with scale_factor / add_offset for an integer type."""
     a, attrs = v['data'], v.get('attrs') or {}
     if t == 'S1':
         a = np.asarray(a)
@@ -300,6 +311,7 @@ def _encode(name, v, t, shape):
 
 
 def write_bytes(dims, vars, attrs=None, fmt='CDF-1'):
+    """dims, vars and global attrs -> NetCDF classic bytes (see the top of this module)."""
     if fmt not in FMT_VERSION:
         raise NetCDFError(f'unknown format {fmt}; use CDF-1, CDF-2 or CDF-5')
     ver = FMT_VERSION[fmt]
@@ -393,6 +405,7 @@ def write_bytes(dims, vars, attrs=None, fmt='CDF-1'):
 
 
 def write(path, dims, vars, attrs=None, fmt='CDF-1'):
+    """write_bytes to path through a temporary file; returns the size in bytes."""
     data = write_bytes(dims, vars, attrs, fmt)
     tmp = path + '.part'
     with open(tmp, 'wb') as f:

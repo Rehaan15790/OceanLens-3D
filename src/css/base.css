@@ -24,7 +24,6 @@ a:hover{color:var(--accent);}
 
 /* units and secondary figures */
 .unit{color:var(--text-3);}
-.muted{color:var(--text-2);}
 
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{transition:none !important;animation:none !important;scroll-behavior:auto !important;}

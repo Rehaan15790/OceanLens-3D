@@ -380,6 +380,7 @@ class Controls:
     def test_overlay_switches(self):
         for sw in ('swArgo', 'swMisfit', 'swGlider', 'swFlow', 'swGrid'):
             self.b.click('#' + sw)
+            self.b.pump(0.15)   # let a frame draw with the switch on, so the redraw it asks for runs
             self.b.click('#' + sw)
         self.assertNoProblems()
 

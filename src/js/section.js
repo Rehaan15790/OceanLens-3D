@@ -14,7 +14,6 @@ let section = null;                  // {a:[lat,lon], b:[lat,lon], name}
 const sectionState = {open:false};
 const sectionGroup = new THREE.Group();
 scene.add(Render.register('section', sectionGroup));
-const tourRunning = ()=>isTourRunning();
 // curtain rows: 10 m steps through the upper ocean, 25 m below 200 m
 const SECTION_Z = [];
 for(let z=0; z<200; z+=10) SECTION_Z.push(z);
@@ -30,6 +29,7 @@ function sectionSpec(){
   }
   return {v:state.variable, palette:state.palette, min:state.cbMin, max:state.cbMax, unit:m.unit, label:m.label, scale:state.scale || 'linear'};
 }
+// the isolines drawn on the curtain and the section plot for variable v
 function sectionContours(v){
   if(v==='temp') return [{val:26, label:'D26', dash:[]}, {val:20, label:'D20', dash:[4,3]}];
   if(v==='sal') return [{val:35, label:'35 PSU', dash:[]}];
@@ -67,6 +67,7 @@ function sectionNearby(maxKm){
 
 const secEndLabels = ['A','B'].map(t=>makeLabel(t, 'secEnd', new THREE.Vector3(), {visibleIf:()=>section!==null}));
 
+// rebuild the 3D curtain, its outlines, isolines and end labels for `section`; clears them when null
 function buildSection(){
   sectionGroup.children.slice().forEach(o=>{
     sectionGroup.remove(o); o.geometry.dispose();
@@ -130,6 +131,7 @@ function buildSection(){
 
 /* ---- drawing a section by dragging across the sea surface ---- */
 const drawRay = new THREE.Raycaster(), drawPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0), drawPt = new THREE.Vector3();
+// the sea-surface point under the pointer, clamped to the map; null when the ray misses
 function surfaceLatLon(e){
   const rect = renderer.domElement.getBoundingClientRect();
   drawRay.setFromCamera(new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1), camera);
@@ -137,12 +139,13 @@ function surfaceLatLon(e){
   const lat = -drawPt.z/SCALE_XZ + (LAT0+LAT1)/2, lon = drawPt.x/SCALE_XZ + (LON0+LON1)/2;   // inverse of toXZ
   return [Math.max(LAT0, Math.min(LAT1, lat)), Math.max(LON0, Math.min(LON1, lon))];
 }
+// drag-to-draw mode on or off (the S key, the draw button)
 function setSectionDraw(on){
   state.sectionDraw = on;
   document.getElementById('sectionDrawBtn').classList.toggle('active', on);
   viewport.classList.toggle('drawing', on);
   document.getElementById('drawHint').classList.toggle('show', on);
-  if(on && tourRunning()) stopTour();
+  if(on && isTourRunning()) stopTour();
 }
 let sectionDrag = null, sectionBuildQueued = false;
 function requestSectionBuild(){
@@ -173,11 +176,13 @@ renderer.domElement.addEventListener('pointerup', ()=>{
   showSection();
 });
 
+// the storm's first fix to landfall; null without a track
 function trackSectionPreset(){
   const T = currentTrack(), last = T[T.length-1];
   if(!T.length) return null;
   return {name:dataSource().section.trackName, a:[T[0].lat, T[0].lon], b:[last.lat, last.lon]};
 }
+// a named preset (SECTION_PRESETS) or 'track': draw it and turn the camera to face it
 function showSectionPreset(key){
   const p = key==='track' ? trackSectionPreset() : SECTION_PRESETS[key];
   if(!p) return;
@@ -211,6 +216,7 @@ function faceSection(){
     az1:to, el1:0.42, r1, t1x:mx, t1z:mz,
     t0:performance.now(), dur:900};
 }
+// build the curtain, dim the volume and open the section panel
 function showSection(){
   buildSection();
   applyMode();            // dims the volume so the curtain reads clearly
@@ -226,6 +232,7 @@ function homeCamera(){
   camTween = {az0:camAz, el0:camEl, r0:camR, t0x:camTarget.x, t0z:camTarget.z,
     az1:to, el1:CAM_HOME.el, r1:fitDistance(), t1x:CAM_TARGET_HOME.x, t1z:CAM_TARGET_HOME.z, t0:performance.now(), dur:900, home:true};
 }
+// remove the section and ease the camera back home
 function clearSection(){
   section = null;
   buildSection();
@@ -235,6 +242,6 @@ function clearSection(){
 }
 document.getElementById('sectionDrawBtn').addEventListener('click', ()=>setSectionDraw(!state.sectionDraw));
 document.querySelectorAll('#sectionPresets .preset').forEach(b=>{
-  b.addEventListener('click', ()=>{ setSectionDraw(false); if(tourRunning()) stopTour(); showSectionPreset(b.dataset.sec); });
+  b.addEventListener('click', ()=>{ setSectionDraw(false); if(isTourRunning()) stopTour(); showSectionPreset(b.dataset.sec); });
 });
 document.getElementById('closeSection').addEventListener('click', clearSection);

@@ -35,11 +35,13 @@ Render.attach({
    camera moves, and at 30 fps while current streaks move. Nothing is drawn while the splash or a
    dialog covers the view. A one-second refresh keeps any missed change from lingering. */
 const splashEl = document.getElementById('splash');
+// true while the splash or a dialog hides the view, so no frames are drawn
 function viewCovered(){
   return (splashEl && !splashEl.classList.contains('hide')) ||
     !!document.querySelector('.overlay.show, #smallScreen:not([hidden])');
 }
 let lastTick = performance.now(), lastFlowTick = 0, lastDrawn = 0, drawnOnce = false, wasCovered = false;
+// one animation frame (main.js animate): move the camera, the streaks, and redraw if anything changed
 function renderFrame(){
   const now = performance.now(), dt = Math.min(0.05, (now - lastTick)/1000);
   lastTick = now;

@@ -12,6 +12,7 @@ const NetCDF3 = (()=>{
                         ubyte:255, ushort:65535, uint:4294967295};
   const HDF5 = [0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a];
 
+  // read the header and check every variable lies inside the file; data is read later, on request
   function parse(buffer){
     const u8 = new Uint8Array(buffer), dv = new DataView(buffer);
     if(HDF5.every((b, i)=>u8[i]===b)) throw new Error('NetCDF-4 file: convert it to NetCDF-3 first (nccopy -k classic) or export it as CSV.');
@@ -88,6 +89,7 @@ const NetCDF3 = (()=>{
       throw new Error('This NetCDF file could not be read: ' + err.message + '.');
     }
   }
+  // one value of type t at byte offset at (NetCDF is big-endian, as DataView reads by default)
   function readOne(dv, t, at){
     switch(t){
       case 'byte': return dv.getInt8(at);
@@ -103,6 +105,7 @@ const NetCDF3 = (()=>{
     }
     return NaN;
   }
+  // the object parse() returns: readers over the file bytes
   function makeFile(u8, dv, version, numrecs, dims, attrs, vars, recsize){
     const get = k=>{ const v = vars[k]; if(!v) throw new Error(`No variable ${k} in this file.`); return v; };
     // the raw values, flattened row-major

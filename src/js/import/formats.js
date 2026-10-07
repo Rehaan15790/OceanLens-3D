@@ -36,6 +36,7 @@
   const has = (nc, n)=>!!(n && nc.vars[n]);
   const num = (nc, n)=>has(nc, n) ? nc.read(n) : null;
   const lowerMap = nc=>{ const m = {}; Object.keys(nc.vars).forEach(k=>{ m[k.toLowerCase()] = k; }); return m; };
+  // the variable holding a quantity (a CF key): by standard_name first, then by usual names; null when absent
   function find(nc, key, extraNames){
     const [sns, names] = CF[key];
     for(const n of Object.keys(nc.vars)) if(sns.includes(String(nc.vars[n].attrs.standard_name || ''))
@@ -59,6 +60,7 @@
     return f && f.some(c=>c!==' ') ? f : null;
   }
   const strs = (nc, n)=>has(nc, n) ? Array.from(nc.read(n), s=>typeof s==='string' ? s.trim() : String(s)) : null;
+  // a CF time variable -> ms since 1970 (NaN where missing); throws on units it cannot read
   function timeMs(nc, n){
     const v = num(nc, n); if(!v) return null;
     const u = String(nc.vars[n].attrs.units || '');

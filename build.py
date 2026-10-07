@@ -51,7 +51,7 @@ MIME = {'.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.we
 
 
 class BuildError(Exception):
-    pass
+    """The sources cannot be built: a missing or unlisted file, a bad reference, invalid JSON, over budget."""
 
 
 def read_text(path):
@@ -61,6 +61,7 @@ def read_text(path):
 
 
 def rel(path):
+    """A path relative to the project root with forward slashes, for messages."""
     return os.path.relpath(path, ROOT).replace(os.sep, '/')
 
 
@@ -73,6 +74,7 @@ def src_path(ref):
 
 
 def inline_assets(css, css_file):
+    """Replace url('../assets/...') in a stylesheet with data: URIs."""
     def data_uri(m):
         path = os.path.join(SRC, 'assets', m.group(1))
         mime = MIME.get(os.path.splitext(path)[1].lower())
@@ -192,6 +194,7 @@ def build():
 
 
 def write(data, out):
+    """Write bytes through a temporary file, so a failed build never leaves half a page."""
     os.makedirs(os.path.dirname(out), exist_ok=True)
     tmp = out + '.tmp'
     with open(tmp, 'wb') as f:
@@ -212,6 +215,7 @@ def material_warnings():
 
 
 def check():
+    """build.py --check: build in memory and compare with the shipped root file; 1 when stale or broken."""
     problems = []
     try:
         data, _, _, _ = build()
@@ -236,6 +240,7 @@ def check():
 
 
 def build_once(out):
+    """Build to `out` and print the size of each part."""
     data, sizes, version, _ = build()
     write(data, out)
     parts = ', '.join(f'{k} {v / 1e3:.0f} kB' for k, v in sizes.items())
@@ -261,16 +266,11 @@ def main():
     args = ap.parse_args()
     if args.check:
         return check()
-    if args.site:
-        try:
-            build_site(os.path.abspath(args.site))
-        except BuildError as e:
-            print('error: ' + str(e))
-            return 1
-        return 0
-    out = os.path.abspath(args.out)
     try:
-        build_once(out)
+        if args.site:
+            build_site(os.path.abspath(args.site))
+        else:
+            build_once(os.path.abspath(args.out))
     except BuildError as e:
         print('error: ' + str(e))
         return 1

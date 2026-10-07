@@ -3,6 +3,7 @@
 const CHART_FONT = '11px system-ui, "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif';
 const CHART_FONT_BOLD = '600 ' + CHART_FONT;
 let chartTheme = null;
+// chart colours from the CSS tokens, read once
 function theme(){
   if(chartTheme) return chartTheme;
   const cs = getComputedStyle(document.documentElement), v = n=>cs.getPropertyValue(n).trim();
@@ -65,6 +66,7 @@ function drawFloatGlyph(ctx, x, y, r, glider){
 
 /* ---- the distance–depth plot in the right panel ---- */
 let sectionPlot = null;   // what the chart last drew, for the hover readout
+// the section panel: distance-depth raster, isolines, nearby floats, key and summary text
 function drawSectionPanel(){
   if(!section) return;
   const th = theme(), spec = sectionSpec(), km = haversineKm(section.a, section.b);
@@ -213,6 +215,8 @@ function misfitWord(tab, rmse){
   const b = MISFIT_BANDS[tab];
   return b ? (rmse < b[0] ? 'good' : rmse <= b[1] ? 'fair' : 'poor') : '';
 }
+// the profile panel chart for profileState.inst and .tab (observed solid, model dashed), its legend and the
+// bias / RMSE line
 function drawProfileChart(){
   const inst = profileState.inst;
   if(!inst) return;
@@ -330,6 +334,7 @@ function drawProfileChart(){
    Everything here is drawn from state and colorbarSpec(); nothing decides a range or a colour. */
 function exaggerationRatio(e){ return fmt.sig2(facts().real.view.exaggerationPerSlider*e); }   // two significant figures
 
+// what the viewport colour key shows (title, ticks, marks, legend rows, note), from colorbarSpec() and state
 function keySpec(){
   const c = colorbarSpec();
   const marks = [], legend = [], notes = [];
@@ -389,6 +394,7 @@ function keySpec(){
     ends:{min:endText(c.min, step), max:endText(c.max, step)}, marks, legend, note:notes.join(' ')};
 }
 
+// draw a keySpec() into the key elements under the 3D view
 function renderKey(spec){
   const $ = id=>document.getElementById(id);
   $('keyTitle').textContent = spec.title;
@@ -443,6 +449,7 @@ function renderKey(spec){
   $('keyNote').textContent = spec.note;
 }
 
+// the "Real data / Synthetic demo" line above the view
 function renderContext(){
   const ctx = dataSource().ctx;
   document.getElementById('contextLine').classList.toggle('synth', dataMode!=='real');
@@ -451,10 +458,11 @@ function renderContext(){
 }
 
 let timeLabelsFor = null;
+// day labels under the timeline; rebuilt only when the data mode changes
 function renderTimeLabels(){
   if(timeLabelsFor===dataMode) return;
   timeLabelsFor = dataMode;
-  const el = document.getElementById('timeLabels'), times = META.times;
+  const el = document.getElementById('timeLabels');
   el.textContent = '';
   for(let t=0;t<NT;t++){
     const s = document.createElement('span');

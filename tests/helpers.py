@@ -6,7 +6,6 @@ and fall back to the older globals otherwise, so they run against every build si
 """
 import functools
 import json
-import os
 import sys
 import unittest
 from pathlib import Path

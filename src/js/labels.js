@@ -16,6 +16,7 @@ const currentLabelDefs = [
 ];
 currentLabelDefs.forEach(d=>{ d.onlyWhen='cur'; labelDefs.push(d); });
 const labelLayerEl = document.getElementById('labelLayer');
+// an HTML label pinned to a 3D point; updateLabels places it each frame. extra: onlyWhen (a variable), visibleIf()
 function makeLabel(text, cls, pos, extra){
   const el = document.createElement('div');
   el.className = 'geoLabel '+cls;
@@ -39,6 +40,7 @@ const ruler = new THREE.LineSegments(new THREE.BufferGeometry(), Render.line(0x8
 ruler.renderOrder = Render.ORDER.surfaceLines;
 scene.add(Render.register('ruler', ruler));
 let rulerCorner = null;
+// the depth ruler on the box corner nearest the camera; redrawn only when that corner or the exaggeration changes
 function placeRuler(){
   const hx = (LON1-LON0)*SCALE_XZ/2, hz = (LAT1-LAT0)*SCALE_XZ/2;
   // the corner nearest the camera, pushed slightly outside the box so no layer sits in front of it
@@ -61,6 +63,7 @@ function updateDepthLabelPositions(){ rulerCorner = null; placeRuler(); }
 const labelRay = new THREE.Raycaster();
 const _lp = new THREE.Vector3(), _ld = new THREE.Vector3();
 let lastLabelCamera = '', compassDeg = NaN;
+// every rendered frame: project the labels, hide those out of view and dim those behind land
 function updateLabels(){
   placeRuler();
   const rect = viewport.getBoundingClientRect();

@@ -11,6 +11,7 @@ const TOUR_KEYS = ['variable', 'mode', 'depthIdx', 'isoVal', 'opacity', 'exagg',
 
 function isTourRunning(){ return tour.running; }
 
+// run fn after ms, unless the step has changed or the tour has stopped by then
 function tourLater(fn, ms){
   const token = tour.token;
   setTimeout(()=>{ if(tour.running && token===tour.token) fn(); }, ms);
@@ -21,6 +22,7 @@ function readingTime(text){
   return Math.max(8000, (words/3.5 + 3)*1000);
 }
 
+// everything the tour changes, so Stop can put it back (restoreApp)
 function snapshotApp(){
   const s = {};
   TOUR_KEYS.forEach(k=>{ s[k] = state[k]; });
@@ -45,10 +47,10 @@ function restoreApp(saved){
   if(playing) setPlaying(true);
 }
 
+// set the app to step tour.idx: state, camera, panel and caption; delayed parts go through tourLater
 function applyTourStep(){
-  const raw = tourSteps[tour.idx];
-  // legacy steps carry real-mode overrides; ux's steps use getters, which the spread evaluates now
-  const step = dataMode==='real' && raw.real ? {...raw, ...raw.real} : {...raw};
+  // the steps' title, caption and time are getters for the data mode: the spread evaluates them now
+  const step = {...tourSteps[tour.idx]};
   tour.token++;
   clearTimeout(tour.timer);
   section = null;           // each step starts without a section; a step can ask for one
@@ -117,6 +119,7 @@ function nextTourStep(fromAutoplay){
   if(fromAutoplay){ setTourAutoplay(false); return; }   // autoplay stops on the last step
   stopTour({restore:true});                            // "Finish"
 }
+// Autoplay on or off; on, the next step comes after the caption's reading time
 function setTourAutoplay(on){
   tour.autoplay = !!on;
   tourPaused = false;

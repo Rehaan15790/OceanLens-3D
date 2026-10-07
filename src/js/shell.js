@@ -6,6 +6,7 @@ const shell = (()=>{
   const app = document.getElementById('app');
   const NARROW = 1100, SMALL = 900;       // CSS px: right panel starts collapsed below NARROW; notice below SMALL
 
+  // open or collapse the 'left' or 'right' panel: a class on #app and the toggle's aria state
   function setPanel(side, open){
     app.classList.toggle(side+'-collapsed', !open);
     const btn = document.getElementById(side+'Toggle');
@@ -25,6 +26,7 @@ const shell = (()=>{
   // panels.js calls this when a float, the track or a section is opened, so a collapsed panel comes back
   function revealRight(){ if(app.classList.contains('right-collapsed')) setPanel('right', true); }
 
+  // collapse the panels that do not fit this window width
   function applyWidth(){
     const w = window.innerWidth;
     setPanel('right', w >= NARROW);
@@ -50,6 +52,7 @@ const shell = (()=>{
   const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
   // dialogs with steps hide whole blocks, so only rendered controls count
   const focusables = el=>[...el.querySelectorAll(FOCUSABLE)].filter(f=>f.getClientRects().length > 0);
+  // focus moves into dialogEl; closeDialog() runs closeFn and gives focus back to the opener
   function openDialog(dialogEl, closeFn){
     opener = document.activeElement; current = dialogEl; onClose = closeFn;
     const first = focusables(dialogEl)[0];
@@ -85,16 +88,13 @@ const shell = (()=>{
   wireOverlay('aboutOverlay', 'aboutBtn', 'aboutClose');
   wireOverlay('helpOverlay', 'helpBtn', 'helpClose');
 
-  // [data-fact] and [data-copy]: numbers and mode strings in static markup
-  function fillFacts(facts, fmt, copy){
+  // [data-fact="path"]: numbers in static markup, from facts().real, written with fmt[data-fmt] (default int).
+  // A data-fmt that fmt lacks prints the raw value, so a date shows as an ISO string: add the formatter to fmt.js.
+  function fillFacts(facts, fmt){
     const get = path=>path.split('.').reduce((o,k)=>o==null ? o : k==='last' ? o[o.length-1] : o[k], facts);
     document.querySelectorAll('[data-fact]').forEach(el=>{
       const v = get(el.dataset.fact), f = fmt[el.dataset.fmt || 'int'];
       el.textContent = v==null ? '' : f ? f(v) : String(v);
-    });
-    if(copy) document.querySelectorAll('[data-copy]').forEach(el=>{
-      const v = copy[el.dataset.copy];
-      el.textContent = typeof v==='function' ? v(facts, fmt) : (v || '');
     });
   }
 
@@ -124,6 +124,6 @@ const shell = (()=>{
   document.querySelectorAll('[data-needs-shell]').forEach(el=>{ el.hidden = false; });
 
   applyWidth();
-  // called when the splash is dismissed (the splash sits above every dialog)
-  return {setPanel, revealRight, openDialog, closeDialog, fillFacts, smallScreenCheck};
+  // what other files call (import-ui.js; tests/test_extend.py uses setPanel)
+  return {setPanel, revealRight, openDialog, closeDialog};
 })();

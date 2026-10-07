@@ -13,9 +13,11 @@ let datasetSeq = 0;
 const pluginListeners = {};
 const OBS_ARRAYS = {temp:'T', sal:'S', chl:'C', oxy:'O'};   // the short names ocean.js reads
 
+// call every listener of a plugin event; a listener that throws is logged to the console and skipped
 function pluginEmit(name, detail){
   (pluginListeners[name] || []).slice().forEach(fn=>{ try { fn(detail); } catch(err){ console.error(err); } });
 }
+// throws unless k is a short identifier
 function pluginKey(k, what){
   if(typeof k !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/i.test(k)) throw new Error(`${what} key must be a short identifier (letters, digits, _ or -): ${k}`);
 }
@@ -23,6 +25,7 @@ function pluginKey(k, what){
 function pluginChanged(){ if(typeof requestUpdate === 'function') requestUpdate('full'); }
 
 /* ---- variables and products ---- */
+// add or replace a variable: spec.sample(lat, lon, depth, t), or spec.grid(t) for a 2D one (see docs/EXTENDING.md)
 function registerVariable(key, spec){
   pluginKey(key, 'Variable');
   if(!spec || (typeof spec.sample !== 'function' && typeof spec.grid !== 'function')) throw new Error(`Variable ${key} needs a sample(lat, lon, depth, t) function.`);
@@ -75,7 +78,9 @@ function registerInstrument(type, spec){
   if(importedInsts.length) pluginChanged();
   return INSTRUMENT_TYPES[type];
 }
+// the registered type of an instrument kind; unknown kinds get 'other'
 function instrumentType(kind){ return INSTRUMENT_TYPES[kind] || INSTRUMENT_TYPES.other; }
+// whether the overlay switches show this kind of instrument
 function instrumentVisible(inst){
   return inst.kind==='argo' ? state.showArgo : inst.kind==='glider' ? state.showGlider : state.showOther;
 }
@@ -98,6 +103,7 @@ const asNum = v => v===null || v===undefined || v==='' ? NaN : +v;
 // text from a file shown in the UI: no control characters, bounded length
 const cleanText = (v, max) => String(v).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, max);
 const MAX_PROFILES = 20000;
+// index of the analysis time nearest to ms (ms since 1970)
 function nearestAnalysis(ms){
   let best = 0, bestD = Infinity;
   META.times.forEach((iso, t)=>{ const d = Math.abs(Date.parse(iso) - ms); if(d < bestD){ bestD = d; best = t; } });
@@ -143,6 +149,7 @@ function datasetInstrument(raw, ds, n){
   inst.userData = {type:kind, data:{id:inst.id, cycle:inst.cycle, inst}};
   return inst;
 }
+// the public description of an added dataset (OceanLens.dataset(id)); null when unknown
 function datasetSummary(id){
   const e = DATASETS.get(id);
   if(!e) return null;
@@ -153,11 +160,14 @@ function datasetSummary(id){
           start:new Date(t0).toISOString(), end:new Date(t1).toISOString(), types,
           notes:d.notes || []};
 }
+// after an add or remove: rebuild importedInsts and bump datasetRev, so markers and caches refresh
 function datasetsChanged(){
   importedInsts = [].concat(...[...DATASETS.values()].map(e=>e.insts));
   datasetRev++;
   pluginChanged();
 }
+// OceanLens.addDataset: profiles -> instruments; returns {id, name, profiles, skipped, warnings}, throws when none
+// can be shown
 function addDataset(ds){
   if(!ds || !Array.isArray(ds.profiles)) throw new Error('A dataset needs a list of profiles.');
   const id = String(ds.id || `data-${++datasetSeq}`);

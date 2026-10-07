@@ -22,6 +22,7 @@ def srgb_to_linear(c):
 
 
 def linear_to_srgb(c):
+    """Linear RGB -> gamma-encoded sRGB (both 0 to 1)."""
     c = np.asarray(c, float)
     return np.where(c <= 0.0031308, 12.92 * c, 1.055 * np.abs(c) ** (1 / 2.4) - 0.055)
 
@@ -35,11 +36,13 @@ M2 = np.array([[0.2104542553, 0.7936177850, -0.0040720468],
 
 
 def linear_to_oklab(rgb):
+    """Linear sRGB -> OKLab."""
     lms = np.cbrt(rgb @ M1.T)
     return lms @ M2.T
 
 
 def oklab_to_linear(lab):
+    """OKLab -> linear sRGB."""
     lms = (lab @ np.linalg.inv(M2).T) ** 3
     return lms @ np.linalg.inv(M1).T
 
@@ -51,6 +54,7 @@ WHITE = np.array([0.95047, 1.0, 1.08883])
 
 
 def srgb_to_cielab(srgb):
+    """sRGB (0 to 1) -> CIELAB (L*, a*, b*), D65 white."""
     xyz = srgb_to_linear(srgb) @ XYZ.T / WHITE
     f = np.where(xyz > (6 / 29) ** 3, np.cbrt(xyz), xyz / (3 * (6 / 29) ** 2) + 4 / 29)
     return np.stack([116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])], -1)
@@ -68,6 +72,7 @@ CVD = {
 
 
 def in_gamut(lab):
+    """True where an OKLab colour lies inside the sRGB gamut."""
     rgb = oklab_to_linear(lab)
     return np.all((rgb >= -1e-6) & (rgb <= 1 + 1e-6), axis=-1)
 
@@ -125,6 +130,7 @@ def from_stops(stops):
 
 
 def ramps():
+    """Every palette: name -> (label, 256 colours)."""
     return {
         # dark blue -> violet -> red -> orange -> pale yellow; warm water is the light end
         'temperature': ('Temperature', designed(18, 95, [0, 0.35, 0.7, 1], [0.12, 0.17, 0.19, 0.13],
@@ -165,6 +171,8 @@ def quantise(rgb):
 
 
 def report(name, q):
+    """Checks for one palette (q: 256 x 3 sRGB, 0 to 255): lightness monotone and evenly stepped, also under
+    simulated colour-vision deficiency."""
     srgb = q / 255
     lab = srgb_to_cielab(srgb)
     L = lab[:, 0]

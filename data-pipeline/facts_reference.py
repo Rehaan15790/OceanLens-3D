@@ -20,6 +20,7 @@ SCALE_XZ, DEPTH_SCALE, DEEP_COMPRESSION = 0.55, 0.002, 0.085
 
 
 class Snapshot:
+    """The snapshot JSON decoded with numpy, and the app's samplers re-implemented (no app code)."""
     def __init__(self, path):
         with open(path, encoding='utf-8') as f:
             self.d = d = json.load(f)
@@ -62,6 +63,7 @@ class Snapshot:
         return (a[i, j] * (1 - fx) + a[i, j + 1] * fx) * (1 - fy) + (a[i + 1, j] * (1 - fx) + a[i + 1, j + 1] * fx) * fy
 
     def cell_median(self, i, j):
+        """Median ETOPO altitude in the 0.5 deg cell of node (i, j), as geo.js cellMedianAlt."""
         g = self.g
         ci, cj = round(i * self.m['step'] / g['step']), round(j * self.m['step'] / g['step'])
         blk = self.alt[max(0, ci - 2):min(g['nlat'], ci + 3), max(0, cj - 2):min(g['nlon'], cj + 3)]
@@ -71,9 +73,11 @@ class Snapshot:
         return self.altitude(lat, lon) > 0
 
     def seabed(self, lat, lon):
+        """Sea-floor depth (m, positive down, at least 5), as geo.js bathyDepth."""
         return max(5.0, -self.altitude(lat, lon))
 
     def at(self, vi, lat, lon, depth, t):
+        """Model variable vi at a point: bilinear, linear between levels, as data-real.js realAt."""
         m = self.m
         y = max(0, min(self.nlat - 1.000001, (lat - m['lat0']) / m['step']))
         x = max(0, min(self.nlon - 1.000001, (lon - m['lon0']) / m['step']))
@@ -89,10 +93,12 @@ class Snapshot:
         return lv(k) if fz == 0 else lv(k) * (1 - fz) + lv(k + 1) * fz
 
     def column(self, vi, lat, lon, t):
+        """Model variable vi on every level at a point."""
         return np.array([self.at(vi, lat, lon, d, t) for d in self.depths])
 
 
 def rho_eos80(S, T):
+    """UNESCO EOS-80 density at one atmosphere (kg/m3), as ocean.js seawaterDensity."""
     rw = (999.842594 + 6.793952e-2 * T - 9.095290e-3 * T ** 2 + 1.001685e-4 * T ** 3 - 1.120083e-6 * T ** 4
           + 6.536332e-9 * T ** 5)
     A = 0.824493 - 4.0899e-3 * T + 7.6438e-5 * T ** 2 - 8.2467e-7 * T ** 3 + 5.3875e-9 * T ** 4
@@ -126,6 +132,8 @@ def inversion_flags(D):
 
 
 def first_crossing(depths, col, seabed, target):
+    """Depth where a column first crosses target above the seabed, as volume.js firstCrossing;
+    None when it never does."""
     v0 = col[0]
     for k in range(len(depths) - 1):
         z0 = depths[k]
@@ -164,6 +172,7 @@ def track(s):
 
 
 def facts(path):
+    """Every number facts.js computes for real data, from the snapshot at path."""
     s = Snapshot(path)
     D = s.depths
     F = {'analysis': {'count': s.nt, 'times': s.m['times']}}

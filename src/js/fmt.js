@@ -34,6 +34,8 @@ const fmt = (()=>{
     analysisTime: t => { const d = date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`; },
     // 13 May
     dayMonth: t => { const d = date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; },
+    // 25 May 2020
+    dayMonthYear: t => { const d = date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`; },
     // 18 May, 05:35 UTC
     floatTime: t => { const d = date(t); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`; },
     // 15 May 06Z, or 20 May 10:18Z off the synoptic hours

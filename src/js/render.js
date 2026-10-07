@@ -30,7 +30,6 @@ const Render = (() => {
 
   /* ---- palettes ---- */
   const lutCache = {};
-  const paletteKey = name => name;
   // PALETTES entries are {label, lut:'<256 sRGB hex entries>'} (palettes.js, generated)
   function lut(name){
     if(!lutCache[name]){
@@ -66,21 +65,21 @@ const Render = (() => {
 
   /* ---- ramp textures ---- */
   const rampImages = {};
+  // a 256 x 1 texture of the palette, sampled by the data-surface shader (patchRamp)
   function rampTexture(name){
-    const key = paletteKey(name);
-    if(!rampImages[key]){
-      const a = lut(key), data = new Uint8Array(RAMP_N*4);
+    if(!rampImages[name]){
+      const a = lut(name), data = new Uint8Array(RAMP_N*4);
       for(let i=0; i<RAMP_N; i++){ data[i*4] = a[i*3]; data[i*4+1] = a[i*3+1]; data[i*4+2] = a[i*3+2]; data[i*4+3] = 255; }
-      rampImages[key] = data;
+      rampImages[name] = data;
     }
     // one texture per material (setPalette swaps it); the range lives in the material's ramp uniforms
-    const tex = new THREE.DataTexture(rampImages[key], RAMP_N, 1, THREE.RGBAFormat);
+    const tex = new THREE.DataTexture(rampImages[name], RAMP_N, 1, THREE.RGBAFormat);
     tex.encoding = THREE.sRGBEncoding;
     tex.magFilter = tex.minFilter = THREE.LinearFilter;
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.generateMipmaps = false;
     tex.needsUpdate = true;
-    tex.name = key;                 // r128 textures have no userData
+    tex.name = name;                 // r128 textures have no userData
     return tex;
   }
   // value -> texel centre: min lands on entry 0, max on entry 255, anything outside clamps.
@@ -94,8 +93,9 @@ const Render = (() => {
     material.userData.range = [min, max];
     material.userData.scale = sc;
   }
+  // swap a data surface's palette; its value range and scale stay
   function setPalette(material, name){
-    if(paletteKey(name) === material.map.name) return;
+    if(name === material.map.name) return;
     const [min, max] = material.userData.range, old = material.map;
     material.map = rampTexture(name);
     old.dispose();
@@ -378,6 +378,7 @@ const Render = (() => {
   let ctx = null;                 // {renderer, scene, camera, toWorld(lat,lon,depth) → THREE.Vector3, beforeRender()}
   const groups = new Map();       // name → Object3D
   function attach(c){ ctx = c; }
+  // name a scene object so tests can find, hide or isolate it (Render.test.groups, toggle, pixelAt isolate)
   function register(name, obj){ groups.set(name, obj); return obj; }
   const ISOLATE_KEEP = new Set(['surface','layers','slice','tchp','iso','iso3d','d26','section','land','floor','backdrop']);
 
@@ -386,6 +387,7 @@ const Render = (() => {
     ctx.renderer.render(ctx.scene, ctx.camera);
     return renderInfo();
   }
+  // draw calls, memory and canvas size of the last frame (tests, and handy in the console: __ol.render.renderInfo())
   function renderInfo(){
     const r = ctx.renderer, i = r.info, gl = r.getContext();
     return {calls:i.render.calls, triangles:i.render.triangles, lines:i.render.lines, points:i.render.points,
@@ -462,9 +464,9 @@ const Render = (() => {
     expectedColour, groups:() => [...groups.keys()], toggle,
     marks:kind => pickableMarks(kind)};
 
-  return {testMode, gpuColor, gpuHex, paletteKey, paletteColor, rampPos, rampLUT, renderForExport, rampTexture, setRange, setPalette,
+  return {testMode, gpuColor, paletteColor, rampPos, rampLUT, renderForExport, setRange, setPalette,
     ORDER, layerOrder, invalidate, takeDirty, setSurfaceRole, dataSurface, flat, line, vertexColoured, terrain, marks, isoShaded, setIsoColour, backdrop,
-    setValues, fillMasked, createRenderer, pixelRatio, applySize, attach, register, test};
+    setValues, fillMasked, createRenderer, applySize, attach, register, test};
 })();
 // the 2D charts, colour bar and export call paletteColor(key, t); palettes.js holds data only
 const paletteColor = Render.paletteColor;

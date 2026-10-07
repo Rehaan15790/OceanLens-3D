@@ -47,6 +47,8 @@ function refreshMarkers(){
   applyMarkerVisibility();
 }
 
+// redraw everything that depends on state. If something on screen is stale after an action,
+// check that the action ends in requestUpdate() and that the stale piece is refreshed here.
 function fullUpdate(){
   refreshMarkers();
   followProfile();

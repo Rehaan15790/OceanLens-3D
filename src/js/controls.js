@@ -65,6 +65,7 @@ function colorbarSpec(){
           view, depth: view==='tchp' || view==='field2d' || view==='iso3d' ? null : readoutDepth(),
           isoValue: view==='iso3d' && iso ? state.isoVal : null, editable:!empty, empty};
 }
+// the colour-range fields, palette select and scale toggle follow colorbarSpec()
 function updateColorbarUI(){
   const spec = colorbarSpec(), meta = VAR_META[state.variable];
   // an empty key (no surface) leaves the fields blank, in both iso views
@@ -100,6 +101,7 @@ function applyViewRange(){
   [state.cbMin, state.cbMax] = viewRange();
   logSafeMin();
 }
+// back to the variable's own palette, scale and default range
 function resetRange(){
   state.customRange = false;
   state.palette = VAR_META[state.variable].palette;
@@ -190,6 +192,7 @@ function syncIsoSlider(){
   });
 }
 function setShowAllImported(on){ setOverlay('showAllImported', on); }
+// state -> every control (pressed, hidden, values, aria); requestUpdate() runs it
 function syncControls(){
   const tchp = is2D(state.variable), src = dataSource();
   ui.varPills.querySelectorAll('.pill').forEach(b=>setPressed(b, b.dataset.v===state.variable));

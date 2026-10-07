@@ -12,7 +12,7 @@
   color:var(--text);max-width:100%;}
 .badge{display:inline-block;padding:1px var(--s-2);border-radius:3px;font-size:var(--fs-1);font-weight:600;
   background:var(--panel-2);color:var(--text);border:1px solid var(--border-strong);white-space:nowrap;}
-.badge-synth,#contextLine.synth .badge{background:var(--synth);border-color:var(--synth);color:var(--synth-ink);}
+#contextLine.synth .badge{background:var(--synth);border-color:var(--synth);color:var(--synth-ink);}
 #compass{width:40px;height:40px;border-radius:50%;background:var(--chip);border:1px solid var(--border);display:flex;
   align-items:center;justify-content:center;flex-shrink:0;}
 #compass svg{width:24px;height:24px;overflow:visible;}

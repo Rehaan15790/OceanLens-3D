@@ -46,6 +46,7 @@ class Recorder(unittest.TestResult):
         self.t0[test.id()] = time.monotonic()
 
     def _add(self, test, status, err=None, sub=None):
+        """Record one result and print its line, with the first lines of a failure's message."""
         tid = test.id() + (f' {sub._subDescription()}' if sub is not None else '')
         msg = ''
         if err is not None:
@@ -92,6 +93,7 @@ class Recorder(unittest.TestResult):
 
 
 def load(names, pattern):
+    """Test module names (@pipeline: data-pipeline/test_*.py) -> one suite, kept to ids containing pattern."""
     loader, suite = unittest.TestLoader(), unittest.TestSuite()
     for n in names:
         if n == '@pipeline':
@@ -106,6 +108,7 @@ def load(names, pattern):
 
 
 def _flatten(s):
+    """Every test case in a nested suite."""
     for t in s:
         if isinstance(t, unittest.TestSuite):
             yield from _flatten(t)

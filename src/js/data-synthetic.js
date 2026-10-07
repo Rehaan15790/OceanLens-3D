@@ -27,6 +27,7 @@ function belowMixedLayer(depth, mld, zc, w){
   const L = x=>1/(1+Math.exp(x));
   return L((depth-zc)/w)/L((mld-zc)/w);
 }
+// demo temperature (°C) at a point; synthSal is the same shape in PSU
 function synthTemp(lat, lon, depth, t){
   const s = synthShape(lat, lon, t);
   const deepT = 5.8 + 10*Math.exp(-depth/450);          // background: about 11 °C at 300 m, 7 °C at 1000 m
@@ -40,6 +41,7 @@ function synthSal(lat, lon, depth, t){
   const zs = Math.max(s.mld + 15, s.zt - 45*s.bay);
   return deepS + (s.sss-deepS)*belowMixedLayer(depth, s.mld, zs, 30);
 }
+// demo current (m/s) from a stream function (no divergence on the grid); it fades with depth
 function synthCurrentUV(lat, lon, depth, t){
   const x=(lon-LON0), y=(lat-LAT0), e=0.01;
   const psi=(xx,yy)=>Math.sin(xx*0.5+t*0.15)*Math.cos(yy*0.6)+0.5*Math.sin(xx*0.32 - yy*0.42 + t*0.12);
@@ -62,7 +64,7 @@ const argoFloats = Array.from({length:14}, (_,idx)=>{
   const lat = lerp(LAT0+1, LAT1-1, (Math.sin(idx*12.9898)*0.5+0.5));
   const lon = lerp(LON0+1, LON1-1, (Math.sin(idx*78.233+4)*0.5+0.5));
   return {id:'SYN-F'+String(idx+1).padStart(2,'0'), kind:'argo', synthetic:true, lat, lon,
-    cycle: 40+idx*3, lastSurfacing: 'on the day shown'};
+    cycle: 40+idx*3};
 });
 
 // Synthetic gliders: tracks of waypoints, ids SYN-G1…G3
@@ -128,6 +130,7 @@ function instrumentTraits(key, lon){
     chlScale: 0.7 + r()*0.8
   };
 }
+// a synthetic float or glider waypoint: sampling levels and the traits ocean.js observeProfile uses
 function makeInstrument(id, kind, lat, lon, maxDepth, opts = {}){
   const levels = kind==='argo' ? ARGO_LEVELS.filter(z=>z<=maxDepth)
     : Array.from({length:Math.floor(maxDepth/5)}, (_,k)=>5+k*5);   // gliders sample every ~5 m

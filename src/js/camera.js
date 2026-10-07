@@ -22,7 +22,9 @@ function fitDistance(){
   for(let k=0; k<24; k++){ const mid = (lo + hi)/2; if(fits(mid)) hi = mid; else lo = mid; }
   return hi;
 }
+// the zoom-out limit
 function maxDistance(){ return Math.max(24, fitDistance()*1.25); }
+// place the camera from camTarget, camAz, camEl and camR; call after changing any of them
 function updateCamera(){
   // keep the camera above the sea: raise the elevation if this distance would take it under
   const minEl = Math.asin(Math.min(1, Math.max(0, (CAM_MIN_Y - camTarget.y)/camR)));
@@ -38,6 +40,7 @@ updateCamera();
 
 let dragging=false, dragMoved=false, lastX=0, lastY=0, drawGesture=false;
 let camTween = null;   // eased camera move (see faceSection); any drag cancels it
+// a manual move cancels any eased move and stops resize refits
 function userMovedCamera(){ camTween = null; camAtHome = false; }
 function orbitBy(dAz, dEl){ userMovedCamera(); camAz += dAz; camEl = Math.max(0.1, Math.min(1.45, camEl + dEl)); updateCamera(); }
 function zoomBy(dR){ userMovedCamera(); camR = Math.max(4, Math.min(maxDistance(), camR + dR)); updateCamera(); }

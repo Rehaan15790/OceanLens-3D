@@ -21,6 +21,7 @@ TEXT_SUFFIXES = {'.py', '.js', '.css', '.html', '.md', '.json', '.yml', '.yaml',
 
 
 def step(name, fn):
+    """Run one step, print PASS or FAIL with its time; True when it passed."""
     t0 = time.monotonic()
     print(f'\n### {name}', flush=True)
     try:
@@ -32,6 +33,7 @@ def step(name, fn):
 
 
 def hygiene():
+    """No home-folder paths in tracked files, and no LICENSE file until the owner chooses a licence."""
     files = subprocess.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], cwd=REPO, capture_output=True, text=True, check=True).stdout.split('\n')
     found = []
     for f in filter(None, files):
@@ -51,6 +53,7 @@ def hygiene():
 
 
 def run(cmd):
+    """Run a command in the project folder; (passed, detail)."""
     print('  $ ' + ' '.join(str(c) for c in cmd), flush=True)
     r = subprocess.run(cmd, cwd=REPO)
     return r.returncode == 0, f'exit {r.returncode}'

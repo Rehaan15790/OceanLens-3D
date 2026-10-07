@@ -22,6 +22,7 @@ function closeSidePanels(){
   if(section){ showPanel('section'); drawSectionPanel(); }
   else showPanel('empty');
 }
+// the built-in Argo profile on screen with the largest temperature RMSE; null when none compares
 function worstArgo(){
   let worst = null, top = -1;
   instrumentsNow().filter(i=>i.kind==='argo' && !i.imported).forEach(inst=>{
@@ -32,6 +33,7 @@ function worstArgo(){
 }
 
 /* ---- actions ---- */
+// open the 'track' or 'section' panel, or close the side panels
 function openPanel(name){
   if(name==='track') return openTrack();
   if(name==='section'){ if(section){ showPanel('section'); drawSectionPanel(); } return; }
@@ -47,6 +49,7 @@ function openWorstFloat(){
 
 /* ---- regional validation summary: shown when no instrument is selected ---- */
 let validationFor = null;
+// the comparison summary shown when nothing is selected; rebuilt when the source or time changes
 function renderValidation(){
   const key = dataMode+state.time;
   if(validationFor===key) return;   // depends on the source and time step only
@@ -240,10 +243,12 @@ document.querySelectorAll('.tabbtn').forEach(btn=>{
 });
 
 /* ---- cyclone track: ocean heat along the path ---- */
+// the storm track panel
 function openTrack(){
   showPanel('track');
   renderTrack();
 }
+// track panel: heat under each fix (bars), winds (real data), and the table
 function renderTrack(){
   const src = dataSource(), real = dataMode==='real', T = currentTrack();
   ui.trackName.textContent = src.track.name;

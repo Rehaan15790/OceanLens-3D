@@ -8,11 +8,13 @@
 const IMPORT_MAX_BYTES = 50e6;
 let importSeq = 0;
 
+// the file's first bytes -> 'netcdf3' | 'hdf5' | 'text'
 function sniffFormat(u8){
   if(u8[0]===0x43 && u8[1]===0x44 && u8[2]===0x46) return 'netcdf3';
   if(u8[0]===0x89 && u8[1]===0x48 && u8[2]===0x44 && u8[3]===0x46) return 'hdf5';
   return 'text';
 }
+// the registered reader of this kind whose detect() scores highest; null when none scores
 function bestFormat(kind, src, name){
   let best = null, top = 0;
   Object.values(IMPORT_FORMATS).filter(f=>f.kind===kind).forEach(f=>{
@@ -30,6 +32,7 @@ async function readFile(file){
   try { return await readData(file.name, await file.arrayBuffer()); }
   catch(err){ return {name:file.name, error:'The file could not be read: ' + err.message, warnings:[]}; }
 }
+// bytes or text -> the parsed object the import dialog reviews; errors come back in out.error, never thrown
 async function readData(name, data){
   const out = {name, format:null, formatLabel:'', error:null, warnings:[], needsMapping:false, columns:null, units:null,
                mapping:null, preview:null, type:null, profiles:null};
@@ -95,12 +98,14 @@ function importParsed(parsed, opts = {}){
 
 /* ---- server mode ---- */
 const serverMode = {live:false, datasets:[], current:null, load:loadServerDataset};
+// GET a server API path as JSON; throws the server's own error message
 async function serverJSON(path){
   const r = await fetch(path, {headers:{Accept:'application/json'}});
   const j = await r.json().catch(()=>null);
   if(!r.ok) throw new Error(j && j.error ? j.error.message : `The server answered ${r.status}.`);
   return j;
 }
+// on load: if serve.py answers api/v1/datasets, fill OceanLens.server and tell the plugins; otherwise stay offline
 async function startServerMode(){
   if(!/^https?:$/.test(location.protocol)) return;
   let j;

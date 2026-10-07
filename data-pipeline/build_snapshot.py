@@ -102,6 +102,7 @@ class InvariantError(Exception):
 
 
 def require(cond, msg):
+    """Stop the build with InvariantError(msg) unless cond holds."""
     if not cond:
         raise InvariantError(msg)
 
@@ -111,6 +112,7 @@ def sha256(data):
 
 
 def read_json(path, default=None):
+    """A JSON file's content, or default when the file does not exist."""
     if not os.path.exists(path):
         return default
     with open(path, encoding='utf-8') as f:
@@ -144,9 +146,12 @@ class Fetcher:
         self._ctx = None
 
     def path(self, name):
+        """Where a cache name lives on disk ('/' in a name is a subfolder)."""
         return os.path.join(self.cache, *name.split('/'))
 
     def get(self, url, name, parse, headers=None, timeout=180, retries=4):
+        """Parsed content of one raw file: from the cache, else downloaded (with --fetch only), parsed and
+        then cached. CacheMiss when it is missing and downloads are off."""
         path = self.path(name)
         if os.path.exists(path):
             with open(path, 'rb') as f:
@@ -167,6 +172,7 @@ class Fetcher:
         return out
 
     def download(self, url, headers=None, timeout=180, retries=4):
+        """The body of url, retried with back-off; FetchError on a 4xx or after the last attempt."""
         host = urllib.parse.urlsplit(url).hostname
         if self.allow_hosts and host not in self.allow_hosts:
             raise FetchError(f'{host} is not in --allow-host; not downloading {url}')
@@ -192,6 +198,7 @@ class Fetcher:
         raise FetchError(f'giving up on {url} after {retries} attempts: {last}') from last
 
     def store(self, name, data, url):
+        """Write a downloaded file and record its URL, hash, size and date in the cache's manifest.json."""
         write_atomic(self.path(name), data)
         with self._lock:          # guards threads in this run only: run one --fetch at a time per cache
             mpath = os.path.join(self.cache, 'manifest.json')
@@ -219,6 +226,7 @@ def pack(values, key):
 
 
 def unpack(b64, key):
+    """The inverse of pack: base64 Int16 -> float array, MISSING -> NaN."""
     off, sc = QUANT[key]
     q = np.frombuffer(base64.b64decode(b64), dtype='<i2').astype(np.float64)
     return np.where(q == MISSING, np.nan, off + q * sc)
@@ -261,6 +269,7 @@ def parse_ascii(data):
 
 
 def parse_das(data):
+    """Check that data is an OPeNDAP DAS and return its text."""
     text = data.decode('utf-8')
     if not text.lstrip().startswith('Attributes {'):
         raise ValueError('not an OPeNDAP DAS')
@@ -268,6 +277,7 @@ def parse_das(data):
 
 
 def das_packing(das, var):
+    """scale_factor, add_offset and _FillValue of one variable in a DAS."""
     i = das.index('\n    ' + var + ' {')
     block = das[i: das.index('}', i)]
     num = lambda key: float(re.search(key + r'\s+(-?[\d.eE+-]+)', block).group(1))
@@ -312,7 +322,20 @@ def cell_members(samples, centres, half=0.2501):
     return [np.where(np.abs(samples - c) <= half)[0] for c in centres]
 
 
+def cell_mean(a, rows, cols):
+    """A native 2-D field -> the app grid: each cell the mean of the finite samples in it (rows, cols from
+    cell_members); NaN where it has none."""
+    out = np.full((len(rows), len(cols)), np.nan)
+    for i, r in enumerate(rows):
+        for j, c in enumerate(cols):
+            blk = a[np.ix_(r, c)]
+            if np.isfinite(blk).any():
+                out[i, j] = np.nanmean(blk)
+    return out
+
+
 def contiguous_ranges(ks):
+    """Level indices -> (first, last) runs of consecutive ones: one OPeNDAP request per run."""
     ks = sorted(set(ks))
     ranges, start = [], ks[0]
     for a, b in zip(ks, ks[1:] + [None]):
@@ -323,6 +346,7 @@ def contiguous_ranges(ks):
 
 
 def hycom_axes(F):
+    """HYCOM's DAS and its lat, lon, depth and time axes (time in hours since 2000-01-01)."""
     das = F.get(HYCOM + '.das', 'hycom.das', parse_das)
     ax = F.get(HYCOM + '.ascii?lat,lon,depth', 'hycom_axes.txt', parse_ascii)
     tim = F.get(HYCOM + '.ascii?time', 'hycom_time.txt', parse_ascii, timeout=300)['time']
@@ -330,6 +354,7 @@ def hycom_axes(F):
 
 
 def nearest_time(tim, when, tol_h=1.5):
+    """Index of the HYCOM time nearest `when`; None when none is within tol_h hours."""
     epoch = datetime(2000, 1, 1, tzinfo=timezone.utc)
     h = (when - epoch).total_seconds() / 3600
     k = int(np.argmin(np.abs(tim - h)))
@@ -339,10 +364,13 @@ def nearest_time(tim, when, tol_h=1.5):
 
 
 def hours_to_time(h):
+    """A HYCOM time (hours since 2000-01-01) -> datetime."""
     return datetime(2000, 1, 1, tzinfo=timezone.utc) + timedelta(hours=float(h))
 
 
 def fetch_hycom(F):
+    """The four HYCOM fields at the eight analyses on the app grid and levels. Returns (model[t, var, level,
+    lat, lon] with land filled, the wet mask[level, lat, lon], the times, provenance)."""
     das, lat, lon, dep, tim = hycom_axes(F)
     tidx = []
     for s in SNAPS:
@@ -383,23 +411,13 @@ def fetch_hycom(F):
                 raw[(t, key, kk)] = a[kk - k0]
 
     rows, cols = cell_members(sub_lat, LATS), cell_members(sub_lon, LONS)
-
-    def regrid(a):
-        out = np.full((len(LATS), len(LONS)), np.nan)
-        for i, r in enumerate(rows):
-            for j, c in enumerate(cols):
-                blk = a[np.ix_(r, c)]
-                if np.isfinite(blk).any():
-                    out[i, j] = np.nanmean(blk)
-        return out
-
     model = np.zeros((len(SNAPS), 4, len(DEPTHS), len(LATS), len(LONS)))
     wet = None
     for t in range(len(SNAPS)):
         for vi, key in enumerate(hvars):
             layer_wet = np.zeros((len(DEPTHS), len(LATS), len(LONS)), bool)
             for di, lv in enumerate(levels):
-                a = sum(w * regrid(raw[(t, key, k)]) for k, w in lv)
+                a = sum(w * cell_mean(raw[(t, key, k)], rows, cols) for k, w in lv)
                 layer_wet[di] = np.isfinite(a)
                 model[t, vi, di] = fill_nans(a)
             if wet is None:
@@ -422,6 +440,7 @@ def p2z(p, lat):
 
 
 def max_gap(z):
+    """The widest sampling gap (m) to_levels interpolates across at depth z."""
     return 20 if z <= 100 else 40 if z <= 300 else 80
 
 
@@ -480,6 +499,7 @@ ARGO_COLS = ('platform_number,cycle_number,time,latitude,longitude,position_qc,d
 
 
 def argo_query():
+    """ERDDAP constraints for the Argo query: columns, time window, domain and pressure."""
     t_lo = (SNAPS[0] - timedelta(days=1.5)).strftime('%Y-%m-%dT%H:%M:%SZ')
     t_hi = (SNAPS[-1] + timedelta(days=1.5)).strftime('%Y-%m-%dT%H:%M:%SZ')
     return [ARGO_COLS, f'time>={t_lo}', f'time<={t_hi}', f'latitude>={LAT0}', f'latitude<={LAT1}',
@@ -487,6 +507,7 @@ def argo_query():
 
 
 def parse_argo_csv(data):
+    """ERDDAP CSV -> (header, rows); the units row is dropped."""
     rows = list(csv.reader(io.StringIO(data.decode('utf-8'))))
     if not rows or rows[0] != ARGO_COLS.split(','):
         raise ValueError('unexpected Argo CSV header')
@@ -572,11 +593,12 @@ def select_argo(names, rows, temperature_only=False, snaps=None):
 
 
 def fetch_argo(F, temperature_only=False, snaps=None):
+    """The QC-selected Argo profiles and the counts of what was dropped (see select_argo)."""
     q = argo_query()
     url = ARGO + '?' + '&'.join(urllib.parse.quote(p, safe='=,') for p in q)
     names, rows = F.get(url, 'argo.csv', parse_argo_csv, timeout=900)
     profiles, counts = select_argo(names, rows, temperature_only, snaps)
-    return profiles, counts, url
+    return profiles, counts
 
 
 # ------------------------------------------------------------------ BGC-Argo (chlorophyll-a, oxygen)
@@ -589,21 +611,25 @@ BGC_WINDOW = ('2020-05-01T00:00:00Z', '2020-05-28T23:59:59Z')
 
 
 def bgc_cols(var):
+    """ERDDAP columns for one BGC variable (chla or doxy)."""
     return ('platform_number,cycle_number,pres,pres_qc,pres_adjusted,pres_adjusted_qc,temp,temp_qc,temp_adjusted,'
             f'temp_adjusted_qc,psal,psal_qc,psal_adjusted,psal_adjusted_qc,{var}_adjusted,{var}_adjusted_qc')
 
 
 def bgc_query(var):
+    """ERDDAP constraints for one BGC variable: adjusted values of ascending profiles in the window."""
     return [bgc_cols(var), f'time>={BGC_WINDOW[0]}', f'time<={BGC_WINDOW[1]}', f'latitude>={LAT0}',
             f'latitude<={LAT1}', f'longitude>={LON0}', f'longitude<={LON1}', 'pres<=1100', 'direction="A"',
             f'{var}_adjusted!=NaN']
 
 
 def bgc_url(var):
+    """The ERDDAP CSV URL for one BGC variable."""
     return BGC + '?' + '&'.join(urllib.parse.quote(p, safe='=,') for p in bgc_query(var))
 
 
 def parse_bgc_csv(var):
+    """A parser for one BGC variable's CSV that checks its header."""
     def parse(data):
         rows = list(csv.reader(io.StringIO(data.decode('utf-8'))))
         if not rows or rows[0] != bgc_cols(var).split(','):
@@ -666,6 +692,7 @@ def fetch_bgc(F, argo):
 
 # ------------------------------------------------------------------ ETOPO1 and IBTrACS
 def parse_etopo(data):
+    """ERDDAP ETOPO CSV -> (altitude[lat, lon], lats, lons)."""
     rows = list(csv.reader(io.StringIO(data.decode('utf-8'))))
     if not rows or rows[0] != ['latitude', 'longitude', 'altitude']:
         raise ValueError('unexpected ETOPO CSV header')
@@ -680,6 +707,7 @@ def parse_etopo(data):
 
 
 def fetch_etopo(F):
+    """ETOPO1 altitude every 0.1 deg over the domain, checked against the app's grid corners."""
     q = urllib.parse.quote(f'altitude[({LAT0}):6:({LAT1})][({LON0}):6:({LON1})]', safe='')
     alt, lats, lons = F.get(ETOPO + '?' + q, 'etopo_0.1deg.csv', parse_etopo)
     step = round(lats[1] - lats[0], 4)
@@ -695,6 +723,7 @@ TRACK_COLS = ('SID', 'NAME', 'ISO_TIME', 'LAT', 'LON', 'USA_WIND', 'NEWDELHI_WIN
 
 
 def parse_ibtracs(data):
+    """IBTrACS CSV -> rows as dicts; ValueError when a needed column is missing."""
     text = data.decode('utf-8', 'replace')
     reader = csv.DictReader(io.StringIO(text))
     missing = [c for c in TRACK_COLS if c not in (reader.fieldnames or [])]
@@ -723,6 +752,7 @@ def track_fixes(rows, name=STORM, year=STORM_YEAR):
 
 
 def fetch_track(F):
+    """The storm's fixes; the first --fetch downloads only the file's header and last 6.5 MB."""
     name = 'ibtracs_tail.csv'
     if not os.path.exists(F.path(name)):
         if not F.fetch:
@@ -766,6 +796,7 @@ def obs_column(arr, la, lo, das, lat2, lon2):
 
 
 def column_on_levels(dep, v):
+    """A model column on native depths -> ARGO_LEVELS (NaN below its deepest value)."""
     fin = np.isfinite(v)
     res = np.full(len(ARGO_LEVELS), np.nan)
     if fin.sum() < 2:
@@ -778,6 +809,7 @@ def column_on_levels(dep, v):
 
 
 def fetch_model_at_obs(F, profiles):
+    """HYCOM T and S at each profile's position and nearest 3-hourly output: [(T, S, time), ...]."""
     das, lat, lon, dep, tim = hycom_axes(F)
     reqs = [obs_request(p, lat, lon, tim) for p in profiles]
     shape = [1, 33, 2, 2]
@@ -800,7 +832,6 @@ def fetch_model_at_obs(F, profiles):
     return cols
 
 
-# ------------------------------------------------------------------ assemble
 # ------------------------------------------------------------------ any CF NetCDF model output
 CF_MODEL = {   # snapshot variable -> (CF standard names, common variable names)
     'temp': (('sea_water_potential_temperature', 'sea_water_temperature', 'sea_water_conservative_temperature',
@@ -828,7 +859,6 @@ def model_from_netcdf(path, log=print):
         nm = ncio.cf_find(ds, sns, names)
         require(nm is not None, f'{os.path.basename(path)}: no {key} variable (standard_name one of {", ".join(sns)})')
         found[key] = nm
-    ref = ds['vars'][found['temp']]
     ax = {a: ncio.cf_axis(ds, a, found['temp']) for a in 'XYZT'}
     require(ax['X'] and ax['Y'] and ax['Z'], f'{os.path.basename(path)}: longitude, latitude and depth axes are needed')
     lon = np.mod(np.asarray(ds['vars'][ax['X']]['data'], 'f8') + 180, 360) - 180
@@ -875,17 +905,7 @@ def model_from_netcdf(path, log=print):
             f'{LAT0}..{LAT1} N, {LON0}..{LON1} E')
     # above the first model level (e.g. 0.49 m in Copernicus output) the first level stands in for the surface
     require(dep[0] <= 12, f'the first model level is at {dep[0]:g} m; the surface layer is missing')
-    levels = [[(0, 1.0)] if d <= dep[0] else lv for d, lv in
-              zip(DEPTHS, [None if d <= dep[0] else level_weights(dep, [d])[0] for d in DEPTHS])]
-
-    def regrid(a2):
-        out = np.full((len(LATS), len(LONS)), np.nan)
-        for i, r in enumerate(rows):
-            for j, c in enumerate(cols):
-                blk = a2[np.ix_(r, c)]
-                if np.isfinite(blk).any():
-                    out[i, j] = np.nanmean(blk)
-        return out
+    levels = [[(0, 1.0)] if d <= dep[0] else level_weights(dep, [d])[0] for d in DEPTHS]
 
     model = np.zeros((nt, 4, len(DEPTHS), len(LATS), len(LONS)))
     wet = np.ones((len(DEPTHS), len(LATS), len(LONS)), bool)
@@ -893,7 +913,7 @@ def model_from_netcdf(path, log=print):
         a = field(found[key])
         need = sorted({k for lv in levels for k, _ in lv})
         for t in range(nt):
-            cells = {k: regrid(a[t, k]) for k in need}
+            cells = {k: cell_mean(a[t, k], rows, cols) for k in need}
             for di, lv in enumerate(levels):
                 g = sum(w * cells[k] for k, w in lv)
                 if t == 0:
@@ -909,7 +929,9 @@ def model_from_netcdf(path, log=print):
     return model, wet, when, info
 
 
+# ------------------------------------------------------------------ assemble
 def group_hash(F, names):
+    """One sha256 over the names and hashes of a group of cache files."""
     h = hashlib.sha256()
     for n in sorted(names):
         h.update(f'{n} {F.used[n]}\n'.encode())
@@ -917,6 +939,7 @@ def group_hash(F, names):
 
 
 def inputs_block(F):
+    """meta.inputs: hash and access date of every raw file the build read (HYCOM files in groups)."""
     man = F.manifest()
     groups = {'hycom': [n for n in F.used if n.startswith('hycom_') and not n.startswith('hycom_obs/')],
               'hycom_obs': [n for n in F.used if n.startswith('hycom_obs/')]}
@@ -934,6 +957,8 @@ def inputs_block(F):
 
 def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=False, log=print, allow_hosts=None,
           model_netcdf=None):
+    """The whole snapshot as a dict, and the Fetcher (for --cache-manifest). Raises CacheMiss, FetchError or
+    InvariantError; main turns each into a message and an exit status."""
     F = Fetcher(cache, fetch, cafile, allow_hosts=allow_hosts)
 
     if model_netcdf:
@@ -952,7 +977,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
     log(f'  temperature {t_w.min():.2f}..{t_w.max():.2f} C, salinity {s_w.min():.2f}..{s_w.max():.2f}, '
         f'surface speed p99 {np.percentile(speed[:, 0][:, wet[0]], 99):.2f} m/s (model water only)')
 
-    argo, acounts, argo_url = fetch_argo(F, temperature_only, times if model_netcdf else None)
+    argo, acounts = fetch_argo(F, temperature_only, times if model_netcdf else None)
     per = [sum(1 for p in argo if p['s'] == s) for s in range(len(times))]
     if model_netcdf:
         if len(argo) < MIN_PROFILES:

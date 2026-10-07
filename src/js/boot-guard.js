@@ -56,6 +56,7 @@
   function fill(template, values) {
     return template.replace(/\{(\w+)\}/g, function (m, k) { return values[k] === undefined ? m : String(values[k]); });
   }
+  // an error, event reason or string -> one short line for the user and __ol.errors
   function describe(err) {
     var msg = err && (err.message || err.reason || err) || 'unknown error';
     msg = String(msg).replace(/^Uncaught\s+/, '').replace(/\s+/g, ' ').replace(/[.\s]+$/, '');
@@ -65,6 +66,7 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
     else fn();
   }
+  // every failure lands in window.__ol.errors: read it in the console when a report says "something went wrong"
   function record(message, source, line) {
     ol.errors.push({ message: message, source: source || '', line: line || 0, time: Date.now() });
   }
@@ -123,14 +125,6 @@
       v.textContent = 'Version ' + ol.version + '. ';
       about.insertBefore(v, about.firstChild);
     }
-  });
-
-  // Builds from before the boot() entry point never call _markReady; they are ready once loaded.
-  window.addEventListener('load', function () {
-    var hasBoot = false;
-    try { hasBoot = typeof boot === 'function'; } catch (e) { hasBoot = false; }
-    if (ol.status !== 'loading' || hasBoot) return;
-    requestAnimationFrame(function () { requestAnimationFrame(markReady); });
   });
 
   // ---- notices (toasts) ----

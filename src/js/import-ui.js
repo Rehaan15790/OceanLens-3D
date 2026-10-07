@@ -34,6 +34,7 @@ const importUI = (()=>{
     parsed = null; busy = false; input.value = '';
     setStatus(''); setError(''); showStep('pick');
   }
+  // open the Add data dialog at its first step
   function open(){
     if(isOpen) return;
     reset();
@@ -44,6 +45,7 @@ const importUI = (()=>{
   }
   const close = ()=>shell.closeDialog();
 
+  // read a chosen or dropped file and show the review step (or the error)
   async function readFile(file){
     if(busy) return;
     if(!api() || !api().readFile){ setError('The import module did not load, so files cannot be read.'); return; }
@@ -131,6 +133,7 @@ const importUI = (()=>{
   }
   const MISSING_NAMES = {lat:'latitude', lon:'longitude', time:'time', depth:'depth or pressure'};
 
+  // the Add to map button: check the mapping, import, close and open the first new profile
   function add(){
     if(!parsed || busy) return;
     const opts = {type:$('importType').value, name:$('importName').value.trim() || parsed.name};
@@ -250,6 +253,7 @@ const importUI = (()=>{
     if(cur!=null) sel.value = typeof cur==='object' ? cur.id : cur;
     setLive(srv.live ? 'live' : 'offline');
   }
+  // the server status line: 'live' | 'loading' | 'offline'
   function setLive(st, text){
     $('sourceStatus').dataset.state = st;
     $('sourceStatusText').textContent = text || (st==='live' ? 'Live: connected to the OceanLens server'
@@ -301,5 +305,5 @@ const importUI = (()=>{
   api().on('server', renderServer);
   renderList();
   renderServer();
-  return {open, renderList, renderServer, readFile, syncMode};
+  return {readFile, syncMode};
 })();

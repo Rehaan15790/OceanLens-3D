@@ -1,3 +1,6 @@
+/* ---- terrain: graticule, domain box, ETOPO1 sea floor with its side skirts, and land ----
+   Built once at load. positionBox and positionFloor (called from updateDepthGeometry in volume.js)
+   move the parts that depend on the vertical exaggeration. */
 // true lat/lon graticule (2.5° minor, 5° major) drawn just above the sea surface: two line sets
 const graticule = new THREE.Group();
 (function buildGraticule(){

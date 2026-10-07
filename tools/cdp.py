@@ -31,7 +31,7 @@ BROWSER_NAMES = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-
 
 
 class CDPError(RuntimeError):
-    pass
+    """A browser that will not start, a protocol error, a timeout, or an exception the page threw in eval()."""
 
 
 def find_browsers():
@@ -49,10 +49,6 @@ def find_browsers():
     return found
 
 
-def find_browser():
-    return find_browsers()[0]
-
-
 def default_build():
     """The built single file to test: $OCEANLENS_BUILD, then dist/OceanLens3D.html, then the root file."""
     env = os.environ.get('OCEANLENS_BUILD')
@@ -65,6 +61,7 @@ def default_build():
 
 
 def file_url(path, query=''):
+    """A file:// URL for a local path, with an optional query string."""
     p = Path(path).resolve().as_posix()
     url = ('file:///' + urllib.parse.quote(p.lstrip('/'), safe='/:'))
     return url + (('?' + query) if query else '')
@@ -97,6 +94,7 @@ class WebSocket:
         self.parts = []
 
     def _frame(self, opcode, payload):
+        """Send one frame; a client must mask its payload."""
         n = len(payload)
         head = bytes([0x80 | opcode])
         if n < 126:
@@ -173,6 +171,7 @@ class WebSocket:
 
 
 def _xor(data, mask):
+    """data XORed with the 4-byte mask, repeated."""
     n = len(data)
     if not n:
         return b''
@@ -212,6 +211,7 @@ class Browser:
                     raise
 
     def _stderr_tail(self, n=3):
+        """The browser's last stderr lines, for an error message."""
         try:
             lines = [l for l in self.stderr_log.read_text(errors='replace').splitlines() if l.strip()]
         except OSError:
@@ -219,6 +219,7 @@ class Browser:
         return ('\n  ' + '\n  '.join(lines[-n:])) if lines else ''
 
     def _start(self, exe, width, height, args, headless, backend, offline, network_log, profile):
+        """Launch one browser executable, find its DevTools port and connect to its page."""
         self.exe = exe
         self.profile = profile or tempfile.mkdtemp(prefix='oceanlens-cdp-')
         self.keep_profile = bool(profile)
@@ -278,6 +279,7 @@ class Browser:
 
     # ---- protocol ----
     def send(self, method, timeout=60, **params):
+        """Call a CDP method and return its result; events that arrive meanwhile are recorded (_event)."""
         self.next_id += 1
         mid = self.next_id
         self.ws.send(json.dumps({'id': mid, 'method': method, 'params': params}))
@@ -311,6 +313,8 @@ class Browser:
                     self._event(msg['method'], msg.get('params', {}))
 
     def _event(self, method, p):
+        """Record a CDP event; console messages, exceptions and log entries go to self.log, requests to
+        self.requests."""
         self.events.append((time.monotonic(), method, p))
         if method == 'Runtime.consoleAPICalled':
             text = ' '.join(_remote_str(a) for a in p.get('args', []))
@@ -337,6 +341,7 @@ class Browser:
             self.log.append({'kind': 'crash', 'level': 'error', 'text': 'renderer crashed', 'where': ''})
 
     def problems(self, levels=('error', 'warning', 'assert'), since=0):
+        """Log records at these levels, from index `since` on (see mark)."""
         return [r for r in self.log[since:] if r['level'] in levels]
 
     def mark(self):
@@ -344,15 +349,18 @@ class Browser:
         return len(self.log)
 
     def external_requests(self):
+        """Requests to anything but file:, data:, blob: or about:. Tests run offline, so each one is a bug."""
         return [r for r in self.requests if not r['url'].startswith(('file:', 'data:', 'blob:', 'about:'))]
 
     # ---- page helpers ----
     def goto(self, url, timeout=60):
+        """Navigate and wait for the load event."""
         n = len(self.events)
         self.send('Page.navigate', url=url)
         self.wait_event('Page.loadEventFired', timeout, since=n)
 
     def wait_event(self, method, timeout=30, since=None):
+        """Wait until an event named `method` has arrived (since index `since` of self.events)."""
         start = len(self.events) if since is None else since
         end = time.monotonic() + timeout
         while time.monotonic() < end:
@@ -371,6 +379,7 @@ class Browser:
         return r.get('result', {}).get('value')
 
     def wait(self, expr, timeout=20, interval=0.1):
+        """Evaluate expr until it is truthy and return that value; CDPError after `timeout` seconds."""
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             v = self.eval(expr)
@@ -380,6 +389,7 @@ class Browser:
         raise CDPError(f'timed out waiting for: {expr}')
 
     def center(self, selector):
+        """CSS-pixel centre of the element, scrolled into view; CDPError when it is missing or hidden."""
         r = self.eval(f"""(()=>{{const e=document.querySelector({json.dumps(selector)}); if(!e) return null;
             e.scrollIntoView({{block:'nearest'}}); const r=e.getBoundingClientRect();
             return [r.left+r.width/2, r.top+r.height/2, r.width, r.height];}})()""")
@@ -394,6 +404,7 @@ class Browser:
                   clickCount=clicks, pointerType='mouse')
 
     def click_at(self, x, y):
+        """A left click at (x, y) in CSS pixels."""
         self.mouse('mouseMoved', x, y)
         self.mouse('mousePressed', x, y, 1, 'left', 1)
         self.mouse('mouseReleased', x, y, 0, 'left', 1)
@@ -403,6 +414,7 @@ class Browser:
         self.click_at(*self.center(selector))
 
     def drag(self, x0, y0, x1, y1, steps=12):
+        """A left-button drag from (x0, y0) to (x1, y1) in `steps` moves."""
         self.mouse('mouseMoved', x0, y0)
         self.mouse('mousePressed', x0, y0, 1, 'left', 1)
         for k in range(1, steps + 1):
@@ -410,6 +422,7 @@ class Browser:
         self.mouse('mouseReleased', x1, y1, 0, 'left', 1)
 
     def wheel(self, x, y, dy):
+        """A mouse-wheel event; dy > 0 scrolls down, which zooms the 3D view out."""
         self.send('Input.dispatchMouseEvent', type='mouseWheel', x=x, y=y, deltaX=0, deltaY=dy)
 
     def key(self, key, modifiers=0):
@@ -434,16 +447,19 @@ class Browser:
         self.send('Emulation.setDeviceMetricsOverride', width=width, height=height, deviceScaleFactor=dpr, mobile=False)
 
     def screenshot(self, path):
+        """Save a PNG of the viewport to path."""
         data = self.send('Page.captureScreenshot', format='png', timeout=120)['data']
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_bytes(base64.b64decode(data))
         return path
 
     def metrics(self):
+        """Performance.getMetrics as {name: value}."""
         self.send('Performance.enable')
         return {m['name']: m['value'] for m in self.send('Performance.getMetrics')['metrics']}
 
     def allow_downloads(self, folder):
+        """Save downloads (the PNG export) into folder."""
         Path(folder).mkdir(parents=True, exist_ok=True)
         try:
             self.send('Browser.setDownloadBehavior', behavior='allow', downloadPath=str(Path(folder).resolve()))
@@ -483,6 +499,7 @@ class Browser:
 
 
 def _remote_str(a):
+    """A console argument (a CDP RemoteObject) as text."""
     if 'value' in a:
         return str(a['value'])
     return a.get('description') or a.get('unserializableValue') or a.get('type', '?')
@@ -521,7 +538,8 @@ def open_app(b, path=None, test=True, enter=True, seed=1, timeout=30):
     end, loaded, state = time.monotonic() + timeout, time.monotonic(), None
     while state is None:
         state = b.eval(READY_JS)
-        if state is None and time.monotonic() - loaded > 2 and                 any(p['kind'] == 'exception' for p in b.problems(since=mark)):
+        if state is None and time.monotonic() - loaded > 2 and \
+                any(p['kind'] == 'exception' for p in b.problems(since=mark)):
             state = 'error'
         if state is None:
             if time.monotonic() > end:

@@ -57,6 +57,8 @@ ARGO_KEYS = {'T': 'temp', 'S': 'sal', 'C': 'chl', 'O': 'oxy'}     # snapshot arg
 
 
 class ApiError(Exception):
+    """A bad request: HTTP status, an OGC-style code, a message and the parameter at fault. do_GET turns it
+    into JSON, a WMS or WCS exception report, or a DAP error, depending on the route."""
     def __init__(self, status, code, message, locator=None):
         super().__init__(message)
         self.status, self.code, self.message, self.locator = status, code, message, locator
@@ -78,10 +80,12 @@ PALETTES = load_palettes()
 
 # ---- time ----------------------------------------------------------------------------------------------------
 def iso(sec):
+    """Seconds since 1970 -> 'YYYY-MM-DDTHH:MM:SSZ'."""
     return datetime.fromtimestamp(float(sec), timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def parse_iso(s):
+    """An ISO 8601 UTC date or date-time -> seconds since 1970; ValueError for anything else."""
     s = s.strip().strip('"\'')
     m = re.fullmatch(r'(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?\s*(?:Z|[+-]00:?00)?', s)
     if not m:
@@ -111,6 +115,7 @@ class Dataset:
         return [float(self.lon[0]), float(self.lat[0]), float(self.lon[-1]), float(self.lat[-1])]
 
     def summary(self, base=''):
+        """This dataset's entry in /api/v1/datasets: times, depths, bbox, variables and links."""
         u = f'{base}/api/v1/datasets/{self.id}'
         links = {'meta': u + '/meta', 'field': u + '/field', 'column': u + '/column', 'profiles': u + '/profiles',
                  'opendap': f'{base}/opendap/{self.id}'}
@@ -123,6 +128,7 @@ class Dataset:
                 'variables': [self.var_summary(k) for k in self.fields], 'links': links}
 
     def var_summary(self, key):
+        """One variable as the API lists it, with its WMS layer name."""
         i = self.info[key]
         return {'key': key, 'label': i['label'], 'units': i['units'], 'standard_name': i.get('standard_name'),
                 'range': [num(x) for x in i['range']], 'scale': i.get('scale', 'linear'),
@@ -134,6 +140,8 @@ class Dataset:
         return max(1.5 * DAY, float(np.median(np.diff(self.tsec))) / 2 if len(self.tsec) > 1 else 0)
 
     def time_index(self, value):
+        """A TIME parameter (empty, an index or ISO 8601) -> index into self.times; ApiError 400 when no
+        analysis is within time_tolerance."""
         if value is None or str(value).strip().lower() in ('', 'current', 'default'):
             return 0
         value = str(value).strip()
@@ -182,6 +190,7 @@ class Dataset:
 
 
 def blend(arrays, weights):
+    """Weighted mean that skips NaN; NaN where under half the weight has data, so land edges are not smeared."""
     num_, den = 0.0, 0.0
     for a, w in zip(arrays, weights):
         good = np.isfinite(a)
@@ -198,16 +207,20 @@ def num(x, nd=4):
 
 
 def palette_name(info):
+    """The variable's palette when the app has it, else 'temperature'."""
     p = info.get('palette', 'temperature')
     return p if p in PALETTES else 'temperature'
 
 
 def safe_id(stem):
+    """A file name stem -> an id usable in URLs, WMS layer names and DAP names."""
     s = re.sub(r'[^A-Za-z0-9_-]+', '-', stem).strip('-') or 'dataset'
     return s if s[0].isalpha() else 'd' + s
 
 
 def var_info(key, attrs=None, data=None):
+    """Label, units, palette, scale and default colour range of a variable: from VARS, then the file's
+    attributes, then the data (2nd to 98th percentile)."""
     attrs = attrs or {}
     base = dict(VARS.get(key, {}))
     info = {'label': base.get('label') or attrs.get('long_name') or key,
@@ -267,6 +280,7 @@ def load_snapshot(path):
 
 
 def snapshot_profiles(d):
+    """The snapshot's Argo profiles as /profiles serves them, cut below each one's last level with data."""
     A, m = d.get('argo'), d['meta']
     if not A:
         return []
@@ -391,6 +405,7 @@ def colour_index(values, lo, hi, log=False):
 
 # ---- the server ----------------------------------------------------------------------------------------------
 class OceanServer(ThreadingHTTPServer):
+    """The HTTP server and what every request shares: datasets, the built app, CORS origins and caches."""
     daemon_threads = True
 
     def __init__(self, addr, datasets, app=None, cors=(), public_url=None, quiet=False):
@@ -429,6 +444,7 @@ class OceanServer(ThreadingHTTPServer):
 
 
 class Handler(BaseHTTPRequestHandler):
+    """One HTTP request. do_GET routes by path; a bad request anywhere raises ApiError."""
     server_version = 'OceanLens/' + VERSION
     sys_version = ''
     protocol_version = 'HTTP/1.1'
@@ -470,6 +486,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Vary', 'Origin')
 
     def send(self, body, ctype, status=200, headers=None, cache_key=None):
+        """Write a response. Text over 1400 bytes is gzipped when the client accepts it; cache_key keeps the
+        compressed body for the next request."""
         if isinstance(body, str):
             body = body.encode('utf-8')
         gz = 'gzip' in self.headers.get('Accept-Encoding', '') and len(body) > 1400 and \
@@ -496,10 +514,12 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
     def send_json(self, obj, status=200, cache_key=None):
+        """Compact JSON. NaN is refused (ValueError, a 500): pass numbers through num()."""
         self.send(json.dumps(obj, separators=(',', ':'), allow_nan=False), 'application/json; charset=utf-8',
                   status, cache_key=cache_key)
 
     def base_url(self):
+        """This server's URL as the client sees it (for links in responses), or --public-url."""
         if self.server.public_url:
             return self.server.public_url.rstrip('/')
         host = self.headers.get('Host') or ''
@@ -508,6 +528,7 @@ class Handler(BaseHTTPRequestHandler):
         return f'http://{host}'
 
     def host_ok(self):
+        """False when bound to loopback and the Host header names another host (DNS rebinding)."""
         if not self.server.check_host:
             return True
         host = (self.headers.get('Host') or '').lower()
@@ -515,6 +536,7 @@ class Handler(BaseHTTPRequestHandler):
         return name in LOOPBACK
 
     def misdirected(self):
+        """HTTP 421 for a request host_ok() refused."""
         self.send_json({'error': {'code': 'MisdirectedRequest',
                                   'message': 'this server answers only to localhost, 127.0.0.1 or [::1]'}}, 421)
 
@@ -607,6 +629,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- REST
     def param(self, q, name, required=False, default=None):
+        """The last value of a query parameter (names are lower case); ApiError 400 when required and missing."""
         v = q.get(name, [None])[-1]
         if v is None or v == '':
             if required:
@@ -615,6 +638,7 @@ class Handler(BaseHTTPRequestHandler):
         return v
 
     def number(self, q, name, required=True, default=None):
+        """A query parameter as a finite float; ApiError 400 otherwise."""
         v = self.param(q, name, required, default)
         try:
             x = float(v)
@@ -625,6 +649,8 @@ class Handler(BaseHTTPRequestHandler):
         return x
 
     def api(self, path, q):
+        """/api/v1/... (docs/API.md): the dataset list, or one dataset's meta, snapshot, field, column,
+        profiles or track."""
         parts = path.split('/')[1:]        # ['api', 'v1', 'datasets', id, op]
         base = self.base_url()
         if parts in (['api'], ['api', 'v1']):
@@ -650,6 +676,7 @@ class Handler(BaseHTTPRequestHandler):
         return handler(ds, q)
 
     def api_meta(self, ds, q):
+        """A dataset's summary plus its grid, data ranges and attributes."""
         out = ds.summary(self.base_url())
         out['grid'] = {'lat': [num(x) for x in ds.lat], 'lon': [num(x) for x in ds.lon],
                        'depth_units': 'm, positive down', 'time_format': 'ISO 8601 UTC'}
@@ -660,17 +687,21 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json(out)
 
     def api_snapshot(self, ds, q):
+        """The snapshot JSON as loaded: the file the app embeds."""
         if ds.raw is None:
             raise ApiError(404, 'NoSnapshot', f'{ds.id} comes from NetCDF and has no app snapshot; use field, column or WCS')
         self.send(ds.raw, 'application/json; charset=utf-8', cache_key=('snap', ds.id))
 
     def pick_var(self, ds, q):
+        """The var parameter, checked against the dataset's fields."""
         key = self.param(q, 'var', True)
         if key not in ds.fields:
             raise ApiError(400, 'InvalidParameterValue', f'var must be one of {", ".join(ds.fields)}', 'var')
         return key
 
     def api_field(self, ds, q):
+        """One variable at one time and depth over the whole grid: JSON, or int16 with X-OceanLens-* headers
+        (format=bin)."""
         key = self.pick_var(ds, q)
         ti = ds.time_index(self.param(q, 'time'))
         depth = self.number(q, 'depth', False, 0)
@@ -693,6 +724,7 @@ class Handler(BaseHTTPRequestHandler):
                                'values': [[num(x) for x in row] for row in grid]})
 
     def api_column(self, ds, q):
+        """Every variable at every depth at one point and time."""
         lat, lon = self.number(q, 'lat'), self.number(q, 'lon')
         ti = ds.time_index(self.param(q, 'time'))
         if not (ds.lat[0] <= lat <= ds.lat[-1] and ds.lon[0] <= lon <= ds.lon[-1]):
@@ -704,6 +736,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json(out)
 
     def api_profiles(self, ds, q):
+        """Profiles filtered by bbox, start, end and type."""
         bbox = self.param(q, 'bbox')
         if bbox:
             try:
@@ -757,12 +790,14 @@ class Handler(BaseHTTPRequestHandler):
                              headers=hdr)
 
     def dap_error(self, e):
+        """A DAP2 error body, which OPeNDAP clients show to their user."""
         msg = e.message.replace('\\', '\\\\').replace('"', '\\"')
         self.send(f'Error {{\n    code = {e.status};\n    message = "{msg}";\n}};\n', 'text/plain; charset=utf-8', e.status,
                   headers={'Content-Description': 'dods-error'})
 
     # -- OGC common
     def ogc_request(self, q, service, versions):
+        """REQUEST (lower case) and VERSION; ApiError for a version this server does not serve."""
         req = self.param(q, 'request', True)
         ver = self.param(q, 'version') or self.param(q, 'acceptversions')
         if ver and req.lower() != 'getcapabilities' and ver not in versions:
@@ -770,6 +805,7 @@ class Handler(BaseHTTPRequestHandler):
         return req.lower(), ver
 
     def bbox_of(self, q, crs, version):
+        """BBOX -> [lon0, lat0, lon1, lat1]. WMS 1.3.0 with EPSG:4326 puts latitude first, so it is swapped."""
         try:
             a = [float(x) for x in self.param(q, 'bbox', True).split(',')[:4]]
             assert len(a) == 4 and all(map(math.isfinite, a))
@@ -783,6 +819,7 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- WMS 1.3.0
     def wms(self, q):
+        """WMS 1.3.0 (1.1.1 accepted): GetCapabilities, GetMap and GetFeatureInfo."""
         req, ver = self.ogc_request(q, 'WMS', ('1.3.0', '1.1.1'))
         if req == 'getcapabilities':
             return self.send(self.wms_capabilities(), 'text/xml; charset=utf-8')
@@ -820,6 +857,7 @@ class Handler(BaseHTTPRequestHandler):
         raise ApiError(400, 'OperationNotSupported', f'REQUEST {req} is not served', 'request')
 
     def wms_map(self, q, ds, key, box, w, h, ti, depth):
+        """GetMap: the layer sampled at every pixel centre and coloured by a palette, as PNG (a heavy slot)."""
         fmt = (self.param(q, 'format') or 'image/png').lower()
         if fmt != 'image/png':
             raise ApiError(400, 'InvalidFormat', 'FORMAT must be image/png', 'format')
@@ -862,6 +900,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send(png, 'image/png', headers={'X-OceanLens-Time': ds.times[ti], 'X-OceanLens-Depth': f'{depth:g}'})
 
     def wms_info(self, q, layers, box, w, h, depth, ver):
+        """GetFeatureInfo: the value of each query layer at pixel (I, J)."""
         try:
             i = int(self.param(q, 'i' if ver == '1.3.0' else 'x', True))
             j = int(self.param(q, 'j' if ver == '1.3.0' else 'y', True))
@@ -888,6 +927,7 @@ class Handler(BaseHTTPRequestHandler):
         raise ApiError(400, 'InvalidFormat', 'INFO_FORMAT must be application/json or text/plain', 'info_format')
 
     def wms_capabilities(self):
+        """The WMS capabilities document: one layer per dataset variable, with time and elevation dimensions."""
         url = escape(self.base_url() + '/wms?', {'"': '&quot;'})
         res = f'<OnlineResource xlink:type="simple" xlink:href="{url}"/>'
         dcp = f'<DCPType><HTTP><Get>{res}</Get></HTTP></DCPType>'
@@ -934,6 +974,7 @@ class Handler(BaseHTTPRequestHandler):
         return '\n'.join(x)
 
     def wms_error(self, e):
+        """A WMS ServiceExceptionReport."""
         body = ('<?xml version="1.0" encoding="UTF-8"?>\n<ServiceExceptionReport version="1.3.0" '
                 'xmlns="http://www.opengis.net/ogc">'
                 f'<ServiceException code={quoteattr(e.code)}>{escape(e.message)}</ServiceException></ServiceExceptionReport>')
@@ -941,7 +982,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- WCS 2.0.1
     def wcs(self, q):
-        req, ver = self.ogc_request(q, 'WCS', ('2.0.1', '2.0.0'))
+        """WCS 2.0.1: GetCapabilities, DescribeCoverage and GetCoverage."""
+        req = self.ogc_request(q, 'WCS', ('2.0.1', '2.0.0'))[0]
         if req == 'getcapabilities':
             return self.send(self.wcs_capabilities(), 'application/xml; charset=utf-8')
         if req == 'describecoverage':
@@ -952,12 +994,14 @@ class Handler(BaseHTTPRequestHandler):
         raise ApiError(400, 'OperationNotSupported', f'REQUEST {req} is not served', 'request')
 
     def coverage(self, cid):
+        """A coverage id ('dataset.var') -> (Dataset, key); ApiError 404 when unknown."""
         ds, key = self.server.layer_ref(cid)
         if ds is None:
             raise ApiError(404, 'NoSuchCoverage', f'no coverage {cid!r}; see GetCapabilities', 'coverageId')
         return ds, key
 
     def wcs_capabilities(self):
+        """The WCS 2.0.1 capabilities document."""
         url = escape(self.base_url() + '/wcs?', {'"': '&quot;'})
         ops = ''.join(f'<ows:Operation name="{op}"><ows:DCP><ows:HTTP><ows:Get xlink:href="{url}"/></ows:HTTP></ows:DCP>'
                       '</ows:Operation>' for op in ('GetCapabilities', 'DescribeCoverage', 'GetCoverage'))
@@ -984,6 +1028,7 @@ class Handler(BaseHTTPRequestHandler):
                 f'<wcs:Contents>{"".join(cov)}</wcs:Contents></wcs:Capabilities>')
 
     def wcs_describe(self, covs):
+        """DescribeCoverage for (dataset, key) pairs: envelope, grid size and units."""
         out = []
         crs = escape('http://www.opengis.net/def/crs-compound?1=http://www.opengis.net/def/crs/OGC/0/AnsiDate'
                      '&2=http://www.opengis.net/def/crs/EPSG/0/5831&3=http://www.opengis.net/def/crs/EPSG/0/4326')
@@ -1013,6 +1058,8 @@ class Handler(BaseHTTPRequestHandler):
                 f'xmlns:swe="http://www.opengis.net/swe/2.0">{"".join(out)}</wcs:CoverageDescriptions>')
 
     def wcs_get(self, q):
+        """GetCoverage: each SUBSET trims or slices one axis, and the cell count is checked against MAX_CELLS
+        before any data is read."""
         ds, key = self.coverage(self.param(q, 'coverageid', True))
         axes = {'time': ds.tsec, 'depth': ds.depths, 'lat': ds.lat, 'lon': ds.lon}
         names = {'time': 'time', 'ansi': 'time', 't': 'time', 'depth': 'depth', 'z': 'depth', 'elevation': 'elevation',
@@ -1069,6 +1116,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.coverage_out(q, ds, key, it, ik, iy, ix, cells)
 
     def coverage_out(self, q, ds, key, it, ik, iy, ix, cells):
+        """The selected cells as CF NetCDF-3 (the default) or CSV."""
         data = ds.fields[key][np.ix_(it, ik, iy, ix)]
         fmt = (self.param(q, 'format') or 'application/netcdf').lower()
         name = f'{ds.id}.{key}'
@@ -1091,6 +1139,7 @@ class Handler(BaseHTTPRequestHandler):
                   headers={'Content-Disposition': f'attachment; filename="{name}.nc"'})
 
     def wcs_error(self, e):
+        """A WCS (OWS 2.0) ExceptionReport."""
         loc = f' locator={quoteattr(e.locator)}' if e.locator else ''
         body = ('<?xml version="1.0" encoding="UTF-8"?>\n<ows:ExceptionReport xmlns:ows="http://www.opengis.net/ows/2.0" '
                 f'version="2.0.1"><ows:Exception exceptionCode={quoteattr(e.code)}{loc}>'
@@ -1099,10 +1148,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def fmt_axis(axis, v):
+    """An axis value for a message: an ISO time or a plain number."""
     return iso(v) if axis == 'time' else f'{v:g}'
 
 
 def geo_box(w, s, e, n):
+    """An EX_GeographicBoundingBox element for the WMS capabilities."""
     return (f'<EX_GeographicBoundingBox><westBoundLongitude>{w:g}</westBoundLongitude><eastBoundLongitude>{e:g}'
             f'</eastBoundLongitude><southBoundLatitude>{s:g}</southBoundLatitude><northBoundLatitude>{n:g}'
             '</northBoundLatitude></EX_GeographicBoundingBox>')
@@ -1124,6 +1175,7 @@ def coords(ds):
 
 
 def var_attrs(ds, key):
+    """CF attributes of a variable in NetCDF and DAS output."""
     info = ds.info[key]
     attrs = {'units': info['units'], 'long_name': info['label'], '_FillValue': FILL}
     if info.get('standard_name'):
@@ -1215,10 +1267,12 @@ def dap_part(ds, grid, name, dims, idx):
 
 
 def dap_decl(c, indent):
+    """One DDS declaration line, e.g. 'Float32 temp[time = 8][depth = 11][lat = 33][lon = 63];'."""
     return f'{indent}{c["kind"]} {c["name"]}' + ''.join(f'[{d} = {n}]' for d, n in zip(c['dims'], c['shape'])) + ';\n'
 
 
 def dap_dds(ds, items):
+    """The DDS for the projected items: arrays, Grids (array and maps) or Structures."""
     out = ['Dataset {\n']
     for it in items:
         if it['kind'] == 'array':
@@ -1234,11 +1288,13 @@ def dap_dds(ds, items):
 
 
 def dap_xdr(c):
+    """One array in DAP2 binary form: its length twice, then the big-endian values."""
     n = int(np.prod(c['shape']))
     return struct.pack('>ii', n, n) + c['data'].tobytes()
 
 
 def dap_ascii(it):
+    """One item in DAP2 ASCII (.ascii) form."""
     out = []
     for c in it['parts']:
         label = c['name'] if it['kind'] == 'array' else f'{it["name"]}.{c["name"]}'
@@ -1255,6 +1311,7 @@ def dap_ascii(it):
 
 
 def das_value(v):
+    """An attribute value -> (DAS type, text)."""
     if isinstance(v, (float, np.floating)):
         return 'Float32' if isinstance(v, np.float32) else 'Float64', f'{float(v):.7g}'
     if isinstance(v, (int, np.integer)) and not isinstance(v, bool):
@@ -1264,6 +1321,7 @@ def das_value(v):
 
 
 def dap_das(ds):
+    """The DAS: CF attributes of the axes, the variables and the dataset."""
     def block(name, attrs):
         rows = ''.join('        {0} {2} {1};\n'.format(*das_value(v), k) for k, v in attrs.items())
         return f'    {name} {{\n{rows}    }}\n'
@@ -1301,6 +1359,7 @@ def coverage_netcdf(ds, key, it, ik, iy, ix, data):
 
 # ---- start-up ------------------------------------------------------------------------------------------------
 def default_app():
+    """The built page to serve when --app is not given; None when nothing is built."""
     for p in (REPO / 'dist' / 'OceanLens3D.html', REPO / 'OceanLens3D.html'):
         if p.exists():
             return p
@@ -1338,6 +1397,7 @@ def embedded_id(datasets, app=None):
 
 
 def load_datasets(snapshots=(), netcdfs=()):
+    """Load every snapshot and NetCDF file; two files may not give the same dataset id."""
     out, seen = [], set()
     for p in list(snapshots) + list(netcdfs):
         ds = load_snapshot(p) if p in snapshots else load_netcdf(p)
@@ -1349,6 +1409,7 @@ def load_datasets(snapshots=(), netcdfs=()):
 
 
 def make_server(host='127.0.0.1', port=8080, snapshots=None, netcdfs=(), app=None, cors=(), public_url=None, quiet=False):
+    """A configured OceanServer, not yet serving (tests/test_server.py starts it on a thread)."""
     snapshots = sorted((REPO / 'data').glob('*.json')) if snapshots is None else [Path(p) for p in snapshots]
     datasets = load_datasets(snapshots, [Path(p) for p in netcdfs])
     return OceanServer((host, port), datasets, app if app is not None else default_app(), cors, public_url, quiet)

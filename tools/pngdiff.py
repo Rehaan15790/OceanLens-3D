@@ -57,6 +57,7 @@ def decode(path):
 
 
 def pixel(img, x, y):
+    """The RGB of pixel (x, y) in an image from decode()."""
     w, h, bpp, rows = img
     return tuple(rows[y][x * bpp:x * bpp + 3])
 

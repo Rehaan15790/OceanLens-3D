@@ -13,6 +13,7 @@ const arrowEdges = new THREE.Mesh(new THREE.BufferGeometry(), Render.flat(0x0b0f
 arrowShafts.frustumCulled = arrowEdges.frustumCulled = false;
 arrowGroup.add(arrowEdges, arrowCones, arrowShafts);
 const _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _m = new THREE.Matrix4(), _yUp = new THREE.Vector3(0,1,0);
+// current arrows on the slice at this depth (slice mode, current speed only)
 function buildArrows(depth){
   const shaft = [], edge = [], e = 0.03;
   let n = 0;
@@ -54,6 +55,7 @@ const FLOW_N = 340;
 const FLOW_SPEED = 2.6; // visual speed multiplier, illustrative, not physically scaled
 const flowLat = new Float32Array(FLOW_N);
 const flowLon = new Float32Array(FLOW_N);
+// particle i to a random point; one on land or out of the water respawns on the next update
 function respawnParticle(i){
   flowLat[i] = LAT0 + Math.random()*(LAT1-LAT0);
   flowLon[i] = LON0 + Math.random()*(LON1-LON0);
@@ -73,11 +75,13 @@ scene.add(Render.register('particles', flowMesh));
 function currentFlowDepth(){
   return state.mode==='slice' ? DEPTHS[state.depthIdx] : 0;
 }
+// streaks show for current speed only, with the overlay on
 function applyFlowVisibility(){
   flowMesh.visible = state.showFlow && state.variable==='cur';
   if(flowMesh.visible) updateFlowParticles(0);
 }
 const _dir = new THREE.Vector3(), _perp = new THREE.Vector3(), _up = new THREE.Vector3(0,1,0);
+// advect every particle by dt seconds and rewrite the streak geometry (scene.js calls this at 30 fps)
 function updateFlowParticles(dt){
   if(!flowMesh.visible) return;
   const depth = currentFlowDepth();

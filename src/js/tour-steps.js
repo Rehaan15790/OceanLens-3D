@@ -103,6 +103,7 @@ function tourFacts(){
   const f = facts().real;
   return f.analysis ? f : null;
 }
+// the caption for the data mode: real (built from facts, falling back to plain if it throws), plain or synth
 function tourCaption(def){
   const mode = dataMode, f = tourFacts(), c = def.caption;
   if(mode!=='real') return c.synth;

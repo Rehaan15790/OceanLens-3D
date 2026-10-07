@@ -2,9 +2,9 @@
    Title and context (real or synthetic, analysis time), the same colour key and legend as the screen, map
    labels with halos, a north arrow, the exaggeration ratio and the data caveat. Graphics owns the render and
    read step (Render.renderForExport, labelsForExport, northAngle); this file only composes. */
-function exportScene(){ return Render.renderForExport(); }
 // label styles in the image mirror viewport.css (.geoLabel and its classes)
 const EXPORT_LABEL_FONT = {sea:'italic 400 13px', land:'600 13px', small:'600 12px', tick:'400 12px', current:'italic 400 12px', secEnd:'600 12px'};
+// the map labels on screen, with the font and colour each gets in the image
 function exportLabels(){
   const family = CHART_FONT.split('px ')[1];
   return labelsForExport().map(L=>{
@@ -13,8 +13,8 @@ function exportLabels(){
       color: key==='tick' ? theme().text2 : theme().text, alpha: L.occluded ? 0.35 : 1};
   });
 }
-function exportNorth(){ return northAngle(); }
 
+// the colour key into the export image, laid out like renderKey (charts.js) on screen
 function paintKey(g, spec, x, yBottom, w){
   const th = theme(), lut = Render.rampLUT(spec.palette);
   // the title wraps as the note does: after the ·, never between a number and its unit (non-breaking spaces)
@@ -64,13 +64,15 @@ function paintKey(g, spec, x, yBottom, w){
   g.fillStyle = th.tick; g.textAlign = 'left';
   lines.forEach(l=>{ g.fillText(l, x+10, cy+2); cy += 15; });
 }
+// one legend symbol; sw is a keySpec legend row's sw ('float good', 'track', …)
 function legendSwatch(g, sw, cx, cy){
   const [kind, cls] = sw.split(' ');
   g.lineWidth = 1.5; g.setLineDash([]);
   if(kind==='float'){
-    const fill = {fair:'#9aa3ab', poor:'#15191d', none:'#5f6b76'}[cls] ?? '#f4f4f4';
+    const hex = {fair:MISFIT_CLASSES[1].color, poor:MISFIT_CLASSES[2].color, none:NO_MISFIT}[cls] ?? FLOAT_DEFAULT;
+    const fill = '#' + hex.toString(16).padStart(6, '0');   // the marker colours from markers.js
     g.beginPath(); g.moveTo(cx, cy-5); g.lineTo(cx+5, cy); g.lineTo(cx, cy+5); g.lineTo(cx-5, cy); g.closePath();
-    if(fill){ g.fillStyle = fill; g.fill(); }
+    g.fillStyle = fill; g.fill();
     g.strokeStyle = cls==='poor' ? '#f4f4f4' : '#0b0f13'; g.stroke();
   } else if(kind==='glider'){
     g.beginPath(); g.arc(cx, cy, 4, 0, 7); g.fillStyle = '#f4f4f4'; g.fill(); g.strokeStyle = '#0b0f13'; g.stroke();
@@ -83,6 +85,7 @@ function legendSwatch(g, sw, cx, cy){
     g.fillStyle = '#e8ecef'; g.fillRect(cx-7, cy-1, 14, 2);
   }
 }
+// split text into lines no wider than maxW px
 function wrapText(g, text, maxW, font){
   g.font = font;
   const lines = []; let line = '';
@@ -102,8 +105,9 @@ function paintNorth(g, x, y, deg){
   g.fillStyle = '#e8ecef'; g.font = CHART_FONT_BOLD; g.textAlign = 'center'; g.fillText('N', x, y+34);
 }
 
+// the Save PNG button: compose the view, labels, key and caveat, then download the PNG
 function exportPNG(){
-  const src = exportScene(), cssW = renderer.domElement.clientWidth, cssH = renderer.domElement.clientHeight;
+  const src = Render.renderForExport(), cssW = renderer.domElement.clientWidth, cssH = renderer.domElement.clientHeight;
   if(!src) return;                                     // the WebGL context is lost; boot-guard shows the notice
   const out = document.createElement('canvas');
   out.width = src.width; out.height = src.height;
@@ -136,7 +140,7 @@ function exportPNG(){
   g.font = CHART_FONT; g.fillStyle = th.text; g.fillText(context, 24+bw+8, 53);
   g.fillStyle = th.text2; g.fillText(spec.title, 24, 70);
 
-  paintNorth(g, cssW-36, 36, exportNorth());
+  paintNorth(g, cssW-36, 36, northAngle());
   paintKey(g, spec, 12, cssH-40, 280);
 
   // caveat along the bottom

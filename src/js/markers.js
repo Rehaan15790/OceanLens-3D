@@ -7,20 +7,23 @@ const stemGroup = new THREE.Group(); scene.add(Render.register('stems', stemGrou
 const PICK_PX = 12, MARK_PX = 13;
 
 // "colour floats by misfit": the temperature RMSE against the model sorts a float into good /
-// fair / poor, lighter to darker; grey when nothing is comparable
+// fair / poor, lighter to darker; grey when nothing is comparable. The key's wording for these
+// thresholds is in charts.js (renderKey): change both together.
 const MISFIT_CLASSES = [
-  {max:0.5, color:0xf4f4f4, css:'#f4f4f4', label:'RMSE < 0.5 °C'},
-  {max:1.0, color:0x9aa3ab, css:'#9aa3ab', label:'RMSE 0.5–1 °C'},
-  {max:Infinity, color:0x15191d, css:'#15191d', label:'RMSE > 1 °C'},
+  {max:0.5, color:0xf4f4f4},
+  {max:1.0, color:0x9aa3ab},
+  {max:Infinity, color:0x15191d},
 ];
-const NO_MISFIT = {color:0x5f6b76, css:'#5f6b76'}, FLOAT_DEFAULT = {color:0xf4f4f4, css:'#f4f4f4'};
-function misfitClass(inst){
+const NO_MISFIT = 0x5f6b76, FLOAT_DEFAULT = 0xf4f4f4;   // export.js legendSwatch draws the key with these too
+// this float's misfit colour now; NO_MISFIT when nothing compares
+function misfitColor(inst){
   const s = summarize(misfit(inst, state.time, 'temp'));
-  return s ? MISFIT_CLASSES.findIndex(c=>s.rmse < c.max) : MISFIT_CLASSES.length;
+  return (s && MISFIT_CLASSES.find(c=>s.rmse < c.max)?.color) ?? NO_MISFIT;
 }
 let markerItems = [];      // [{pos:Vector3, kind:instrument type, vis, userData}] for picking and hover
 function markStyle(kind){ return instrumentType(kind).marker || (kind === 'glider' ? 'circle' : 'diamond'); }
 const timeOf = inst => typeof inst.time === 'number' ? inst.time : Date.parse(inst.time);
+// one THREE.Points for items of one shape and outline, each coloured by its hex
 function marksObject(items, opts){
   const geo = new THREE.BufferGeometry().setFromPoints(items.map(it=>it.pos));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(items.flatMap(it=>Render.gpuColor(new THREE.Color(it.hex).toArray())), 3));
@@ -31,6 +34,7 @@ function marksObject(items, opts){
 function clearGroup(g){
   g.children.slice().forEach(o=>{ g.remove(o); o.geometry.dispose(); o.material.dispose(); });
 }
+// rebuild every mark, stem and track line from scratch; main.js refreshMarkers decides when
 function buildMarkers(){
   clearGroup(markerGroup); clearGroup(stemGroup);
   markerItems = [];
@@ -40,11 +44,10 @@ function buildMarkers(){
   floats.forEach(inst=>{
     const kind = inst.kind || 'argo', t = instrumentType(kind);
     const [x,z] = toXZ(inst.lat, inst.lon);
-    const cls = state.colorMisfit ? misfitClass(inst) : -1;
-    const hex = cls < 0 ? FLOAT_DEFAULT.color : cls < MISFIT_CLASSES.length ? MISFIT_CLASSES[cls].color : NO_MISFIT.color;
+    const hex = state.colorMisfit ? misfitColor(inst) : FLOAT_DEFAULT;
     const userData = inst.userData || {type:kind, data:{id:inst.id, inst}};
     const item = {pos:new THREE.Vector3(x, 0.05, z), kind, vis:inst, userData, hex};
-    push(marks, kind + (cls === 2 ? '|dark' : '|light'), item);
+    push(marks, kind + (hex === MISFIT_CLASSES[2].color ? '|dark' : '|light'), item);   // poor floats get a light outline
     markerItems.push(item);
     if(t ? t.stem !== false : kind !== 'glider')
       push(stems, kind, [new THREE.Vector3(x,0.05,z), new THREE.Vector3(x, -(inst.real ? inst.maxDepth : 1000)*DEPTH_SCALE*state.exagg, z)]);
@@ -88,6 +91,7 @@ function buildMarkers(){
   applyMarkerVisibility();
   placeSelection();
 }
+// show or hide marks and stems by instrument type (the overlay switches)
 function applyMarkerVisibility(){
   [markerGroup, stemGroup].forEach(g=>g.children.forEach(o=>{ o.visible = !!o.userData.vis && instrumentVisible(o.userData.vis); }));
 }
@@ -110,6 +114,7 @@ function placeSelection(){
 
 /* ---- picking on screen: the nearest float, waypoint or track fix within PICK_PX ---- */
 const _pp = new THREE.Vector3();
+// the mark or track fix nearest the pointer, within PICK_PX; null when none
 function pickAt(clientX, clientY){
   const rect = renderer.domElement.getBoundingClientRect(), x = clientX - rect.left, y = clientY - rect.top;
   let best = null, bestD = PICK_PX;
@@ -123,6 +128,7 @@ function pickAt(clientX, clientY){
   if(trackGroup.visible) trackFixes.forEach(f=>consider(f.pos, {kind:'track', index:f.index}));
   return best;
 }
+// a click on the view (not a drag): open the profile or the track under the pointer
 function handleClick(e){
   const hit = pickAt(e.clientX, e.clientY);
   if(!hit) return;

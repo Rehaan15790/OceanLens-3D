@@ -25,6 +25,7 @@ const CSV_NAMES = {
 const CSV_UNIT_TOKENS = /^(c|degc|°c|deg_c|degree_c|degrees_c|degree_celsius|degrees_celsius|celsius|f|degf|°f|k|kelvin|m|meters|metres|ft|feet|km|dbar|decibar|db|bar|kpa|psu|pss|pss78|pss-78|g\/kg|1|1e-3|mg\/m3|mg_m3|mg_m-3|mg m-3|ug\/l|µg\/l|ugl|ug l-1|umol\/kg|µmol\/kg|umol_kg|umol kg-1|micromole\/kg|micromol\/kg|umol\/l|µmol\/l|umol l-1|micromole\/l|micromol\/l|mmol m-3|ml\/l|ml_l|mg\/l|mg_l|degrees_north|degrees_east|degree_north|degree_east|deg|utc|iso8601|m\/s|cm\/s|mm\/s|m_s|cm_s|m s-1|cm s-1|kn|knots)$/i;
 
 const isNumCell = c => c!=='' && Number.isFinite(+c);
+// one line split on delimiter d; double quotes may hold the delimiter and "" for a quote
 function splitLine(line, d){
   const out = []; let cur = '', q = false;
   for(let i=0; i<line.length; i++){
@@ -39,6 +40,8 @@ function splitLine(line, d){
   out.push(cur.trim());
   return out;
 }
+// text -> {delimiter, headerDetected, header, names (lower case, units cut), units, rows, ragged}; throws when no
+// delimiter gives consistent columns
 function parseDelimited(text){
   const lines = String(text).replace(/^﻿/, '').split(/\r\n|\n|\r/).filter(l=>l.trim()!=='' && !/^\s*#/.test(l));
   if(lines.length < 2) throw new Error('The file has fewer than two lines of data.');
@@ -79,6 +82,7 @@ function parseDelimited(text){
   return {delimiter, headerDetected, header, names, units, rows, ragged};
 }
 
+// column index per field from the header names; needsMapping when the user has to choose
 function guessMapping(table){
   const mapping = {}, used = new Set();
   CSV_FIELDS.forEach(f=>{
@@ -131,6 +135,7 @@ function unitConverter(field, unit){
 }
 const TYPE_WORDS = {adcp:'adcp', radar:'hfradar', hfr:'hfradar', argo:'argo', float:'argo', 'bgc-argo':'argo', glider:'glider',
                     ctd:'ctd', cast:'ctd', mooring:'mooring', buoy:'mooring'};
+// an instrument type from words in a header, file name or type cell; null when none matches
 function typeFromText(s){
   const w = String(s || '').toLowerCase();
   for(const k of Object.keys(TYPE_WORDS)) if(w.includes(k)) return TYPE_WORDS[k];
@@ -177,6 +182,7 @@ function diveProfile(ks, s, bin = z=>Math.round(z)){
   return {lat:la, lon:lo, ms:times[times.length>>1], z, vars};
 }
 
+// a parsed table and its column mapping -> a dataset for addDataset (plugins.js); throws with a message for the user
 function tableToDataset(table, mapping, opts = {}){
   const col = f=>mapping[f]===undefined || mapping[f]===null || mapping[f]==='' ? -1 : +mapping[f];
   ['lat', 'lon', 'time'].forEach(f=>{ if(col(f) < 0) throw new Error(`Choose the column that holds ${f==='lat' ? 'latitude' : f==='lon' ? 'longitude' : 'time'}.`); });

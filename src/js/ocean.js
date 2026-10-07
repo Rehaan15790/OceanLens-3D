@@ -9,6 +9,7 @@ function seawaterDensity(S, T){
   const B = -5.72466e-3 + 1.0227e-4*T - 1.6546e-6*T*T;
   return rw + A*S + B*Math.pow(S,1.5) + 4.8314e-4*S*S;
 }
+// density anomaly σt = ρ − 1000 kg/m³
 function sigmaT(S,T){ return seawaterDensity(S,T) - 1000; }
 // pressure (dbar) at depth z (m): Saunders (1981), within 0.1 dbar of UNESCO 1983 to 1000 m
 function pressureDbar(z, lat=15){
@@ -28,6 +29,8 @@ function soundSpeed(T,S,z){
 function modelFn(varKey){
   return hasModel(varKey) && VAR_META[varKey].dims!==2 ? VAR_META[varKey].sample : null;
 }
+// the model value of varKey at a point (dens: σt from temperature and salinity); null below the deepest level or
+// with no model field
 function modelAt(varKey, lat, lon, z, t){
   if(varKey==='dens'){
     const T = modelAt('temp',lat,lon,z,t), S = modelAt('sal',lat,lon,z,t);
@@ -80,6 +83,8 @@ function inversionFlags(D){
 }
 
 const obsCache = new Map();
+// an instrument's observations at analysis t: real profiles as read; synthetic ones generated once from the model
+// plus the instrument's traits, then cached
 function observeProfile(inst, t){
   if(inst.real) return inst.obs;
   const key = inst.id+'|'+t;
@@ -111,6 +116,7 @@ function observeProfile(inst, t){
   obsCache.set(key, p);
   return p;
 }
+// an observed profile's array for a variable key; undefined when it has none
 function obsArray(p, varKey){ return {temp:p.T, sal:p.S, chl:p.C, oxy:p.O, dens:p.D}[varKey] || (p.vars ? p.vars[varKey] : undefined); }
 // value of an observed profile at depth z; null inside a gap, on a flagged level or below the
 // profile. Above the first level (5 m) the first value stands in for the mixed layer.
@@ -141,6 +147,7 @@ function misfit(inst, t, varKey){
   });
   return out;
 }
+// misfit() output -> {bias, rmse, n}; null when nothing was comparable
 function summarize(diffs){
   if(!diffs.length) return null;
   let s=0, s2=0;
@@ -175,6 +182,7 @@ function tchpColumn(tempAt, salAt, bottom){
   }
   return {q:q*CP_SEAWATER/1e7, d26:null};
 }
+// values on DEPTHS -> a function of depth, linear between levels, null below the last
 function columnInterp(vals){
   return z=>{
     if(z <= 0) return vals[0];
@@ -184,6 +192,7 @@ function columnInterp(vals){
     return null;
   };
 }
+// TCHP and D26 of the model column at a point
 function modelTchp(lat, lon, t, seabed){
   const Tv = DEPTHS.map(d=>fieldTemp(lat,lon,d,t)), Sv = DEPTHS.map(d=>fieldSal(lat,lon,d,t));
   return tchpColumn(columnInterp(Tv), columnInterp(Sv), Math.min(seabed, DEPTHS[DEPTHS.length-1]));
@@ -197,6 +206,7 @@ function obsTchp(inst, p, seabed){
   return r;
 }
 const tchpCache = new Map();
+// TCHP at every grid node at analysis t (null on land), cached per data mode
 function tchpGrid(t){
   const key = dataMode+t;
   if(!tchpCache.has(key)){

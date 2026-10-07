@@ -8,7 +8,7 @@ ETOPO1 relief and Cyclone Amphan's IBTrACS track. It needs Python 3 and numpy on
 
 ```
 python data-pipeline/build_snapshot.py                   # rebuild from the raw cache, write data/amphan-2020.json
-python data-pipeline/build_snapshot.py --check           # rebuild and compare with the committed file
+python data-pipeline/build_snapshot.py --check --temperature-only --model-at-obs   # rebuild and compare with the committed file
 python data-pipeline/build_snapshot.py --fetch --allow-host tds.hycom.org   # download what the cache lacks, from HYCOM only
 python data-pipeline/build_snapshot.py --temperature-only --model-at-obs    # the committed configuration
 python -m unittest discover -s data-pipeline -v          # tests (no network, no cache needed)

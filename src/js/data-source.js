@@ -23,10 +23,8 @@ const SOURCES = {
     track: {name:'Cyclone Amphan', badge:'IBTrACS v04r01', mapLabel:'Amphan (IBTrACS)',
             landfallLabel: fix=>`Landfall ${fmt.fixTime(fix.t)}`,
             nowLabel: (wind, agency)=>`Amphan · ${wind} kt (${agency})`,
-            detailsButton:"Show Amphan's track details", openButton:"Show Amphan's track",
             empty:'No IBTrACS fixes for Amphan fall inside the map.'},
-    section: {trackPreset:"Along Amphan's track", trackName:'Amphan: genesis to landfall',
-              none:'No Argo profiles within 40 km of this line.'},
+    section: {trackPreset:"Along Amphan's track", trackName:'Amphan: genesis to landfall'},
     legend: {track:'Amphan track (IBTrACS)', now:'Amphan at this analysis'},
     val: {heading:'Model–Argo comparison',
           sub: (t, nArgo)=>`${fmt.analysisTime(META.times[t])} · ${nArgo} Argo profiles`,
@@ -56,10 +54,8 @@ const SOURCES = {
     time: {now: t=>`Day ${fmt.demoDay(t)}`, tick: t=>`Day ${fmt.demoDay(t)}`},
     track: {name:'Sample track', badge:'Illustrative, not a real storm', mapLabel:'Sample track (illustrative)',
             landfallLabel: ()=>'Landfall', nowLabel: null,
-            detailsButton:'Show the sample track details', openButton:'Show the sample track',
             empty:'The sample track has no positions.'},
-    section: {trackPreset:'Along the sample track', trackName:'Sample track: start to landfall',
-              none:'No floats or gliders within 40 km of this line.'},
+    section: {trackPreset:'Along the sample track', trackName:'Sample track: start to landfall'},
     legend: {track:'Sample track (illustrative)', now:null},
     val: {heading:'Model–observation comparison',
           sub: (t, nArgo, nGlider)=>`Day ${fmt.demoDay(t)} · ${nArgo} synthetic floats and ${nGlider} glider profiles`,
@@ -71,6 +67,7 @@ const SOURCES = {
              file: (t, variable, view)=>`oceanlens3d_synthetic_day${fmt.demoDay(t)}_${variable}_${view}.png`}
   }
 };
+// the active entry of SOURCES: the ocean, the instruments and every mode-dependent string
 function dataSource(){ return SOURCES[dataMode]; }
 
 function fieldTemp(lat, lon, depth, t){ return dataSource().temp(lat, lon, depth, t); }
@@ -91,6 +88,7 @@ function instrumentsNow(){
   const own = dataSource().instruments(state.time);
   return dataMode==='real' && importedInsts.length ? own.concat(importedNow(state.time)) : own;
 }
+// the storm track of the active source: Amphan (real) or SAMPLE_TRACK (synthetic)
 function currentTrack(){ return dataSource().fixes(); }
 
 /* ---- action: switch the data source ---- */

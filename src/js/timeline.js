@@ -1,6 +1,8 @@
 /* ---- timeline: the analyses (real) or demo days (synthetic), and playback ---- */
+// the label of time step t in the active data mode
 function timeLabel(t){ return dataSource().time.now(t); }
 
+// state -> the timeline slider, time label and play button
 function syncTimeline(){
   ui.timeline.max = NT-1;
   ui.timeline.value = state.time;
@@ -18,6 +20,7 @@ function setTime(t){
 }
 const PLAY_STEP_MS = 1100;
 let playTimer = null;
+// start or stop playback: one analysis every PLAY_STEP_MS, looping
 function setPlaying(on){
   on = !!on;
   if(on===state.playing) return;

@@ -20,6 +20,7 @@ stormNow.visible = false;
 const stormLabel = makeLabel('', 'current', new THREE.Vector3(), {visibleIf:()=>stormNow.visible && trackGroup.visible});
 stormLabel.el.style.color = '#ffcf5c';
 const fixGeo = new THREE.SphereGeometry(1, 12, 12), fixMat = Render.flat(0xffffff);
+// rebuild the track line, fixes, landfall ring and labels for the active data source
 function buildTrack(){
   trackGroup.children.slice().forEach(o=>{
     trackGroup.remove(o);
@@ -55,6 +56,7 @@ function buildTrack(){
   const last = T[T.length-1], [x1,z1] = toXZ(last.lat+0.5, last.lon-0.6);
   landfallLabel.pos.set(x1, 0.34, z1);
 }
+// the ring and label where Amphan was at the analysis on screen (real data only)
 function updateStormNow(){
   stormNow.visible = false;
   if(dataMode!=='real' || !REAL_TRACK.length)return;
