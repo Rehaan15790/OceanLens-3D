@@ -6,9 +6,10 @@ statement 26067 (problem owner: INCOIS). It is a student prototype and is not af
 INCOIS or the Ministry of Earth Sciences.
 
 Two data modes:
-- **Real data:** Cyclone Amphan, May 2020. It combines eight HYCOM GOFS 3.1 analyses, quality-controlled Argo profiles, ETOPO1
-  relief and the IBTrACS track. HYCOM assimilates Argo, so the model–Argo comparison is a consistency check, not
-  independent validation.
+- **Real data:** Cyclone Amphan, May 2020, as a hindcast. It combines eight HYCOM GOFS 3.1 analyses, 206
+  quality-controlled Argo profiles from 70 floats (chlorophyll on 36 profiles from 13 BGC-Argo floats, oxygen on 24
+  profiles from 9), ETOPO1 relief and the IBTrACS track. HYCOM assimilates Argo, so the model–Argo comparison is a
+  consistency check, not independent validation.
 - **Synthetic demo data:** analytic fields with synthetic floats and gliders, labelled as such. It is not a real
   ocean state.
 
@@ -31,11 +32,11 @@ regularly in Edge), or Safari 15 or later. It is built for laptop and desktop sc
 | `build.py` | Assembles `src/`, `vendor/` and `data/` into one HTML file (Python standard library only) |
 | `data-pipeline/` | Fetches, caches and packs HYCOM, Argo, BGC-Argo, ETOPO1 and IBTrACS into `data/`; `ncio.py` reads and writes NetCDF classic (Python + numpy) |
 | `server/serve.py` | The optional data server: the app, a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2 (Python + numpy) |
-| `samples/` | Files to try with "Add data": a real BGC-Argo NetCDF, real Argo CSV, a synthetic CTD cast |
+| `samples/` | Files to try with "Add data". Real: an Argo GDAC multi-profile NetCDF (`argo-5907328_prof.nc`), an ERDDAP Argo CSV with its units row, a BGC-Argo NetCDF, Argo profiles from the snapshot as CSV, and two 2016 BoBBLE Seaglider files (NetCDF and CSV). Synthetic: one CTD cast. `samples/README.md` gives each file's source and citation. |
 | `tools/`, `tests/` | The test runner, the headless-browser client and the tests |
 | `docs/` | `TESTING.md` (tests and harness), `DEPLOY.md` (hosting, releases, the server), `API.md` (REST, WMS, WCS), `EXTENDING.md` (plugins, variables, formats) |
 | `REQUIREMENTS.md` | Each requirement of problem statement 26067 mapped to the feature, files and test, with status |
-| `deck/` | The pitch deck (HTML source; the PDF at the root is printed from it) |
+| `deck/` | The pitch deck (HTML source; the PDF at the root is printed from it) and the SIH portal text (`portal-submission.md`) |
 
 ## Build
 
@@ -51,12 +52,19 @@ The build is deterministic: the same sources always give the same bytes. The ver
 
 ```
 python tools/check.py            # hygiene, build check, fresh build into dist/, every test suite
-python tools/check.py --quick    # the subset CI runs
+python tools/check.py --quick    # unit, server and smoke suites: what CI runs
 python tools/run.py --list       # the suites and tests
 ```
 
-The tests drive the built file in a headless Chromium browser (Edge or Chrome) through the DevTools protocol,
-with a client written against the Python standard library. See `docs/TESTING.md`.
+You need Python 3 with numpy and a Chromium-based browser (Edge, Chrome or Chromium). numpy is used by the data
+pipeline, the server and their tests, and by `data-pipeline/facts_reference.py`, which writes the expected numbers
+that the `unit` suite checks against the app.
+
+The browser tests drive the built file in headless Chromium through the DevTools protocol, with a client written
+against the Python standard library. There are 193 automated tests: the 134 that `tools/run.py --list` names, plus
+the 59 data-pipeline tests that the `unit` suite runs. The checks also run as root (in a container or WSL, the
+client starts the browser with `--no-sandbox`) and on GitHub Actions, where `.github/workflows/ci.yml` runs
+`tools/check.py --quick`. See `docs/TESTING.md`.
 
 ## Rebuild the data
 
@@ -85,17 +93,23 @@ python server/serve.py                # http://127.0.0.1:8080/: the app, /api/v1
 
 HYCOM GOFS 3.1 (HYCOM Consortium), Argo (Argo GDAC, doi:10.17882/42182), ETOPO1 (NOAA NCEI,
 doi:10.7289/V5C8276M) and IBTrACS v04r01 (NOAA NCEI, doi:10.25921/82ty-9e16; winds from IMD and JTWC). The full
-acknowledgements and citations are in `THIRD_PARTY_NOTICES.md` and in the app's About panel.
+acknowledgements and citations are in `THIRD_PARTY_NOTICES.md` and in the app's About panel. The sample files
+come from the Argo GDAC (its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE experiment,
+2016); `samples/README.md` gives the queries and citations.
 
 ## Possible uses (not implemented as features)
 
 - **Cyclone briefings.** Cyclone heat potential (TCHP) is the heat stored above the 26 °C isotherm (D26). The app
   computes it from the model's temperature and salinity columns and maps it with the storm track. That is the kind
-  of view a cyclone cell uses before landfall.
-- **Search and rescue.** Surface currents are shown as arrows and streaks. Turning them into drift trajectories would
-  need a particle-tracking step that the app does not have.
-- **Fisheries.** The profile panel can show chlorophyll from BGC-Argo floats. The Amphan snapshot has no chlorophyll
-  data and HYCOM has no chlorophyll field, so today only synthetic mode shows it.
+  of view a cyclone cell uses before landfall. The built-in case is a hindcast of one past cyclone: there are no
+  forecasts and no live data.
+- **Search and rescue.** With Current speed selected, the current direction is drawn in white with a dark edge:
+  streaks at the surface or the slice depth, and arrows in the Depth slice view. The streaks are illustrative, not
+  physically scaled.
+  Turning currents into drift trajectories would need a particle-tracking step that the app does not have.
+- **Fisheries.** The Amphan snapshot holds chlorophyll on 36 profiles from 13 BGC-Argo floats; the profile panel
+  shows them. HYCOM has no chlorophyll field, so real-data mode has no chlorophyll map; only synthetic mode draws a
+  chlorophyll field. There is no fishing-zone (PFZ) or SST-front product.
 - **Teaching.** The guided tour walks through the main views in eight steps.
 
 ## What a production service would need
@@ -105,12 +119,18 @@ operational one would add:
 
 - Scheduled ingestion of live model output. The server reads NetCDF-3 files at start-up; NetCDF-4 must be
   converted first, and nothing yet pulls new forecasts over OPeNDAP.
+- A 3D view that loads model fields from the server. Today it draws only the snapshot built into the page; model
+  files given to the server reach other clients through WMS, WCS, OPeNDAP and REST only.
+- A pipeline that is not tied to one case. It hard-codes the Amphan domain (6–22°N, 61–92°E, which leaves out the
+  Andaman and Nicobar Islands), the 11 depths and the 4 model variables; the 8 analysis times are fixed for HYCOM.
 - Scheduled Argo, BGC-Argo and glider ingestion from the GDACs into the same layout.
 - Readers for real ADCP and HF radar files. The plugins exist but are tested on synthetic records
   (`REQUIREMENTS.md`, row 6a).
 - Authentication, TLS and rate limits, from the institution's reverse proxy (`docs/DEPLOY.md`, section 4).
-- Further data sources: the INCOIS Live Access Server (las.incois.gov.in) and Copernicus Marine
-  (data.marine.copernicus.eu, which needs a free account).
+- Further data sources: the INCOIS Live Access Server (las.incois.gov.in; no real export has been tried) and
+  Copernicus Marine (GLOBAL_MULTIYEAR_PHY_001_030 and GLOBAL_MULTIYEAR_BGC_001_029). Their raw files and ARCO Zarr
+  stores can be read over HTTPS without an account; only the `copernicusmarine` toolbox needs a free account. The
+  native files are NetCDF-4/HDF5, so they need a conversion to NetCDF-3 or a new reader.
 
 ## Licence
 

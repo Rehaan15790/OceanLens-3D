@@ -8,8 +8,8 @@ One build produces two things, and a small server adds a third:
 3. **The data server** (`server/serve.py`): the same file plus a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2, for an
    institution's own machines (section 4).
 
-The repository is private and has no remote. Everything below assumes a **private** GitHub repository that the owner
-may connect later. Connecting any host, or creating any account, is the owner's decision.
+The repository is a **private** GitHub repository, and everything below assumes it stays private. Connecting any
+host, or creating any account, is the owner's decision.
 
 ## 1. The single file (release)
 
@@ -43,7 +43,7 @@ single.
 
 ```
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'sha256-…' 'sha256-…'; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'sha256-…' 'sha256-…' …; style-src 'unsafe-inline'; img-src data: blob:; font-src 'none'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
@@ -51,7 +51,8 @@ single.
 ```
 
 - The same CSP, minus `frame-ancestors`, is also in a `<meta>` tag inside the file, so it applies over `file://`
-  and on hosts that cannot set headers.
+  and on hosts that cannot set headers. `script-src` lists one hash per inline script. `connect-src 'self'` lets a
+  page served by `server/serve.py` call only its own server.
 - `no-cache` makes browsers revalidate the one HTML file (by ETag) on every visit, so a new release is picked up
   at once.
 
@@ -76,22 +77,24 @@ gzip. Publish `dist/site/` either from a branch, or with an Actions workflow; th
 
 ## 3. Continuous integration
 
-`.github/workflows/ci.yml` runs `python tools/check.py --quick` (unit, server and smoke suites) on pull requests and on pushes to `main`. It is
-written but not pushed. It is kept lean because Actions minutes and artifact storage are metered on private
-repositories:
+`.github/workflows/ci.yml` runs `python tools/check.py --quick` (unit, server and smoke suites) on GitHub Actions,
+on pull requests and on pushes to `main`. It installs numpy, and `tools/cdp.py` finds the runner's Google Chrome.
+It is kept lean because Actions minutes and artifact storage are metered on private repositories:
 
 - one `ubuntu-latest` job (Linux minutes cost half of Windows minutes), with a 15-minute timeout;
 - documentation-only changes are skipped (`paths-ignore`);
 - a newer push cancels the run in progress (`concurrency`);
-- test output and the built file are kept for 7 days;
+- the test output (when a run fails) or the built file (when it passes) is kept for 7 days;
 - the full suite runs only on demand (`workflow_dispatch` with `full: true`).
 
 ## 4. The data server on institutional infrastructure (e.g. INCOIS)
 
 `server/serve.py` uses only the Python standard library and numpy. It needs no database, no container and no
-internet access. It serves the single file at `/`, the API at `/api/v1`, WMS at `/wms` and WCS at `/wcs`
-(`docs/API.md`). The page detects that it is served over HTTP and lists the server's datasets; opened from a file it
-behaves exactly as before.
+internet access. It serves the single file at `/`, the API at `/api/v1`, WMS at `/wms`, WCS at `/wcs` and OPeNDAP
+at `/opendap` (`docs/API.md`). The page detects that it is served over HTTP and lists the server's datasets.
+Picking one loads its observed profiles or, for another snapshot, reloads the page with that snapshot embedded. The
+3D view draws only the snapshot in the page: a model file given with `--netcdf` is served through WMS, WCS, OPeNDAP
+and REST, not drawn in 3D. Opened from a file, the page behaves exactly as before.
 
 ```
 python build.py --out dist/OceanLens3D.html
@@ -136,8 +139,17 @@ Notes:
   at 127.0.0.1.
 - `--cors` is off by default. Turn it on only for the origins that embed the API (e.g. an existing INCOIS portal
   calling WMS from its own pages).
-- Model data: CF NetCDF-3 files given with `--netcdf`, e.g. a Copernicus or INCOIS model subset saved as NetCDF-3.
-  `data-pipeline/build_snapshot.py --model-netcdf` makes an app snapshot from the same file, for `data/`.
+- Model data: CF NetCDF-3 files given with `--netcdf`. The server takes every numeric variable on 1-D latitude and
+  longitude axes (depth and time axes are optional), so a file with a single variable works. NetCDF-4 files are
+  refused. Copernicus Marine's native files (for example GLOBAL_MULTIYEAR_PHY_001_030) are NetCDF-4/HDF5, so they
+  must be subset and converted to NetCDF-3 first, for example with `nccopy -k classic`, or downloaded with
+  `copernicusmarine subset --netcdf3-compatible`. That toolbox needs a free account. The raw files can also be
+  downloaded over HTTPS without an account, but they are NetCDF-4 and need the same conversion. A real INCOIS LAS
+  export has not been tried.
+- `data-pipeline/build_snapshot.py --model-netcdf FILE` makes an app snapshot for `data/`, but it needs more: one
+  file holding temperature, salinity and both current components (u and v) on 1-D latitude, longitude and depth
+  axes, covering the map down to 1000 m. It uses the first 16 time steps. Files with one variable each must be
+  merged into one file first.
 - Health check: `GET /healthz` returns `{"status": "ok", ...}`.
 - The server reads its datasets at start-up. Restart it after changing files.
 - It refuses requests above 2048 × 2048 pixels (WMS) or 5 million cells (WCS). It serves only GET, HEAD and OPTIONS,

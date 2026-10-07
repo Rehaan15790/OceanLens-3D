@@ -1,9 +1,8 @@
 # OceanLens 3D server API
 
 `server/serve.py` serves the built app and its data over HTTP: a REST API, OGC WMS 1.3.0, OGC WCS 2.0.1 and a minimal
-OPeNDAP DAP2 endpoint. It needs
-Python 3.12 and numpy, nothing else. NetCDF input and output go through `data-pipeline/ncio.py` (NetCDF classic,
-CDF-1/2/5).
+OPeNDAP DAP2 endpoint. It needs Python 3 (tested with 3.11 and 3.12) and numpy, nothing else. NetCDF input and
+output go through `data-pipeline/ncio.py` (NetCDF classic, CDF-1/2/5).
 
 ```
 python build.py --out dist/OceanLens3D.html             # the page served at /
@@ -148,7 +147,9 @@ http://localhost:8080/opendap/amphan-2020.dods?temp[0][0][0:32][0:62],time
 ## What it does not do
 
 - OPeNDAP is DAP2 projections and hyperslabs only. There are no selection clauses (`&`), server functions,
-  DAP4, `.html`/`.info` pages or Sequences for profiles. It has not been tried with netCDF-C, pydap or Panoply.
+  DAP4, `.html`/`.info` pages or Sequences for profiles. In a manual check (not part of the automated tests),
+  netCDF-C 4.9.3, through netCDF4-python, opened `/opendap/amphan-2020` and read a hyperslab and a strided slice.
+  pydap and Panoply have not been tried.
 - No WMS `GetLegendGraphic`, no reprojection beyond `CRS:84`/`EPSG:4326`, no WCS `rangeSubset`, scaling or
   POST/SOAP bindings, no WCS-T.
 - No authentication, rate limiting or TLS of its own: put it behind the institution's reverse proxy
