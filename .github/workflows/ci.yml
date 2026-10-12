@@ -1,4 +1,4 @@
-# Lean by design: Actions minutes and artifact storage are metered on private repositories.
+# Lean by design: a short run gives fast feedback, and it stays cheap if the repository is ever made private again.
 # One Linux job runs the same checks as `python tools/check.py --quick` locally (unit, server, smoke).
 # The full suite runs on demand.
 name: check

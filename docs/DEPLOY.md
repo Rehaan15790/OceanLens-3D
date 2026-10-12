@@ -8,8 +8,8 @@ One build produces two things, and a small server adds a third:
 3. **The data server** (`server/serve.py`): the same file plus a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2, for an
    institution's own machines (section 4).
 
-The repository is a **private** GitHub repository, and everything below assumes it stays private. Connecting any
-host, or creating any account, is the owner's decision.
+The repository is **public** on GitHub so the code can be read and reviewed, but the code is all rights reserved
+(README.md, Copyright and licence). Connecting any host, or creating any account, is the owner's decision.
 
 ## 1. The single file (release)
 
@@ -21,7 +21,7 @@ python -c "import hashlib; print(hashlib.sha256(open('OceanLens3D.html','rb').re
 
 1. Bump `VERSION`.
 2. Record the version and SHA-256 in the release notes.
-3. Attach the file to a GitHub release. On a private repository, releases are private too.
+3. Attach the file to a GitHub release. On a public repository, releases are public: anyone can download the file.
 
 Anyone receiving the file can check it against the published hash.
 
@@ -56,30 +56,33 @@ single.
 - `no-cache` makes browsers revalidate the one HTML file (by ETag) on every visit, so a new release is picked up
   at once.
 
-### Primary route: Cloudflare Pages or Netlify (free plan, private repository)
+### Primary route: Cloudflare Pages or Netlify (free plan)
 
-Both deploy from a private GitHub repository on their free plans. Both read `_headers`, serve brotli and gzip,
+Both deploy from a GitHub repository on their free plans. Both read `_headers`, serve brotli and gzip,
 and give HTTPS.
 
-- **Cloudflare Pages.** Create a project and connect the private repository. Use the build command
+- **Cloudflare Pages.** Create a project and connect the repository. Use the build command
   `python build.py --site dist/site` and the output directory `dist/site`. Alternatively, skip the Git connection
   and upload `dist/site/` by drag-and-drop ("Direct Upload").
-- **Netlify.** Add a new site from the private repository. Use the build command `python build.py --site dist/site`
+- **Netlify.** Add a new site from the repository. Use the build command `python build.py --site dist/site`
   and the publish directory `dist/site`. The alternative is to drag-and-drop `dist/site/` onto the dashboard.
 
 Deploys through the host's own Git integration cost no GitHub Actions minutes.
 
-### Paid-plan option: GitHub Pages
+### Option: GitHub Pages
 
-GitHub Pages can publish from a private repository only on a paid plan (Pro, Team or Enterprise). It cannot set
-custom headers, so the `<meta>` CSP is the only policy, without `frame-ancestors`. It caches for 10 minutes and serves
-gzip. Publish `dist/site/` either from a branch, or with an Actions workflow; the workflow uses metered minutes.
+GitHub Pages publishes from a public repository on the free plan (from a private one only on Pro, Team or
+Enterprise). It cannot set custom headers, so the `<meta>` CSP is the only policy, without `frame-ancestors`. It
+caches for 10 minutes and serves gzip. Publish `dist/site/` either from a branch, or with an Actions workflow.
+
+A public site lets anyone use the app. While the code is all rights reserved, decide that before publishing one.
 
 ## 3. Continuous integration
 
 `.github/workflows/ci.yml` runs `python tools/check.py --quick` (unit, server and smoke suites) on GitHub Actions,
 on pull requests and on pushes to `main`. It installs numpy, and `tools/cdp.py` finds the runner's Google Chrome.
-It is kept lean because Actions minutes and artifact storage are metered on private repositories:
+Actions minutes are free on public repositories, but it is kept lean for fast feedback and in case the repository
+is made private again, where minutes and artifact storage are metered:
 
 - one `ubuntu-latest` job (Linux minutes cost half of Windows minutes), with a 15-minute timeout;
 - documentation-only changes are skipped (`paths-ignore`);
@@ -163,4 +166,4 @@ Notes:
 - Personal absolute paths, CA bundles and certificates, tokens and keys. Docs use placeholders such as
   `<path-to-raw-cache>` and `<your-ca-bundle.pem>`. `tools/check.py` fails on absolute home-folder paths in
   tracked files.
-- A `LICENSE` file, until the owner chooses a licence. `tools/check.py` checks this too.
+- A `LICENSE` file: the code is all rights reserved (README.md). `tools/check.py` checks this too.

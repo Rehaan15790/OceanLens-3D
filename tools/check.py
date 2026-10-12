@@ -57,7 +57,7 @@ def workflow_problems():
 
 def hygiene():
     """No home-folder paths or secrets in tracked files, vendored library and workflows as pinned, and no LICENSE
-    file until the owner chooses a licence."""
+    file: the code is all rights reserved (README.md), so an open-source licence must never be added by accident."""
     # -z: names as UTF-8 bytes, not "quoted\303\251" (a quoted name never exists on disk, so it would go unscanned)
     files = subprocess.run(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=REPO,
                            capture_output=True, check=True).stdout.decode('utf-8', 'replace').split('\0')
@@ -80,7 +80,7 @@ def hygiene():
             problems.append(f'{rel} is not the pinned official release (missing, or its sha256 changed)')
     problems += workflow_problems()
     if any((REPO / n).exists() for n in ('LICENSE', 'LICENSE.md', 'LICENSE.txt')):
-        problems.append('a LICENSE file exists, but the owner has not chosen a licence')
+        problems.append('a LICENSE file exists, but the code is all rights reserved (README.md)')
     for p in problems:
         print('  ' + p)
     return not problems, f'{len([f for f in files if f])} tracked or new files scanned'

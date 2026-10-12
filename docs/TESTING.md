@@ -28,7 +28,7 @@ tests still run. Output goes to `tests/output/` (gitignored): `report.json`, `fi
 
 `tools/check.py` runs four steps: repository hygiene, `build.py --check`, a fresh build into `dist/platform.html`
 and the test suites against that build. The hygiene step fails on
-absolute home-folder paths in tracked or new files and on a `LICENSE` file (the owner has not chosen a licence).
+absolute home-folder paths in tracked or new files and on a `LICENSE` file (the code is all rights reserved).
 It does not look at git remotes, so it also passes in a GitHub Actions checkout. `.github/workflows/ci.yml` runs
 `tools/check.py --quick` on pull requests and pushes to `main`, and the full set on demand.
 

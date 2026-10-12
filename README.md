@@ -86,7 +86,7 @@ inspects TLS traffic, pass the antivirus root certificate with `--ca-bundle <you
 
 ## Deploy
 
-See `docs/DEPLOY.md`. It covers the downloadable single file, static hosting from a private repository, and the data
+See `docs/DEPLOY.md`. It covers the downloadable single file, static hosting, and the data
 server on an institution's own machines:
 
 ```
@@ -137,7 +137,15 @@ operational one would add:
   `copernicusmarine` toolbox needs a free account. The raw files are NetCDF-4/HDF5 and the Zarr stores are another
   format again, so each needs a conversion to NetCDF-3 or a new reader.
 
-## Licence
+## Copyright and licence
 
-No licence has been chosen for this project yet. Until one is, the authors reserve all rights. Third-party
-software and data included in the build keep their own licences and terms, listed in `THIRD_PARTY_NOTICES.md`.
+Copyright © 2026 Team ByteForge. All rights reserved.
+
+The source code is public so that it can be read and reviewed. It is **not** open source and no licence is granted:
+you may not copy, modify, distribute, host, sell or otherwise use this code, the built `OceanLens3D.html` or the
+deck, in whole or in part, without written permission from the authors. Viewing the repository on GitHub, and
+forking it on GitHub as GitHub's Terms of Service allow, grants no other right. For licensing, open an issue or
+contact the authors.
+
+Third-party software and data included in the build keep their own licences and terms, listed in
+`THIRD_PARTY_NOTICES.md`.

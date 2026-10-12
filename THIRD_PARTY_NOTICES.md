@@ -1,7 +1,7 @@
 # Third-party notices
 
 OceanLens 3D ships as one HTML file. That file contains the third-party software and data listed here, and each
-keeps its own licence or terms of use. The project's own code has no licence yet (see README.md).
+keeps its own licence or terms of use. The project's own code is all rights reserved (see README.md, Copyright and licence).
 
 ## Software
 
