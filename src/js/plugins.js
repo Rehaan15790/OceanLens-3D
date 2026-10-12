@@ -10,7 +10,7 @@ const DATASETS = new Map();          // id -> {dataset, insts}
 let importedInsts = [];              // the instruments of every added dataset
 let datasetRev = 0;                  // bumps on every add/remove, so the markers rebuild
 let datasetSeq = 0;
-const pluginListeners = {};
+const pluginListeners = Object.create(null);   // an event named "constructor" or "__proto__" is just a name
 const OBS_ARRAYS = {temp:'T', sal:'S', chl:'C', oxy:'O'};   // the short names ocean.js reads
 
 // call every listener of a plugin event; a listener that throws is logged to the console and skipped
@@ -33,7 +33,12 @@ function registerVariable(key, spec){
   const v = Object.assign({label:key, unit:'', palette:'speed', scale:'linear', dims:3, listed:true, product:false,
                            ranges:{real:range, synth:range}}, spec, {key});
   v.model = Object.assign({real:true, synth:true}, spec.model);
-  if(typeof v.sample !== 'function') v.sample = (lat, lon)=>NaN;
+  // a product given only as grid(t) reads at a point from its nearest map point (the hover readout, getVal)
+  if(typeof v.sample !== 'function') v.sample = v.dims !== 2 ? ()=>NaN : (lat, lon, z, t)=>{
+    const i = Math.round((lat-LAT0)/META.step), j = Math.round((lon-LON0)/META.step);
+    const g = i>=0 && i<LAT_N && j>=0 && j<LON_N ? field2dGrid(key, t) : null, q = g ? g[i*LON_N + j] : null;
+    return q===null || q===undefined ? NaN : q;
+  };
   if(!PALETTES[v.palette]) v.palette = 'speed';
   if(v.scale !== 'log') v.scale = 'linear';
   VAR_META[key] = v;
@@ -213,7 +218,7 @@ const OceanLens = window.OceanLens = {
   registerVariable, registerProduct, registerInstrument, registerFormat, addDataset, removeDataset,
   datasets: ()=>[...DATASETS.keys()].map(datasetSummary),
   dataset: datasetSummary,
-  variable: k=>VAR_META[k] || null, variables: ()=>Object.keys(VAR_META),
+  variable: k=>Object.prototype.hasOwnProperty.call(VAR_META, k) ? VAR_META[k] : null, variables: ()=>Object.keys(VAR_META),
   instrument: t=>INSTRUMENT_TYPES[t] || null, instruments: ()=>Object.keys(INSTRUMENT_TYPES),
   formats: ()=>Object.keys(IMPORT_FORMATS),
   observations: type=>importedInsts.filter(i=>i.kind===type),   // every imported record of a type, all times

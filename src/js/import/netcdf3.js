@@ -1,9 +1,9 @@
 /* ============================================================
    NETCDF CLASSIC READER (CDF-1, CDF-2 64-bit offset, CDF-5 64-bit data)
    NetCDF3.parse(arrayBuffer) -> {version, numrecs, dims, attrs, vars, read(name), raw(name), attr(var, name)}
-   read() unpacks: _FillValue, missing_value, valid_min/max/range and the default fill become NaN,
-   then scale_factor and add_offset apply (no valid range on times and coordinates). Char variables come back
-   as strings.
+   read() unpacks: _Unsigned integers are read as unsigned; _FillValue, missing_value, valid_min/max/range and the
+   default fill become NaN, then scale_factor and add_offset apply (no valid range on times and coordinates). Char
+   variables come back as strings.
    ============================================================ */
 const NetCDF3 = (()=>{
   const TYPES = {1:['byte', 1], 2:['char', 1], 3:['short', 2], 4:['int', 4], 5:['float', 4], 6:['double', 8],
@@ -74,6 +74,7 @@ const NetCDF3 = (()=>{
         numrecs = recsize ? Math.floor((u8.length - recStart)/recsize) : 0;
       }
       recVars.forEach(v=>{ v.shape[0] = numrecs; });
+      dims.forEach(d=>{ if(d.unlimited) d.size = numrecs; });     // the record dimension's length is the record count
       // every variable's data must lie inside the file; with no records (Argo _prof.nc files have N_HISTORY = 0)
       // the record variables hold nothing, so only the start of the record section is checked
       let claimed = 0;
@@ -133,9 +134,14 @@ const NetCDF3 = (()=>{
         for(let i=0; i<a.length; i+=len) out.push(dec.decode(a.subarray(i, i+len)).replace(/\0+$/, '').trim());
         return out;
       }
-      const at = v.attrs, num = x=>Array.isArray(x) ? x.map(Number) : x===undefined ? [] : [Number(x)];
+      // _Unsigned = "true" (NUG): signed integers that hold unsigned data, and so do their fill and valid values
+      const bits = {byte:8, short:16, int:32, int64:64}[v.type];
+      const unsigned = !!bits && String(v.attrs._Unsigned || '').trim().toLowerCase()==='true';
+      const stored = x=>unsigned && x < 0 ? x + 2**bits : x;
+      if(unsigned) for(let i=0; i<a.length; i++) a[i] = stored(a[i]);
+      const at = v.attrs, num = x=>(Array.isArray(x) ? x.map(Number) : x===undefined ? [] : [Number(x)]).map(stored);
       const fills = num(at._FillValue).concat(num(at.missing_value));
-      if(!('_FillValue' in at) && DEFAULT_FILL[v.type]!==undefined) fills.push(DEFAULT_FILL[v.type]);
+      if(!('_FillValue' in at) && DEFAULT_FILL[v.type]!==undefined) fills.push(stored(DEFAULT_FILL[v.type]));
       const isFloat = v.type==='float' || v.type==='double';
       const fill = x=>fills.some(f=>isFloat ? Math.abs(x - f) <= Math.abs(f)*1e-6 : x===f) || (isFloat && Math.abs(x) >= 9.96e36) || Number.isNaN(x);
       // no valid range on times and coordinates, nor one that rejects every value: both are wrong metadata

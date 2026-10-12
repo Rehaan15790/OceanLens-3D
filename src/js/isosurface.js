@@ -59,7 +59,7 @@ const iso3dMesh = new THREE.Mesh(new THREE.BufferGeometry(), Render.isoShaded([1
 iso3dMesh.renderOrder = Render.ORDER.translucent;
 iso3dMesh.visible = false;
 scene.add(Render.register('iso3d', iso3dMesh));
-let iso3dKey = null, iso3dInfo = null;
+let iso3dKey = null, iso3dSpec = null, iso3dInfo = null;
 const iso3dStats = {ms:NaN, triangles:0};   // the last rebuild, for tests and the perf budget (~50 ms)
 
 // node values over (k, i, j), missing ones repeated from above; colOK = the column has water and a surface value
@@ -138,9 +138,10 @@ function buildIso3d(target){
 }
 
 // called by applyVolumeView in 'iso3d': rebuild only when the field or the value changed
+// (a variable registered again under the same key is a new field)
 function updateIso3d(){
-  const key = fieldKey(state.variable) + '|' + state.isoVal;
-  if(key !== iso3dKey){ iso3dKey = key; buildIso3d(state.isoVal); }
+  const key = fieldKey(state.variable) + '|' + state.isoVal, spec = VAR_META[state.variable];
+  if(key !== iso3dKey || spec !== iso3dSpec){ iso3dKey = key; iso3dSpec = spec; buildIso3d(state.isoVal); }
   isoInfo = iso3dInfo;
   iso3dMesh.scale.y = state.exagg;
   Render.setIsoColour(iso3dMesh.material, paletteColor(state.palette, Render.rampPos(state.isoVal, state.cbMin, state.cbMax, state.scale)));

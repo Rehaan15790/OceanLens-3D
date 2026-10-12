@@ -90,8 +90,8 @@ function importParsed(parsed, opts = {}){
   if(!ds) throw new Error('Choose the columns first.');
   const d = Object.assign({}, ds, {id:`imp-${++importSeq}`, name:opts.name || parsed.name, source:'import',
                                    format:parsed.format, type:opts.type || ds.type || parsed.type || 'other'});
+  const r = addDataset(d);                     // throws when nothing can be shown: the data mode stays as it was
   if(dataMode!=='real') setDataMode('real');   // imported observations are real data
-  const r = addDataset(d);
   r.warnings = (ds.warnings || []).concat(r.warnings);
   return r;
 }
@@ -129,8 +129,9 @@ async function loadServerDataset(id){
   if(!(d.profiles > 0)) return {id, profiles:0, warnings:['This dataset has no profiles; its fields are served through the REST API, WMS, WCS and OPeNDAP, not drawn in 3D.']};
   const bbox = [LON0, LAT0, LON1, LAT1].join(',');
   const j = await serverJSON(`api/v1/datasets/${encodeURIComponent(id)}/profiles?bbox=${bbox}`);
+  const r = addDataset({id:'srv-' + id, name:d.title || id, source:'server', format:'json', type:'other', profiles:(j && j.profiles) || []});
   if(dataMode!=='real') setDataMode('real');
-  return addDataset({id:'srv-' + id, name:d.title || id, source:'server', format:'json', type:'other', profiles:(j && j.profiles) || []});
+  return r;
 }
 
 Object.assign(OceanLens, {readFile, readData, importParsed, server:serverMode});

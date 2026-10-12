@@ -6,7 +6,7 @@
 const tour = {running:false, idx:0, token:0, autoplay:false, timer:null, saved:null};
 let tourRotating = false;   // the camera may turn slowly during this step (read by the render loop)
 let tourPaused = false;     // autoplay was switched off part-way (read by the render loop)
-const TOUR_KEYS = ['variable', 'mode', 'depthIdx', 'isoVal', 'opacity', 'exagg', 'cbMin', 'cbMax', 'palette', 'customRange', 'time',
+const TOUR_KEYS = ['variable', 'mode', 'depthIdx', 'isoVal', 'opacity', 'exagg', 'cbMin', 'cbMax', 'palette', 'scale', 'customRange', 'time',
                    'colorMisfit', 'showArgo', 'showGlider', 'showGrid', 'showFlow', 'showTrack', 'playing'];
 
 function isTourRunning(){ return tour.running; }
@@ -143,7 +143,7 @@ ui.tourAuto.addEventListener('click', ()=>{
   else pauseTourAutoplay();
 });
 window.addEventListener('keydown', e=>{
-  if(!tour.running || e.ctrlKey || e.metaKey || e.altKey) return;
+  if(!tour.running || e.ctrlKey || e.metaKey || e.altKey || viewCovered()) return;
   if(e.target.matches && e.target.matches('input, select, textarea')) return;
   const k = e.key;
   if(k==='ArrowRight'){ nextTourStep(false); }

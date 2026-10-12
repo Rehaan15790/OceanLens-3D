@@ -162,6 +162,10 @@ def main():
     ap.add_argument('--fp-save', default=str(OUTPUT / 'fingerprint.json'), help='where to write the fingerprint')
     ap.add_argument('--list', action='store_true', help='list suites and tests, run nothing')
     args = ap.parse_args()
+    # failure messages quote page text (e.g. U+2212 minus); redirected on Windows, stdout is cp1252 and a print would
+    # raise inside the test result and end the run without a report
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(errors='backslashreplace')
 
     if args.build:
         os.environ['OCEANLENS_BUILD'] = str(Path(args.build).resolve())

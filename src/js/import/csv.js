@@ -222,7 +222,8 @@ function tableToDataset(table, mapping, opts = {}){
   table.rows.forEach(r=>{
     const ms = parseTimeCell(r[col('time')]);
     if(!Number.isFinite(ms)){ badTime++; return; }
-    const lat = +r[col('lat')], lon0 = +r[col('lon')], lon = lon0 > 180 ? lon0 - 360 : lon0;
+    const num = c=>isNumCell(c) ? +c : NaN;          // an empty cell is no position, not 0°
+    const lat = num(r[col('lat')]), lon0 = num(r[col('lon')]), lon = lon0 > 180 ? lon0 - 360 : lon0;
     const id = col('id') >= 0 ? r[col('id')] : `${lat.toFixed(3)},${lon.toFixed(3)}`;
     const key = id + '|' + ms;
     if(!groups.has(key)){

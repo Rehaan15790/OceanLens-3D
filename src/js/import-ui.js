@@ -18,7 +18,7 @@ const importUI = (()=>{
   ];
   const api = ()=>window.OceanLens || null;
   const plural = (n, one, many)=>`${n} ${n===1 ? one : many}`;
-  let parsed = null, busy = false, isOpen = false;
+  let parsed = null, busy = false, isOpen = false, readSeq = 0;
   const autoAll = new Set();       // datasets whose import turned Show all times on
 
   /* ---- dialog steps ---- */
@@ -32,6 +32,7 @@ const importUI = (()=>{
   }
   function reset(){
     parsed = null; busy = false; input.value = '';
+    readSeq++;                     // a read still running belongs to a dialog that has been closed or reset
     setStatus(''); setError(''); showStep('pick');
   }
   // open the Add data dialog at its first step
@@ -50,10 +51,12 @@ const importUI = (()=>{
     if(busy) return;
     if(!api() || !api().readFile){ setError('The import module did not load, so files cannot be read.'); return; }
     busy = true; setError(''); showStep('read');
+    const seq = ++readSeq;
     setStatus(`Reading ${file.name}…`);
     backBtn.hidden = true;
     card.tabIndex = -1; card.focus();          // the focused control was in a step that is now hidden
     const p = await api().readFile(file);
+    if(seq!==readSeq) return;      // closed (and maybe opened again) meanwhile: this file is no longer wanted
     busy = false;
     if(!isOpen) return;
     if(p.error){
@@ -177,7 +180,8 @@ const importUI = (()=>{
   }
   function addedMessage(name, res, shown = {}){
     let s = `Added ${plural(res.profiles, 'profile', 'profiles')} from ${name}.`;
-    if(res.skipped) s += ` ${plural(res.skipped, 'profile was', 'profiles were')} outside the map and left out.`;
+    // addDataset skips a profile outside the map, and one without a position, time or values
+    if(res.skipped) s += ` ${plural(res.skipped, 'profile was', 'profiles were')} left out: outside the map, or no usable position, time or values.`;
     if(shown.moved) s += ` The timeline moved to ${timeLabel(state.time)}, the analysis nearest the new profiles.`;
     if(shown.all) s += ` No profile is within 1.5 days of an analysis (the first is from ${shown.date}), so Show all times is now on.`;
     else if(!state.showAllImported) s += ' Profiles within 1.5 days of the analysis time are shown; turn on Show all times to see every one.';

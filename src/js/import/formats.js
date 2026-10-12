@@ -35,6 +35,8 @@
 
   const has = (nc, n)=>!!(n && nc.vars[n]);
   const num = (nc, n)=>has(nc, n) ? nc.read(n) : null;
+  // a CF depth axis with positive="up" holds heights (negative below the surface)
+  const isUp = (nc, n)=>has(nc, n) && String(nc.vars[n].attrs.positive || '').trim().toLowerCase()==='up';
   const lowerMap = nc=>{ const m = {}; Object.keys(nc.vars).forEach(k=>{ m[k.toLowerCase()] = k; }); return m; };
   // the variable holding a quantity (a CF key): by standard_name first, then by usual names; null when absent
   function find(nc, key, extraNames){
@@ -45,18 +47,22 @@
     for(const n of (extraNames || []).concat(names)) if(low[n]) return low[n];
     return null;
   }
-  // len flags, one character each, from char variables (any shape; the reader collapses the last
-  // dimension into strings) or numeric flag variables; null when there is none or not one is set (ERDDAP
+  // len flags, one character each, from char variables (any shape; the first byte of each flag's share of
+  // the bytes) or numeric flag variables; null when there is none or not one is set (ERDDAP
   // glider tables carry flag columns that are all missing)
   function flags(nc, n, len){
     if(!has(nc, n)) return null;
-    const r = nc.read(n);
     let f = null;
-    if(r.length && typeof r[0]==='string'){
-      const w = len / r.length;
-      if(!Number.isInteger(w) || w < 1) return null;
-      f = Array.from(r, x=>x.padEnd(w, ' ').slice(0, w)).join('').split('');
-    } else if(r.length===len) f = Array.from(r, v=>Number.isFinite(v) ? String(Math.round(v)) : ' ');
+    if(nc.vars[n].type==='char'){
+      // the raw bytes, not read(): its strings are trimmed, and a blank flag before the first set one (a level
+      // a sensor did not sample) would shift every later flag onto the wrong level
+      const r = nc.raw(n), w = r.length / len;
+      if(!r.length || !Number.isInteger(w) || w < 1) return null;
+      f = Array.from({length:len}, (_, i)=>r[i*w] ? String.fromCharCode(r[i*w]) : ' ');
+    } else {
+      const r = nc.read(n);
+      if(r.length===len) f = Array.from(r, v=>Number.isFinite(v) ? String(Math.round(v)) : ' ');
+    }
     return f && f.some(c=>c!==' ') ? f : null;
   }
   const strs = (nc, n)=>has(nc, n) ? Array.from(nc.read(n), s=>typeof s==='string' ? s.trim() : String(s)) : null;
@@ -67,7 +73,20 @@
     const m = u.match(/^\s*(\w+?)s?\s+since\s+(\d{1,4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}(?:\.\d*)?))?)?/i);
     const unit = m && {second:1e3, sec:1e3, s:1e3, minute:6e4, min:6e4, hour:36e5, hr:36e5, h:36e5, day:864e5, d:864e5}[m[1].toLowerCase()];
     if(!unit) throw new Error(`Can't read the times: ${n} has units "${u}". Expected something like "days since 1950-01-01".`);
-    const base = Date.UTC(+m[2], +m[3]-1, +m[4], +(m[5]||0), +(m[6]||0), 0) + 1000*(+(m[7]||0));
+    const cal = String(nc.vars[n].attrs.calendar || 'standard').trim().toLowerCase();
+    if(!['standard', 'gregorian', 'proleptic_gregorian', 'julian', ''].includes(cal)) throw new Error(`Can't read the times: ${n} uses the "${cal}" calendar.`);
+    const y = +m[2], mo = +m[3], d = +m[4], hms = 36e5*(+(m[5]||0)) + 6e4*(+(m[6]||0)) + 1000*(+(m[7]||0));
+    let base;
+    if(cal==='julian' || (cal!=='proleptic_gregorian' && y*1e4 + mo*100 + d < 15821015)){
+      // a Julian calendar date (the standard calendar is Julian before 15 October 1582, e.g. "hours since 1-1-1"),
+      // through its Julian day number; read as Gregorian it would be 2 days off in year 1
+      const a = Math.floor((14 - mo)/12), yy = y + 4800 - a, mm = mo + 12*a - 3;
+      base = (d + Math.floor((153*mm + 2)/5) + 365*yy + Math.floor(yy/4) - 32083 - 2440588)*864e5 + hms;
+    } else {
+      const epoch = new Date(Date.UTC(2000, 0, 1));
+      epoch.setUTCFullYear(y, mo-1, d);              // Date.UTC would read years 0–99 as 1900–1999
+      base = epoch.getTime() + hms;
+    }
     return Array.from(v, x=>Number.isFinite(x) ? base + x*unit : NaN);
   }
   const iso = ms=>new Date(ms).toISOString().slice(0, 16)+'Z';
@@ -206,9 +225,9 @@
     const C = {}; VARS.forEach(key=>{ const nm = col(key); if(nm && !/_adjusted$/i.test(nm)) C[key] = base(key, nm);
       else if(nm) C[key] = {raw:null, rawQc:null, adj:num(nc, nm), adjQc:flags(nc, low[nm.toLowerCase()+'_qc'], n), adjExists:true}; });
     if(!Pc && !Dc) throw new Error('This table has no depth or pressure column.');
-    const c = Pc || Dc;
+    const c = Pc || Dc, dUp = !!Dc && isUp(nc, dN);
     const zAt = (k, la)=>{ const v = pick(null, c.raw, c.rawQc, c.adj, c.adjQc, k, false);
-      return Pc && Number.isFinite(v) ? depthFromPressure(v, la) : v; };
+      return !Number.isFinite(v) ? v : Pc ? depthFromPressure(v, la) : dUp ? 0 - v : v; };
     const raw = {}, valsAt = ks=>{
       const vals = {};
       for(const [key, c] of Object.entries(C)){
@@ -278,7 +297,7 @@
       const dv = nc.vars[dataN], lv = nc.vars[latN];
       if(lv.dims.length && dv.dims.length >= 3) throw new Error('This looks like gridded model output. Build a snapshot from it with data-pipeline/build_snapshot.py --model-netcdf.');
       if(lv.dims.length===1 && dv.dims.length===1 && lv.dims[0]===dv.dims[0]) return readTable(nc, 'cf_generic');
-      const isP = !!find(nc, 'pres') && zN===find(nc, 'pres');
+      const isP = !!find(nc, 'pres') && zN===find(nc, 'pres'), zUp = !isP && isUp(nc, zN);
       const lat = num(nc, latN), lon = num(nc, lonN), t = timeN ? timeMs(nc, timeN) : null;
       if(!t) throw new Error('No time variable was found.');
       const nP = dv.dims.length===2 ? nc.vars[dataN].shape[0] : 1, nL = dv.shape[dv.shape.length-1];
@@ -289,7 +308,7 @@
       for(let p=0;p<nP;p++){
         const la = lat[Math.min(p, lat.length-1)], lo = lon[Math.min(p, lon.length-1)], tm = t[Math.min(p, t.length-1)];
         if(!Number.isFinite(la) || !Number.isFinite(lo) || !Number.isFinite(tm)) continue;
-        const z = Array.from(zPer(p), x=>isP && Number.isFinite(x) ? depthFromPressure(x, la) : x), vals = {};
+        const z = Array.from(zPer(p), x=>!Number.isFinite(x) ? x : isP ? depthFromPressure(x, la) : zUp ? 0 - x : x), vals = {};
         for(const [k, c] of Object.entries(cols)){
           const a = per(c.a, p), q = per(c.q, p);
           vals[k] = Array.from({length:nL}, (_,i)=>pick(k, a, q, null, null, i, false));

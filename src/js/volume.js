@@ -85,6 +85,7 @@ function buildIsoMesh(varKey, target, asNeutral){
   } else {
     Render.setValues(geo, cross.map(z=>z===null ? 0 : z));
     mesh = new THREE.Mesh(geo, Render.dataSurface({palette:'depth', min:info.lo, max:info.hi}));
+    mesh.renderOrder = Render.ORDER.translucent;   // translucent while a section is open: after the stems below it
   }
   return {mesh, info};
 }
@@ -108,6 +109,7 @@ function buildIsoGeometry(){
    The map lies on the sea surface like the 0 m layer, so the graticule (0.02) and the floats (0.05) stay above it. */
 const tchpMesh = new THREE.Mesh(gridGeometry(0),
   Render.dataSurface({palette:VAR_META.tchp.palette, min:VAR_META.tchp.defMin, max:VAR_META.tchp.defMax, masked:true}));
+tchpMesh.renderOrder = Render.ORDER.map;   // translucent while a section is open: after the D26 surface below it
 tchpMesh.visible = false;
 scene.add(Render.register('tchp', tchpMesh));
 let d26Mesh = null, tchpContour = null;
@@ -190,6 +192,7 @@ function updateLayerColors(){
    opaque. TCHP and 2D products: the map, opaque. A variable with no model field (chlorophyll in real
    mode) draws no field. While a section is open everything in front of the curtain turns translucent. */
 function applyVolumeView(){
+  Render.invalidate();   // also called outside requestUpdate (showSection, clearSection)
   renderer.domElement.setAttribute('aria-label', viewDescription());
   const view = currentView(), tchp = view==='tchp', map2d = tchp || view==='field2d', mode = state.mode, sec = !!section;
   layerMeshes.forEach(m=>{ m.visible = false; });
@@ -232,8 +235,10 @@ function applyVolumeView(){
     Render.setSurfaceRole(iso3dMesh.material, !sec, 0.5);
   }
 }
-// the opacity slider: the faint layers only (fast path, no recolouring)
+// the opacity slider: the faint layers only (fast path, no recolouring); a slice and the maps keep their own opacity
 function setLayerOpacity(v){
+  const view = currentView();
+  if(!hasModel(state.variable) || (view!=='surface' && view!=='layers')) return;
   layerMeshes.forEach(m=>{ if(m.material.transparent) m.material.opacity = section ? Math.min(v, 0.15) : v; });
 }
 

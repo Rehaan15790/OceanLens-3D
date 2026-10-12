@@ -492,6 +492,24 @@ class NetCDFClassic(unittest.TestCase):
         self.assertEqual(list(ncio.read_bytes(b)['vars']['c']['data']), [1, 2, 3])
         self.assertEqual(len(b) % 4, 3)
 
+    def test_unsigned_bytes_take_their_fill_as_unsigned(self):
+        # _Unsigned: _FillValue -1 is stored as the byte 255, which must read as missing, not as 255
+        b = ncio.write_bytes({'x': 3}, {'v': {'dims': ('x',), 'dtype': 'i1', 'data': np.array([1, -1, -56], 'i1'),
+                                              'attrs': {'_Unsigned': 'true', '_FillValue': np.int8(-1)}}})
+        v = ncio.read_bytes(b)['vars']['v']['data']
+        self.assertEqual((v[0], v[2]), (1, 200))
+        self.assertTrue(np.isnan(v[1]))
+
+    def test_classic_files_hold_only_classic_attribute_types(self):
+        # a Python int is int64 to numpy; NC_INT64 (type 10) and the unsigned types do not exist in CDF-1 and CDF-2
+        V = {'v': {'dims': ('x',), 'attrs': {'flag_values': np.array([1, 2], 'u1')}, 'data': np.zeros(1)}}
+        for fmt in ('CDF-1', 'CDF-2'):
+            d = ncio.read_bytes(ncio.write_bytes({'x': 1}, V, {'n': 3, 'big': 2 ** 40}, fmt))
+            self.assertEqual((d['attrs']['n'], d['attrs']['big']), (3, 2 ** 40), fmt)
+            self.assertEqual(d['vars']['v']['attrs']['flag_values'].dtype, np.int32, fmt)
+            self.assertEqual(ncio._attr_bytes('n', 3, None, fmt)[0], 'i4', fmt)
+        self.assertEqual(ncio._attr_bytes('n', np.uint8(3), None, 'CDF-5')[0], 'u1')
+
     def test_cf_helpers(self):
         dims, V = self.dataset()
         d = ncio.read_bytes(ncio.write_bytes(dims, V))
@@ -499,6 +517,16 @@ class NetCDFClassic(unittest.TestCase):
         self.assertEqual(ncio.cf_axis(d, 'T', 'temp'), 'time')
         self.assertEqual(ncio.cf_times(d['vars']['time'])[1], datetime(2020, 5, 13, 12, tzinfo=timezone.utc))
         self.assertTrue(np.allclose(ncio.cf_depth({'attrs': {'positive': 'up'}, 'data': np.array([-5.0])}), [5]))
+
+    def test_times_before_1970_and_julian_reference_dates(self):
+        times = lambda v, units, cal='standard': ncio.cf_times({'attrs': {'units': units, 'calendar': cal}, 'data': np.array([v])})[0]
+        utc = lambda *a: datetime(*a, tzinfo=timezone.utc)
+        # before 1970: datetime.fromtimestamp refuses negative times on Windows
+        self.assertEqual(times(3650.25, 'days since 1950-01-01'), utc(1959, 12, 30, 6))
+        # the standard calendar is Julian before 15 Oct 1582: NCEP/NCAR reanalysis time 17067072 is 1948-01-01
+        self.assertEqual(times(17067072.0, 'hours since 1-1-1 00:00:0.0'), utc(1948, 1, 1))
+        self.assertEqual(times(1, 'days since 1-1-1', 'proleptic_gregorian'), utc(1, 1, 2))
+        self.assertEqual(times(0, 'days since 2000-01-01', 'julian'), utc(2000, 1, 14))
 
     def test_bad_input(self):
         with self.assertRaisesRegex(ncio.NetCDFError, 'NetCDF-4'):

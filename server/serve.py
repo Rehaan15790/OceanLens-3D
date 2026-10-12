@@ -9,7 +9,7 @@ Python standard library and numpy only; NetCDF through data-pipeline/ncio.py.
 Routes: / (the app), /api/v1/..., /wms, /wcs, /ows, /opendap/..., /healthz. docs/API.md has the details and example URLs.
 """
 import argparse, base64, contextlib, gzip, json, math, re, socket, struct, sys, threading, time, zlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -84,8 +84,8 @@ PALETTES = load_palettes()
 
 # ---- time ----------------------------------------------------------------------------------------------------
 def iso(sec):
-    """Seconds since 1970 -> 'YYYY-MM-DDTHH:MM:SSZ'."""
-    return datetime.fromtimestamp(float(sec), timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    """Seconds since 1970 -> 'YYYY-MM-DDTHH:MM:SSZ' (not fromtimestamp: on Windows it refuses times before 1970)."""
+    return (datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=float(sec))).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def parse_iso(s):
@@ -340,7 +340,7 @@ def load_netcdf(path):
     lat, lon = np.asarray(V[la]['data'], float), np.asarray(V[lo]['data'], float)
     depth = np.asarray(V[zn]['data'], float) if zn else np.array([0.0])
     if zn and (str(V[zn]['attrs'].get('positive', '')).lower() == 'up' or (depth <= 0).all() and (depth < 0).any()):
-        depth = -depth
+        depth = 0.0 - depth                     # not -depth: the surface would be -0 in every response
     tsec = ncio.cf_time_epoch(V[tn]['data'], V[tn]['attrs'].get('units', ''), V[tn]['attrs'].get('calendar', 'standard')) if tn else np.array([0.0])
     axes = {V[la]['dims'][0]: 'y', V[lo]['dims'][0]: 'x'}
     if zn:
@@ -352,14 +352,17 @@ def load_netcdf(path):
         dims = tuple(v['dims'])
         if name in (la, lo, zn, tn) or 'y' not in [axes.get(x) for x in dims] or 'x' not in [axes.get(x) for x in dims]:
             continue
-        a = np.asarray(v['data'], np.float32)
-        if a.dtype.kind not in 'fiu':
+        a = np.asarray(v['data'])
+        if a.dtype.kind not in 'fiu':          # e.g. a char variable
             continue
+        a = a.astype(np.float32)
         extra = [i for i, x in enumerate(dims) if x not in axes]
         if any(a.shape[i] != 1 for i in extra):
             continue
         a = a.squeeze(axis=tuple(extra)) if extra else a
         dims = [axes[x] for x in dims if x in axes]
+        if (zn and 'z' not in dims) or (tn and 't' not in dims):
+            continue                           # e.g. sea surface height beside 3-D fields: every field has the file's axes
         for ax in ('t', 'z'):
             if ax not in dims:
                 a, dims = a[np.newaxis], [ax] + dims
@@ -413,6 +416,7 @@ class OceanServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, addr, datasets, app=None, cors=(), public_url=None, quiet=False):
+        self.address_family = socket.AF_INET6 if ':' in addr[0] else socket.AF_INET     # --host ::1 or ::
         super().__init__(addr, Handler)
         self.datasets = {d.id: d for d in datasets}
         self.app, self.cors, self.public_url, self.quiet = app, tuple(cors), public_url, quiet
@@ -573,7 +577,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.server.public_url.rstrip('/')
         host = self.headers.get('Host') or ''
         if not re.fullmatch(r'[A-Za-z0-9.\-]+(:\d{1,5})?|\[[0-9A-Fa-f:.]+\](:\d{1,5})?', host):
-            host = '%s:%d' % self.server.server_address[:2]
+            name, port = self.server.server_address[:2]
+            host = f'[{name}]:{port}' if ':' in name else f'{name}:{port}'
         return f'http://{host}'
 
     def host_ok(self):
@@ -645,7 +650,7 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith('/opendap'):
                 return self.dap_error(e)
             return self.send_json({'error': {'code': e.code, 'message': e.message}}, e.status)
-        except (BrokenPipeError, ConnectionResetError):
+        except ConnectionError:            # the client went away (on Windows usually ConnectionAbortedError)
             pass
         except Exception as e:             # a bug, not a bad request: say so without a traceback to the client
             self.log_error('internal error on %s: %r', self.path, e)
@@ -1505,8 +1510,13 @@ def main(argv=None):
     ap.add_argument('--public-url', help='base URL clients see, when behind a reverse proxy (e.g. https://host/oceanlens)')
     ap.add_argument('--quiet', action='store_true', help='no request log')
     a = ap.parse_args(argv)
+    # the banner names the app's path: redirected on Windows, stdout is cp1252 and a character outside it would stop
+    # the server at start-up (stderr already uses backslashreplace)
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(errors='backslashreplace')
     srv = make_server(a.host, a.port, a.data, a.netcdf, a.app, a.cors, a.public_url, a.quiet)
-    print(f'OceanLens 3D server {VERSION} on http://{a.host}:{srv.server_address[1]}/  '
+    host = f'[{a.host}]' if ':' in a.host else a.host
+    print(f'OceanLens 3D server {VERSION} on http://{host}:{srv.server_address[1]}/  '
           f'({len(srv.datasets)} datasets: {", ".join(srv.datasets)}; app {srv.app or "not built"})', flush=True)
     for w in exposure_warnings(a.host, a.cors):
         print('warning: ' + w, file=sys.stderr, flush=True)

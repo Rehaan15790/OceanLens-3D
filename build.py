@@ -38,11 +38,14 @@ CSP = ("default-src 'none'; script-src {scripts}; style-src {styles}; img-src da
        "connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'")
 SITE_HEADERS = ['Referrer-Policy: no-referrer', 'X-Content-Type-Options: nosniff',
                 'Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()', 'Cache-Control: no-cache']
+# the 404 page is served under the same policy as the app, so its style is a <style> element whose hash _headers lists
+NOT_FOUND_CSS = ('body{margin:0;padding:40px 24px;background:#0e1318;color:#e8ecef;font-family:system-ui,sans-serif}'
+                 'h1{font-size:20px;font-weight:600}a{color:#e8ecef}')
 NOT_FOUND = ('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<title>Not found · OceanLens 3D</title>\n'
-             '<meta name="viewport" content="width=device-width, initial-scale=1">\n</head>\n'
-             '<body style="margin:0;padding:40px 24px;background:#0e1318;color:#e8ecef;font-family:system-ui,sans-serif">\n'
-             '<h1 style="font-size:20px;font-weight:600">Page not found</h1>\n'
-             '<p><a href="/" style="color:#e8ecef">Open OceanLens 3D</a></p>\n</body>\n</html>\n')
+             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+             f'<style>{NOT_FOUND_CSS}</style>\n</head>\n<body>\n'
+             '<h1>Page not found</h1>\n'
+             '<p><a href="/">Open OceanLens 3D</a></p>\n</body>\n</html>\n')
 
 CSS_LINK = re.compile(r'<link rel="stylesheet" href="(css/[\w.-]+\.css)">\n')
 JSON_TAG = re.compile(r'<script type="application/json" id="([\w-]+)" src="([\w./-]+\.json)"></script>')
@@ -68,7 +71,10 @@ def hash_of(text):
 
 def rel(path):
     """A path relative to the project root with forward slashes, for messages."""
-    return os.path.relpath(path, ROOT).replace(os.sep, '/')
+    try:
+        return os.path.relpath(path, ROOT).replace(os.sep, '/')
+    except ValueError:              # Windows: --out or --site on another drive has no relative path
+        return path.replace(os.sep, '/')
 
 
 def src_path(ref):
@@ -187,6 +193,8 @@ def build():
     handlers = sorted(set(re.findall(r'<[a-z][^>]*?\s(on[a-z]+)\s*=', tags, re.I)))
     if handlers or re.search(r'javascript:', tags, re.I):
         raise BuildError('inline event handlers or javascript: URLs in src/index.html: ' + ', '.join(handlers or ['javascript:']))
+    if re.search(r'<[a-z][^>]*?\sstyle\s*=', tags, re.I):
+        raise BuildError('style="" markup in src/index.html: the policy hashes the <style> element only; use a class')
     hashes = []
     for m in re.finditer(r'<!--.*?-->|<script\b([^>]*)>(.*?)</script>', page, re.S | re.I):
         if m.group(0).startswith('<!--'):
@@ -269,6 +277,7 @@ def build_site(folder):
     write(data, os.path.join(folder, 'index.html'))
     write(NOT_FOUND.encode('utf-8'), os.path.join(folder, '404.html'))
     write(b'User-agent: *\nDisallow:\n', os.path.join(folder, 'robots.txt'))
+    csp = csp.replace('style-src ', f'style-src {hash_of(NOT_FOUND_CSS)} ', 1)
     headers = ['/*', f"  Content-Security-Policy: {csp}; frame-ancestors 'none'"] + ['  ' + h for h in SITE_HEADERS]
     write(('\n'.join(headers) + '\n').encode('utf-8'), os.path.join(folder, '_headers'))
     print(f'built site {rel(folder)} {version}: index.html, 404.html, robots.txt, _headers')

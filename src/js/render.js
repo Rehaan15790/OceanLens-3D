@@ -122,6 +122,7 @@ const Render = (() => {
     underLines: 10,     // stems, glider tracks, section isolines and outlines: drawn first, tinted by what is in front
     layers: 20,         // + (count-1-index): the deepest layer first, the surface last (camera is always above the sea)
     translucent: 34,    // translucent D26 or isosurface
+    map: 36,            // the TCHP / 2D map at the sea surface, when translucent: over the D26 surface below it
     surfaceLines: 40,   // graticule, coast, contours, track line
     particles: 42,
     markers: 44,

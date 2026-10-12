@@ -116,7 +116,8 @@ def tchp(depths, Tc, Sc, bottom, cp=4000.0):
     cross = np.where(T <= 26)[0]
     if len(cross):
         w[cross[0]:] = 0
-    return float(np.trapezoid(rho_eos80(S, T) * w, z) * cp / 1e7)
+    trapezoid = getattr(np, 'trapezoid', None) or np.trapz        # trapezoid is numpy 2; numpy 1.x has trapz only
+    return float(trapezoid(rho_eos80(S, T) * w, z) * cp / 1e7)
 
 
 def inversion_flags(D):
@@ -204,7 +205,9 @@ def facts(path):
         return best
     times = [t.timestamp() for t in s.times]
     before = max(0, sum(1 for x in times if x <= ts(T[0]['t']) - 12 * 3600) - 1)
-    after = max(before + 1, next(i for i, x in enumerate(times) if x >= ts(lf['t']) + 12 * 3600))
+    # as facts.js: findIndex gives -1 when no analysis is 12 h past landfall (next() without a default would raise),
+    # and never past the last analysis
+    after = min(len(times) - 1, max(before + 1, next((i for i, x in enumerate(times) if x >= ts(lf['t']) + 12 * 3600), -1)))
     F['track'] = {'firstFix': T[0]['t'], 'inMapFixes': len(sea),
                   'leadDays': [round((ts(T[0]['t']) - x) / 86400, 2) for x in times],
                   'landfall': {'time': lf['t'], 'lat': round(lf['lat'], 3), 'lon': round(lf['lon'], 3),

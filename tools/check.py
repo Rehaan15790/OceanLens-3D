@@ -58,7 +58,9 @@ def workflow_problems():
 def hygiene():
     """No home-folder paths or secrets in tracked files, vendored library and workflows as pinned, and no LICENSE
     file until the owner chooses a licence."""
-    files = subprocess.run(['git', 'ls-files', '--cached', '--others', '--exclude-standard'], cwd=REPO, capture_output=True, text=True, check=True).stdout.split('\n')
+    # -z: names as UTF-8 bytes, not "quoted\303\251" (a quoted name never exists on disk, so it would go unscanned)
+    files = subprocess.run(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=REPO,
+                           capture_output=True, check=True).stdout.decode('utf-8', 'replace').split('\0')
     found, leaked = [], []
     for f in filter(None, files):
         p = REPO / f
@@ -97,6 +99,8 @@ def main():
     ap.add_argument('--no-build', action='store_true', help='do not run build.py; test the existing build')
     ap.add_argument('--suite', help='passed through to tools/run.py')
     args = ap.parse_args()
+    if hasattr(sys.stdout, 'reconfigure'):        # findings name files and lines; redirected on Windows, stdout is cp1252
+        sys.stdout.reconfigure(errors='backslashreplace')
 
     results = [step('repository hygiene', hygiene)]
     target = None

@@ -14,6 +14,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from helpers import AppTestCase, REPO, Browser, default_build, open_app
 from cdp import file_url
@@ -658,6 +659,25 @@ class Embedding(unittest.TestCase):
                 build, _ = self.tree(css=css)
                 with self.assertRaises(build.BuildError):
                     build.build()
+
+    def test_style_markup_is_refused(self):
+        # the policy hashes the one <style> element; a style="" attribute would be dropped by the browser
+        build, root = self.tree()
+        page = (root / 'src' / 'index.html').read_text(encoding='utf-8').replace('<body>', '<body>\n<p style="color:red">x</p>')
+        (root / 'src' / 'index.html').write_text(page, encoding='utf-8')
+        with self.assertRaisesRegex(build.BuildError, 'style'):
+            build.build()
+
+    def test_the_site_404_page_is_allowed_its_style(self):
+        # _headers covers /* and so the 404 page: its <style> must be one of the hashes the policy lists
+        build, root = self.tree()
+        with mock.patch('builtins.print'):
+            build.build_site(str(root / 'site'))
+        css = re.search(r'<style>(.*?)</style>', (root / 'site' / '404.html').read_text(encoding='utf-8'), re.S).group(1)
+        policy = re.search(r'Content-Security-Policy: ([^\n]*)', (root / 'site' / '_headers').read_text(encoding='utf-8')).group(1)
+        style_src = re.search(r"style-src ([^;]*)", policy).group(1).split()
+        self.assertIn(build.hash_of(css), style_src)
+        self.assertNotRegex((root / 'site' / '404.html').read_text(encoding='utf-8'), r'\sstyle\s*=')
 
     def test_data_that_is_not_json_is_refused(self):
         build, root = self.tree()

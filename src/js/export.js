@@ -150,7 +150,8 @@ function exportPNG(){
   g.fillStyle = '#12181e'; g.fillRect(12, cssH-32, cw+20, 22);
   g.fillStyle = th.text2; g.fillText(cav, 22, cssH-17);
 
-  const view = state.variable==='tchp' ? 'map' : state.mode==='slice' ? DEPTHS[state.depthIdx]+'m' : state.mode;
+  const shown = currentView();         // a 2D product is a map whatever state.mode was left at
+  const view = shown==='tchp' || shown==='field2d' ? 'map' : shown==='slice' ? DEPTHS[state.depthIdx]+'m' : shown;
   const link = document.createElement('a');
   link.download = dataSource().export.file(state.time, state.variable, view);
   link.href = out.toDataURL('image/png');

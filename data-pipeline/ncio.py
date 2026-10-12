@@ -19,7 +19,7 @@ attrs, float data is packed; NaN becomes _FillValue. NaN in float data is writte
 the variable has one. NetCDF-4 (HDF5) files are refused with a message.
 """
 import math, os, re, struct
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
@@ -200,10 +200,16 @@ def _unpack(a, t, attrs):
         flat = a.reshape(-1, a.shape[-1]) if a.shape[-1] else a.reshape(-1, 1)
         strs = [row.tobytes().decode('utf-8', 'replace').rstrip('\x00 ') for row in flat]
         return np.array(strs, dtype=str).reshape(a.shape[:-1])
-    if str(attrs.get('_Unsigned', '')).lower() == 'true' and t in ('i1', 'i2', 'i4', 'i8'):
+    unsigned = str(attrs.get('_Unsigned', '')).lower() == 'true' and t in ('i1', 'i2', 'i4', 'i8')
+    if unsigned:
         a = a.view('u' + t[1:])
+
+    def stored(v):
+        """An attribute compared with stored values: _Unsigned makes the integer ones unsigned too (NUG)."""
+        x = np.asarray(v)
+        return x.astype(t).view('u' + t[1:]) if unsigned and x.dtype.kind == 'i' else v
     bad = np.zeros(a.shape, bool)
-    fills = [attrs[k] for k in ('_FillValue', 'missing_value') if k in attrs]
+    fills = [stored(attrs[k]) for k in ('_FillValue', 'missing_value') if k in attrs]
     for f in fills:
         for v in np.atleast_1d(f):
             bad |= a == v
@@ -212,6 +218,7 @@ def _unpack(a, t, attrs):
     vr = attrs.get('valid_range')
     lo = vr[0] if vr is not None and np.size(vr) == 2 else attrs.get('valid_min')
     hi = vr[1] if vr is not None and np.size(vr) == 2 else attrs.get('valid_max')
+    lo, hi = (None if x is None else stored(x) for x in (lo, hi))
     with np.errstate(invalid='ignore'):
         if lo is not None:
             bad |= a < lo
@@ -230,8 +237,9 @@ def _unpack(a, t, attrs):
 
 
 # ------------------------------------------------------------------ writing
-def _attr_bytes(name, value, vtype=None):
-    """An attribute -> (type, count, bytes); _FillValue and valid_* take the variable's type."""
+def _attr_bytes(name, value, vtype=None, fmt='CDF-5'):
+    """An attribute -> (type, count, bytes); _FillValue and valid_* take the variable's type. Integer types that fmt
+    lacks (a Python int is int64 to numpy) become int, or double when they do not fit."""
     if isinstance(value, (str, bytes)):
         b = value.encode('utf-8') if isinstance(value, str) else value
         return 'S1', len(b), b
@@ -242,6 +250,8 @@ def _attr_bytes(name, value, vtype=None):
         t = 'i4'
     elif a.dtype.kind in 'iu':
         t = a.dtype.str[1:] if a.dtype.str[1:] in CODES else 'i4'
+        if fmt != 'CDF-5' and t not in CLASSIC:
+            t = 'i4'
         if t == 'i4' and a.size and (a.min() < -2**31 or a.max() >= 2**31):
             t = 'f8'
     elif a.dtype.kind == 'f':
@@ -353,7 +363,7 @@ def write_bytes(dims, vars, attrs=None, fmt='CDF-1'):
             return b'\x00' * 4 + u(0, nsz)
         out = struct.pack('>i', TAG_ATT) + u(len(at), nsz)
         for k, val in at.items():
-            t, n, b = _attr_bytes(k, val, vtype)
+            t, n, b = _attr_bytes(k, val, vtype, fmt)
             out += name(k) + struct.pack('>i', CODES[t]) + u(n, nsz) + b + b'\x00' * pad4(len(b))
         return out
 
@@ -465,6 +475,7 @@ def cf_axis(ds, axis, var=None):
     return None
 
 
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _UNIT_SECONDS = {'second': 1, 'sec': 1, 's': 1, 'minute': 60, 'min': 60, 'hour': 3600, 'hr': 3600, 'h': 3600,
                  'day': 86400, 'd': 86400}
 
@@ -478,9 +489,18 @@ def cf_time_epoch(values, units, calendar='standard'):
     if not m or m.group(1).lower() not in _UNIT_SECONDS:
         raise NetCDFError(f'time units {units!r} are not "<unit> since <date>"')
     y, mo, d, hh, mi, ss = m.group(2, 3, 4, 5, 6, 7)
-    sec = float(ss or 0)
-    base = datetime(int(y), int(mo), int(d), int(hh or 0), int(mi or 0), int(sec), tzinfo=timezone.utc)
-    return base.timestamp() + (sec - int(sec)) + np.asarray(values, 'f8') * _UNIT_SECONDS[m.group(1).lower()]
+    y, mo, d, sec = int(y), int(mo), int(d), float(ss or 0)
+    cal = str(calendar).lower()
+    if cal == 'julian' or (cal in ('standard', 'gregorian', '') and (y, mo, d) < (1582, 10, 15)):
+        # a Julian calendar date (the standard calendar is Julian before 15 Oct 1582, e.g. "hours since 1-1-1"): from
+        # its Julian day number; the proleptic Gregorian date of the same numbers is 2 days off in year 1, 13 in 2000
+        a = (14 - mo) // 12
+        yy, mm = y + 4800 - a, mo + 12 * a - 3
+        base = (d + (153 * mm + 2) // 5 + 365 * yy + yy // 4 - 32083 - 2440588) * 86400.0 + \
+            int(hh or 0) * 3600 + int(mi or 0) * 60 + int(sec)
+    else:
+        base = datetime(y, mo, d, int(hh or 0), int(mi or 0), int(sec), tzinfo=timezone.utc).timestamp()
+    return base + (sec - int(sec)) + np.asarray(values, 'f8') * _UNIT_SECONDS[m.group(1).lower()]
 
 
 def cf_times(var):
@@ -488,7 +508,8 @@ def cf_times(var):
     a = var['attrs']
     secs = cf_time_epoch(var['data'], a.get('units', ''), a.get('calendar', 'standard'))
     try:
-        return [None if not np.isfinite(s) else datetime.fromtimestamp(float(s), timezone.utc) for s in np.ravel(secs)]
+        # epoch + timedelta, not fromtimestamp: on Windows that raises OSError for any time before 1970
+        return [None if not np.isfinite(s) else EPOCH + timedelta(seconds=float(s)) for s in np.ravel(secs)]
     except (OverflowError, OSError, ValueError) as e:                 # a time far outside the calendar
         raise NetCDFError(f'time values outside the supported calendar range ({type(e).__name__}: {e})') from e
 

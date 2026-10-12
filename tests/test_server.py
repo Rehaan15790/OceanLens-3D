@@ -488,6 +488,26 @@ class ServerTest(unittest.TestCase):
         back = ncio.read_bytes(b)['vars']['temp']['data']
         np.testing.assert_allclose(back, temp[:, :, ::-1, :], rtol=0, atol=1e-6)
 
+    def test_netcdf_with_surface_fields_and_an_upward_axis(self):
+        # model files often carry 2-D fields (sea surface height) beside 3-D ones, and times before 1970: both used to
+        # stop the server at start (the second on Windows only)
+        f = WORK / 'cf-mixed.nc'
+        ncio.write(str(f), {'time': None, 'z': 2, 'lat': 2, 'lon': 3}, {
+            'time': {'dims': ('time',), 'data': np.array([0.0, 1.0]), 'attrs': {'standard_name': 'time', 'units': 'days since 1960-05-16'}},
+            'z': {'dims': ('z',), 'data': np.array([-10.0, 0.0]), 'attrs': {'axis': 'Z', 'positive': 'up', 'units': 'm'}},
+            'lat': {'dims': ('lat',), 'data': np.array([10.0, 11.0]), 'attrs': {'standard_name': 'latitude'}},
+            'lon': {'dims': ('lon',), 'data': np.array([80.0, 81.0, 82.0]), 'attrs': {'standard_name': 'longitude'}},
+            'zos': {'dims': ('time', 'lat', 'lon'), 'dtype': 'f4', 'data': np.zeros((2, 2, 3), np.float32), 'attrs': {'units': 'm'}},
+            'deptho': {'dims': ('lat', 'lon'), 'dtype': 'f4', 'data': np.full((2, 3), 50, np.float32), 'attrs': {'units': 'm'}},
+            'thetao': {'dims': ('time', 'z', 'lat', 'lon'), 'dtype': 'f4', 'attrs': {'standard_name': 'sea_water_potential_temperature'},
+                       'data': np.arange(24, dtype=np.float32).reshape(2, 2, 2, 3)},
+        })
+        ds = serve.load_netcdf(f)
+        self.assertEqual(list(ds.fields), ['temp'], 'fields without every axis of the file are left out')
+        self.assertEqual(ds.times, ['1960-05-16T00:00:00Z', '1960-05-17T00:00:00Z'], 'times before 1970 (Windows)')
+        self.assertEqual(str(ds.depths.tolist()), '[0.0, 10.0]', 'positive up: the surface is 0 m, not -0 m')
+        np.testing.assert_array_equal(ds.layer('temp', 1, 10.0), np.arange(12, 18).reshape(2, 3))
+
 
 class ServerSecurityTest(unittest.TestCase):
     """Attacks on the server over raw sockets, so what is sent is not normalised. Each of these got a 500, froze
@@ -628,7 +648,7 @@ class ServerSecurityTest(unittest.TestCase):
         def status():
             c = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
             try:
-                c.request('GET', '/healthz')
+                c.request('GET', '/healthz', headers={'Connection': 'close'})
                 r = c.getresponse()
                 r.read()
                 return r.status
@@ -713,6 +733,24 @@ class ServerSecurityTest(unittest.TestCase):
                 s, h, b = self.request(path, port=srv.server_address[1])
                 self.assertEqual(s, 200, fmt)
                 self.assertRegex(h['content-disposition'][0], r'^attachment; filename="[A-Za-z0-9_.-]+\.' + ext + '"$')
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+    def test_ipv6_loopback_bind(self):
+        # --host ::1 is a loopback bind like 127.0.0.1; the server used to open an IPv4 socket and fail to start
+        try:
+            socket.socket(socket.AF_INET6).close()
+            srv = serve.make_server('::1', 0, [SNAP], [], app='', quiet=True)
+        except OSError as e:
+            self.skipTest(f'no IPv6 loopback here: {e}')
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            c = http.client.HTTPConnection('::1', srv.server_address[1], timeout=10)
+            c.request('GET', '/healthz', headers={'Connection': 'close'})
+            self.assertEqual(c.getresponse().status, 200)
+            c.close()
+            self.assertTrue(srv.check_host, 'a ::1 bind still answers only loopback Host names')
         finally:
             srv.shutdown()
             srv.server_close()

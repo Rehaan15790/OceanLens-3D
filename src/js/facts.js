@@ -160,7 +160,8 @@ function trackFacts(T){
     ri24Jtwc:ri('usa'), ri24Imd:ri('nd')};
 
   const before = Math.max(0, times.filter(x=>x <= Date.parse(T[0].t)-12*3.6e6).length-1);
-  const after = Math.max(before+1, times.findIndex(x=>x >= Date.parse(lf.t)+12*3.6e6));
+  // never past the last analysis: there may be none 12 h after landfall (findIndex -1), or before may be the last
+  const after = Math.min(times.length-1, Math.max(before+1, times.findIndex(x=>x >= Date.parse(lf.t)+12*3.6e6)));
   const heat = t=>mean(sea.map(p=>tchpAt(p.lat, p.lon, t, bathyDepth(p.lat, p.lon))));
   F.path = {beforeIndex:before, afterIndex:after, heatBefore:heat(before), heatAfter:heat(after)};
 

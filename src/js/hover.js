@@ -35,8 +35,9 @@ function hoverText(e){
       return `${fmtDeg(lat, lon)}<br>${Math.round(z)} m · ${fmtVal(spec.v, v)}`;
     }
   }
-  const tchp = state.variable==='tchp';
-  const isoObj = tchp ? null : state.mode==='iso' ? isoMesh : state.mode==='iso3d' ? iso3dMesh : null;
+  // TCHP and other 2D products are a map at the surface, whatever state.mode was left at
+  const view = currentView(), tchp = view==='tchp', map2d = tchp || view==='field2d';
+  const isoObj = map2d ? null : view==='iso' ? isoMesh : view==='iso3d' ? iso3dMesh : null;
   if(isoObj && isoObj.visible){
     const hit = hoverRay.intersectObject(isoObj, false)[0];
     if(hit){
@@ -44,7 +45,7 @@ function hoverText(e){
       return `${fmtDeg(lat, lon)}<br>${isoLabel()} at ${Math.round(z)} m`;
     }
   }
-  const depth = !tchp && state.mode==='slice' ? DEPTHS[state.depthIdx] : 0;
+  const depth = view==='slice' ? DEPTHS[state.depthIdx] : 0;
   hoverPlane.constant = depth*DEPTH_SCALE*state.exagg;
   if(!hoverRay.ray.intersectPlane(hoverPlane, hoverPt)) return null;
   const {lat, lon} = worldLatLon(hoverPt);
@@ -59,18 +60,33 @@ function hoverText(e){
     const d26 = r.q===0 ? 'D26: surface below 26 °C' : r.d26===null ? 'D26: warm to the sea floor' : `D26 ${r.d26.toFixed(0)} m`;
     return `${where}<br>TCHP ${fmt.value('tchp', r.q, 'kJ/cm²')} · ${d26} · seabed ${Math.round(seabed)} m`;
   }
-  if(state.mode==='iso') return `${where}<br>No crossing above the sea floor (seabed ${Math.round(seabed)} m)`;
+  if(map2d) return `${where}<br>${VAR_META[state.variable].label} · ${fmtVal(state.variable, getVal(state.variable, lat, lon, 0, state.time))}`;
+  if(view==='iso') return `${where}<br>No crossing above the sea floor (seabed ${Math.round(seabed)} m)`;
   if(depth > seabed) return `${where}<br>Below the sea floor (seabed ${Math.round(seabed)} m)`;
-  const label = state.mode==='slice' ? `${depth} m` : 'Surface (0 m)';
+  const label = view==='slice' ? `${depth} m` : 'Surface (0 m)';
   return `${where}<br>${label} · ${fmtVal(state.variable, getVal(state.variable, lat, lon, depth, state.time))}`;
 }
-renderer.domElement.addEventListener('pointermove', e=>{
+// what the readout depends on besides the pointer: a shortcut or playback changes it while the pointer rests
+const hoverStateKey = ()=>[dataMode, state.variable, state.mode, state.depthIdx, state.time, state.isoVal, state.exagg,
+  datasetRev, state.showAllImported, section ? section.a.concat(section.b).join() : ''].join('|');
+let hoverAt = null, hoverKey = '';
+function showHover(e){
   const text = dragging ? null : hoverText(e);
+  hoverAt = text ? {clientX:e.clientX, clientY:e.clientY} : null;
+  hoverKey = hoverStateKey();
   if(!text){ hoverTip.style.display='none'; return; }
   const rect = renderer.domElement.getBoundingClientRect();
   hoverTip.innerHTML = text;
   hoverTip.style.display = 'block';
   hoverTip.style.left = (e.clientX-rect.left)+'px';
   hoverTip.style.top = (e.clientY-rect.top)+'px';
-});
-renderer.domElement.addEventListener('pointerleave', ()=>{ hoverTip.style.display='none'; renderer.domElement.style.cursor=''; });
+}
+// read the point again once the view under a resting pointer has changed
+(function followHoverState(){
+  requestAnimationFrame(followHoverState);
+  if(!hoverAt || hoverTip.style.display!=='block' || hoverStateKey()===hoverKey) return;
+  flushUpdate();                       // the markers and surfaces the readout picks must be the new ones
+  showHover(hoverAt);
+})();
+renderer.domElement.addEventListener('pointermove', showHover);
+renderer.domElement.addEventListener('pointerleave', ()=>{ hoverAt = null; hoverTip.style.display='none'; renderer.domElement.style.cursor=''; });

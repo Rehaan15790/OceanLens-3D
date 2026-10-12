@@ -352,6 +352,9 @@ function keySpec(){
     const v = `${fmt.dp(c.isoValue, ISO_META[state.variable].dp)}\u00a0${c.unit}`;
     title = `${c.label} (${c.unit})\u00a0· ${v}\u00a0isosurface`;
     if(c.isoValue >= c.min && c.isoValue <= c.max) marks.push({v:c.isoValue, text:v});
+  } else if(c.view==='field2d'){
+    // a map-only product: one surface map whatever the display mode was, so no depth and no layers
+    title = `${c.label} (${c.unit})`;
   } else {
     // non-breaking spaces keep a number with its unit; the line breaks after the ·
     const where = state.mode==='surface' ? 'surface\u00a0(0\u00a0m)'
