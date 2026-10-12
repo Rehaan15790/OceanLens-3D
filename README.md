@@ -35,7 +35,7 @@ is built for laptop and desktop screens.
 | `server/serve.py` | The optional data server: the app, a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2 (Python + numpy) |
 | `samples/` | Files to try with "Add data". Real: an Argo GDAC multi-profile NetCDF (`argo-5907328_prof.nc`), an ERDDAP Argo CSV with its units row, a BGC-Argo NetCDF, Argo profiles from the snapshot as CSV, and two 2016 BoBBLE Seaglider files (NetCDF and CSV). Synthetic: one CTD cast. `samples/README.md` gives each file's source and citation. |
 | `tools/`, `tests/` | The test runner, the headless-browser client and the tests |
-| `docs/` | `TESTING.md` (tests and harness), `DEPLOY.md` (hosting, releases, the server), `API.md` (REST, WMS, WCS, OPeNDAP), `EXTENDING.md` (plugins, variables, formats) |
+| `docs/` | `PRESENTER_GUIDE.md` (features, demo script, judge questions), `HOW_THE_CODE_WORKS.md` (stack, code map, internals), `TESTING.md` (tests and harness), `DEPLOY.md` (hosting, releases, the server), `API.md` (REST, WMS, WCS, OPeNDAP), `EXTENDING.md` (plugins, variables, formats) |
 | `REQUIREMENTS.md` | Each requirement of problem statement 26067 mapped to the feature, files and test, with status |
 | `deck/` | The pitch deck (HTML source; the PDF at the root is printed from it) and the SIH portal text (`portal-submission.md`) |
 
