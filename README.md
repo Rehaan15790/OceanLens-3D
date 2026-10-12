@@ -1,141 +1,149 @@
 # OceanLens 3D
 
-A browser-based 3D viewer for ocean model output and Argo float profiles over the Arabian Sea and the Bay of
-Bengal (6–22°N, 61–92°E, 0–1000 m). It was built by Team ByteForge for Smart India Hackathon 2026, problem
-statement 26067 (problem owner: INCOIS). It is a student prototype and is not affiliated with or endorsed by
-INCOIS or the Ministry of Earth Sciences.
+**Interactive 3D viewer for ocean model output and Argo floats, in one offline HTML file.**
 
-Two data modes:
-- **Real data:** Cyclone Amphan, May 2020, as a hindcast. It combines eight HYCOM GOFS 3.1 analyses, 206
-  quality-controlled Argo profiles from 70 floats (chlorophyll on 36 profiles from 13 BGC-Argo floats, oxygen on 24
-  profiles from 9), ETOPO1 relief and the IBTrACS track. HYCOM assimilates Argo, so the model–Argo comparison is a
-  consistency check, not independent validation.
-- **Synthetic demo data:** analytic fields with synthetic floats and gliders, labelled as such. It is not a real
-  ocean state.
+[![check](https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml/badge.svg)](https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml)
+![Smart India Hackathon 2026](https://img.shields.io/badge/SIH%202026-PS%2026067-1f6feb)
+![All rights reserved](https://img.shields.io/badge/licence-all%20rights%20reserved-lightgrey)
 
-## Open it
+![OceanLens 3D: sea-surface temperature over the Arabian Sea and the Bay of Bengal, with Argo floats and Cyclone Amphan's track](docs/images/temperature-surface.png)
 
-Double-click `OceanLens3D.html`. It is one self-contained file that needs no server, no installation and no
-network connection, so it also runs from a USB drive or an email attachment.
+OceanLens 3D puts ocean model fields, Argo float profiles and a cyclone track into one 3D scene that you can slice,
+probe and compare. It covers the Arabian Sea and the Bay of Bengal (6–22°N, 61–92°E, 0–1000 m).
 
-It needs a browser with WebGL and hardware acceleration turned on: current Chrome, Edge or Firefox, or Safari 15
-or later. The automated tests run in headless Chromium-based browsers; Firefox and Safari have not been tested. It
-is built for laptop and desktop screens.
+It was built by **Team ByteForge** for Smart India Hackathon 2026, problem statement 26067 (problem owner: INCOIS).
+It is a student prototype and is not affiliated with or endorsed by INCOIS or the Ministry of Earth Sciences.
 
-## Repository layout
+## Try it
+
+1. Download [`OceanLens3D.html`](https://github.com/Rehaan15790/OceanLens-3D/raw/main/OceanLens3D.html) (about 3.4 MB).
+2. Double-click it. No install, no server, no internet connection.
+3. Press **Start the guided tour** for an 8-step walkthrough, or `?` for the keyboard shortcuts.
+
+It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, or Safari 15 or later, on a laptop or
+desktop screen. The automated tests run in Chromium-based browsers; Firefox and Safari have not been tested.
+
+## Features
+
+- **3D ocean fields:** temperature, salinity, current speed and cyclone heat potential on 11 levels from 0 to
+  1000 m, over real sea-floor relief.
+- **Five views:** surface, all depth levels, a depth slice, the depth of a value (for example the 26 °C isotherm,
+  D26) and a marching-cubes isosurface.
+- **Vertical sections:** drag a line across the sea, or pick a preset such as Amphan's track.
+- **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
+  with bias, RMSE and a density-inversion QC check.
+- **Cyclone analysis:** heat potential under Amphan's path before and after the storm, with IMD and JTWC winds.
+- **Bring your own data:** drop Argo, glider, ERDDAP, CF NetCDF-3 or CSV files on the view. They are read in the
+  browser and never uploaded.
+- **Built for sharing:** a colour-bar editor, a timeline with playback, PNG export and a guided tour.
+- **A data server and a plugin API** for institutions: REST, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2, plus
+  `window.OceanLens` for new instruments, variables, products and file formats.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/cyclone-heat-potential.png" alt="Cyclone heat potential map with Amphan's track and the track panel"><br><sub><b>Heat before Amphan.</b> Cyclone heat potential on 13 May 2020, with the 50 kJ/cm² contour and the track details.</sub></td>
+    <td width="50%"><img src="docs/images/cold-wake-section.png" alt="Vertical temperature section along Amphan's track"><br><sub><b>The cold wake.</b> A section along the track after landfall, with D26 and D20 marked.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/images/argo-vs-hycom.png" alt="An Argo float's temperature profile compared with HYCOM"><br><sub><b>Argo against HYCOM.</b> The worst-fitting float during the storm: observed profile solid, model dashed, with bias and RMSE.</sub></td>
+  </tr>
+</table>
+
+## The data
+
+There are two data modes, switched in the header.
+
+- **Real data: Cyclone Amphan, May 2020 (a hindcast).** Eight HYCOM GOFS 3.1 analyses and 206 quality-controlled
+  Argo profiles from 70 floats. BGC-Argo floats add chlorophyll (36 profiles from 13 floats) and oxygen (24 profiles
+  from 9). The scene also has ETOPO1 relief and the IBTrACS track. HYCOM assimilates Argo, so the model–Argo
+  comparison is a consistency check, not independent validation.
+- **Synthetic demo:** analytic fields with synthetic floats and gliders, labelled as such. It is not a real ocean
+  state.
+
+The `samples/` folder has real files to try with **Add data**: Argo GDAC and ERDDAP downloads, a BGC-Argo profile and
+two BoBBLE 2016 Seaglider files. There is also one synthetic CTD cast. `samples/README.md` gives each file's source
+and citation.
+
+## How it is built
+
+The app is plain JavaScript on three.js r128, with no framework and no npm. A Python standard-library script inlines
+the code, three.js and the data snapshot into the single HTML file, with a strict Content Security Policy. The data
+pipeline, the server and the test harness are Python with numpy. The browser tests drive the built file in headless
+Chromium through our own DevTools-protocol client.
+
+Every number the app quotes is computed from the data at run time. An independent Python script recomputes the same
+numbers, and a test fails if the two disagree.
+
+## Documentation
+
+| Document | What it covers |
+| --- | --- |
+| [Presenter guide](docs/PRESENTER_GUIDE.md) | Every feature, a 7-minute demo script and likely questions |
+| [How the code works](docs/HOW_THE_CODE_WORKS.md) | The stack, a map of every source file, rendering, data, science, import, build, server and tests |
+| [Testing](docs/TESTING.md) | The suites, the harness and the test contract with the app |
+| [Deploying](docs/DEPLOY.md) | The single-file release, static hosting and the data server |
+| [Server API](docs/API.md) | REST, WMS, WCS and OPeNDAP, with example URLs |
+| [Extending](docs/EXTENDING.md) | Plugins, new variables, derived products and file formats |
+| [Requirements](REQUIREMENTS.md) | Each requirement of problem statement 26067, mapped to the feature, files and test, with status |
+| [Pipeline](data-pipeline/README.md) | How the real-data snapshot is fetched, cached and packed |
+
+## Development
+
+You need Python 3 (tested with 3.11 and 3.12) with numpy, and a Chromium-based browser (Edge, Chrome or Chromium)
+for the browser tests.
+
+```
+python build.py                           # build into dist/OceanLens3D.html while working
+python build.py --out OceanLens3D.html    # rebuild the shipped file
+python build.py --check                   # the sources are consistent and the shipped file is up to date
+
+python tools/check.py --quick             # unit, server and smoke suites: what CI runs
+python tools/check.py                     # hygiene, build check, fresh build, every suite
+python tools/run.py --list                # list the suites and tests
+
+python server/serve.py                    # the app and its data at http://127.0.0.1:8080/
+python data-pipeline/build_snapshot.py    # rebuild the data snapshot from the raw cache
+```
+
+The build is deterministic: the same sources always give the same bytes. A full test run has one known failure:
+the `perf` load budget, which our runs miss because the test browser renders WebGL in software
+(`docs/TESTING.md`). Rebuilding the snapshot needs the raw cache, or network access with `--fetch`
+(`data-pipeline/README.md`).
+
+### Repository layout
 
 | Path | What it is |
-|---|---|
-| `OceanLens3D.html` | The shipped single file. Generated by `build.py`; do not edit it by hand. |
+| --- | --- |
+| `OceanLens3D.html` | The shipped single file, generated by `build.py`. Do not edit it by hand. |
 | `src/` | The app sources: `index.html` (markup and the script/style manifest), `css/`, `js/`, `assets/` |
-| `vendor/three.r128.min.js` | three.js r128, unmodified (MIT; see `THIRD_PARTY_NOTICES.md`) |
-| `data/amphan-2020.json` | The real-data snapshot, written by the data pipeline |
-| `build.py` | Assembles `src/`, `vendor/` and `data/` into one HTML file (Python standard library only) |
-| `data-pipeline/` | Fetches, caches and packs HYCOM, Argo, BGC-Argo, ETOPO1 and IBTrACS into `data/`; `ncio.py` reads and writes NetCDF classic (Python + numpy) |
-| `server/serve.py` | The optional data server: the app, a REST API, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2 (Python + numpy) |
-| `samples/` | Files to try with "Add data". Real: an Argo GDAC multi-profile NetCDF (`argo-5907328_prof.nc`), an ERDDAP Argo CSV with its units row, a BGC-Argo NetCDF, Argo profiles from the snapshot as CSV, and two 2016 BoBBLE Seaglider files (NetCDF and CSV). Synthetic: one CTD cast. `samples/README.md` gives each file's source and citation. |
+| `vendor/` | three.js r128, unmodified (MIT; see `THIRD_PARTY_NOTICES.md`) |
+| `data/` | The real-data snapshot, written by the data pipeline |
+| `data-pipeline/` | Fetches, caches and packs HYCOM, Argo, BGC-Argo, ETOPO1 and IBTrACS; `ncio.py` reads and writes NetCDF classic |
+| `server/` | The optional data server |
+| `samples/` | Files to try with Add data |
 | `tools/`, `tests/` | The test runner, the headless-browser client and the tests |
-| `docs/` | `PRESENTER_GUIDE.md` (features, demo script, judge questions), `HOW_THE_CODE_WORKS.md` (stack, code map, internals), `TESTING.md` (tests and harness), `DEPLOY.md` (hosting, releases, the server), `API.md` (REST, WMS, WCS, OPeNDAP), `EXTENDING.md` (plugins, variables, formats) |
-| `REQUIREMENTS.md` | Each requirement of problem statement 26067 mapped to the feature, files and test, with status |
-| `deck/` | The pitch deck (HTML source; the PDF at the root is printed from it) and the SIH portal text (`portal-submission.md`) |
+| `docs/` | The guides listed above |
+| `deck/` | The pitch deck (HTML source; the PDF at the root is printed from it) and the SIH portal text |
 
-## Build
+## Limitations and next steps
 
-```
-python build.py                           # writes dist/OceanLens3D.html (use while working)
-python build.py --out OceanLens3D.html    # rebuilds the shipped file
-python build.py --check                   # sources consistent and the shipped file up to date
-```
-
-The build is deterministic: the same sources always give the same bytes. The version comes from `VERSION`.
-
-## Test
-
-```
-python tools/check.py            # hygiene, build check, fresh build into dist/, every test suite
-python tools/check.py --quick    # unit, server and smoke suites: what CI runs
-python tools/run.py --list       # the suites and tests
-```
-
-A full run has one known failure: the `perf` load budget (ready within 2.5 s at 4× CPU throttling), which our
-runs miss because the test browser renders WebGL in software (`docs/TESTING.md`).
-
-You need Python 3 with numpy and a Chromium-based browser (Edge, Chrome or Chromium). numpy is used by the data
-pipeline, the server and their tests, and by `data-pipeline/facts_reference.py`, which writes the expected numbers
-that the `unit` suite checks against the app.
-
-The browser tests drive the built file in headless Chromium through the DevTools protocol, with a client written
-against the Python standard library. There are 194 automated tests: the 135 that `tools/run.py --list` names, plus
-the 59 data-pipeline tests that the `unit` suite runs. The checks also run as root (in a container or WSL, the
-client starts the browser with `--no-sandbox`) and on GitHub Actions, where `.github/workflows/ci.yml` runs
-`tools/check.py --quick`. See `docs/TESTING.md`.
-
-## Rebuild the data
-
-The pipeline caches every raw response, so a rebuild from an existing cache works offline. By default it reads
-the cache from `data-pipeline/cache/`, which git ignores. Pass `--cache <path-to-raw-cache>` or set
-`OCEANLENS_CACHE` to use another folder:
-
-```
-python data-pipeline/build_snapshot.py
-```
-
-A first run, or a run with a missing cache file, needs network access and must be allowed with `--fetch`; see
-`python data-pipeline/build_snapshot.py --help`. Behind antivirus software that
-inspects TLS traffic, pass the antivirus root certificate with `--ca-bundle <your-ca-bundle.pem>`.
-
-## Deploy
-
-See `docs/DEPLOY.md`. It covers the downloadable single file, static hosting, and the data
-server on an institution's own machines:
-
-```
-python server/serve.py                # http://127.0.0.1:8080/: the app, /api/v1, /wms, /wcs, /opendap
-```
+- **One built-in case, no live data.** The real data is a hindcast of one past cyclone. There are no forecasts, and
+  the pipeline is tied to the Amphan domain, its 11 depths and 4 model variables.
+- **The 3D view draws only the snapshot in the page.** Model files given to the server reach other clients through
+  REST, WMS, WCS and OPeNDAP, but are not drawn in 3D.
+- **NetCDF-4 must be converted** to NetCDF-3 (for example `nccopy -k classic`) or exported as CSV.
+- **The ADCP and HF radar plugins are tested on synthetic records only.**
+- **Not yet connected:** the INCOIS Live Access Server and Copernicus Marine products; scheduled Argo, BGC-Argo and
+  glider ingestion; authentication and rate limits, which belong in the institution's reverse proxy.
+- **Possible uses, not implemented as features:** drift prediction for search and rescue (needs particle tracking),
+  fishing-zone advisories, and climate monitoring.
 
 ## Data sources and citations
 
-HYCOM GOFS 3.1 (HYCOM Consortium), Argo (Argo GDAC, doi:10.17882/42182), ETOPO1 (NOAA NCEI,
-doi:10.7289/V5C8276M) and IBTrACS v04r01 (NOAA NCEI, doi:10.25921/82ty-9e16; winds from IMD and JTWC). The full
-acknowledgements and citations are in `THIRD_PARTY_NOTICES.md` and in the app's About panel. The real sample
-files come from the Argo GDAC (its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE
-experiment, 2016); `samples/README.md` gives the queries and citations.
-
-## Possible uses (not implemented as features)
-
-- **Cyclone briefings.** Cyclone heat potential (TCHP) is the heat stored above the 26 °C isotherm (D26). The app
-  computes it from the model's temperature and salinity columns and maps it with the storm track. That is the kind
-  of view a cyclone cell uses before landfall. The built-in case is a hindcast of one past cyclone: there are no
-  forecasts and no live data.
-- **Search and rescue.** With Current speed selected, the current direction is drawn in white with a dark edge:
-  streaks at the surface or the slice depth, and arrows in the Depth slice view. The streaks are illustrative, not
-  physically scaled.
-  Turning currents into drift trajectories would need a particle-tracking step that the app does not have.
-- **Fisheries.** The Amphan snapshot holds chlorophyll on 36 profiles from 13 BGC-Argo floats; the profile panel
-  shows them. HYCOM has no chlorophyll field, so real-data mode has no chlorophyll map; only synthetic mode draws a
-  chlorophyll field. There is no fishing-zone (PFZ) or SST-front product.
-- **Teaching.** The guided tour walks through the main views in eight steps.
-
-## What a production service would need
-
-The data server (`server/serve.py`) and the plugin API (`docs/EXTENDING.md`) cover the shape of a service. An
-operational one would add:
-
-- Scheduled ingestion of live model output. The server reads NetCDF-3 files at start-up; NetCDF-4 must be
-  converted first, and nothing yet pulls new forecasts over OPeNDAP.
-- A 3D view that loads model fields from the server. Today it draws only the snapshot built into the page; model
-  files given to the server reach other clients through WMS, WCS, OPeNDAP and REST only.
-- A pipeline that is not tied to one case. It hard-codes the Amphan domain (6–22°N, 61–92°E, which leaves out the
-  Andaman and Nicobar Islands), the 11 depths and the 4 model variables; the 8 analysis times are fixed for HYCOM.
-- Scheduled Argo, BGC-Argo and glider ingestion from the GDACs into the same layout.
-- Readers for real ADCP and HF radar files. The plugins exist but are tested on synthetic records
-  (`REQUIREMENTS.md`, row 6a).
-- Authentication, TLS and rate limits, from the institution's reverse proxy (`docs/DEPLOY.md`, section 4).
-- Further data sources: the INCOIS Live Access Server (las.incois.gov.in; no real export has been tried) and
-  Copernicus Marine (GLOBAL_MULTIYEAR_PHY_001_030 and GLOBAL_MULTIYEAR_BGC_001_029). For these two Copernicus
-  products, the raw files and ARCO Zarr stores can be read over HTTPS without an account; only the
-  `copernicusmarine` toolbox needs a free account. The raw files are NetCDF-4/HDF5 and the Zarr stores are another
-  format again, so each needs a conversion to NetCDF-3 or a new reader.
+HYCOM GOFS 3.1 (HYCOM Consortium), Argo (Argo GDAC, doi:10.17882/42182), ETOPO1 (NOAA NCEI, doi:10.7289/V5C8276M) and
+IBTrACS v04r01 (NOAA NCEI, doi:10.25921/82ty-9e16; winds from IMD and JTWC). The sample files come from the Argo GDAC
+(its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE experiment, 2016). The full
+acknowledgements and citations are in `THIRD_PARTY_NOTICES.md`, `samples/README.md` and the app's About panel.
 
 ## Copyright and licence
 
