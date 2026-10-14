@@ -1,7 +1,10 @@
-/* Real data: HYCOM fields, Argo profiles and the Amphan track, decoded from the embedded snapshot. */
-// HYCOM on the app's own 0.5° grid and levels, laid out [time][variable][level][lat][lon]
-const REAL = (()=>{
-  const m = REAL_DATA.meta, q = b64Int16(REAL_DATA.model);
+/* Real data: the model fields, Argo profiles and the Amphan track, decoded from the embedded snapshots.
+   The main snapshot holds a model (HYCOM) with the floats, the track and the relief. A second, model-only snapshot
+   (#snapshot-glorys, written by build.py from the GLORYS snapshot) holds another model on the same grid and times.
+   One model is on screen at a time (realModel); setRealModel() switches. */
+// one snapshot's model on the app's own 0.5° grid and levels, laid out [time][variable][level][lat][lon]
+function decodeModel(d){
+  const m = d.meta, q = b64Int16(d.model);
   const per = m.depths.length*m.nlat*m.nlon, f = new Float32Array(q.length);
   for(let n=0;n<q.length;n++){
     const [off, sc] = m.quant[m.vars[Math.floor(n/per) % m.vars.length]];
@@ -10,13 +13,59 @@ const REAL = (()=>{
   // mask.wet: one bit per cell, [level][lat][lon], most significant bit first; 1 = the cell holds model
   // water. Cells without it carry values filled from their neighbours.
   let wet = null;
-  if(REAL_DATA.mask){
-    const bits = atob(REAL_DATA.mask.wet);
+  if(d.mask){
+    const bits = atob(d.mask.wet);
     wet = new Uint8Array(per);
     for(let n=0;n<per;n++) wet[n] = (bits.charCodeAt(n>>3) >> (7-(n&7))) & 1;
   }
   return {meta:m, f, per, layer:m.nlat*m.nlon, wet};
+}
+// the words the app uses for a model; meta.model names it, and a snapshot without meta.model is HYCOM
+const MODEL_WORDS = {
+  HYCOM: {product:'HYCOM analysis', products:'analyses', label:'HYCOM', kind:'analysis',
+          data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)'},
+  GLORYS:{product:'GLORYS daily mean', products:'daily means', label:'GLORYS', kind:'reanalysis',
+          data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means'},
+};
+function modelWords(meta){
+  const short = (meta.model && meta.model.short) || 'HYCOM';
+  return Object.assign({short}, MODEL_WORDS[short] || {product:`${short} model output`, products:'model times',
+    label:short, kind:'model', data:short, note:short});
+}
+// the real-data models in the page, main snapshot first; the second is decoded the first time it is shown
+const REAL_MODELS = (()=>{
+  const list = [{id:modelWords(REAL_DATA.meta).short.toLowerCase(), words:modelWords(REAL_DATA.meta),
+                 atObs:!!(REAL_DATA.argo && REAL_DATA.argo.model), decoded:null, data:()=>REAL_DATA}];
+  const el = document.getElementById('snapshot-glorys');
+  if(el){
+    let d = null;
+    const data = ()=>d || (d = JSON.parse(el.textContent));
+    const words = modelWords(data().meta), id = words.short.toLowerCase();
+    // the second model must sit on the main snapshot's grid, levels and times, or it is left out (and said why)
+    const m = data().meta, M = REAL_DATA.meta;
+    const same = ['lat0', 'lon0', 'step', 'nlat', 'nlon'].every(k=>m[k]===M[k]) &&
+      m.depths.join()===M.depths.join() && m.times.join()===M.times.join() && m.vars.join()===M.vars.join();
+    if(!same) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`);
+    else if(!list.some(x=>x.id===id)) list.push({id, words, atObs:false, decoded:null, data});
+  }
+  return list;
 })();
+let realModel = REAL_MODELS[0].id;
+const REAL = decodeModel(REAL_DATA);
+REAL_MODELS[0].decoded = REAL;
+// the model on screen: its words (MODEL.short, MODEL.product, ...)
+function activeModel(){ return REAL_MODELS.find(x=>x.id===realModel) || REAL_MODELS[0]; }
+function MODEL(){ return activeModel().words; }
+// the Model switch in the left panel: one button per model (setRealModel is in data-source.js)
+REAL_MODELS.forEach(m=>{
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.model = m.id;
+  b.textContent = m.words.label;
+  b.title = m.words.note;
+  b.addEventListener('click', ()=>setRealModel(m.id));
+  ui.modelToggle.appendChild(b);
+});
 // bilinear in latitude/longitude, linear between model levels
 function realAt(vi, lat, lon, depth, t){
   const m = REAL.meta, f = REAL.f;
@@ -35,7 +84,8 @@ function realAt(vi, lat, lon, depth, t){
 }
 
 /* ---- real Argo profiles (REAL_DATA.argo), one set per analysis ----
-   Each carries HYCOM at its own position and time when the snapshot has argo.model. A profile whose
+   Each carries the main model at its own position and time when the snapshot has argo.model (inst.atObs; it is
+   inst.model only while that model is on screen). A profile whose
    salinity failed delayed-mode QC (sq 0) keeps its temperature; density then uses model salinity.
    C (chlorophyll, mg/m³) and O (oxygen, µmol/kg) come from BGC-Argo adjusted values; NaN = no sensor or failed QC. */
 const realProfiles = (()=>{
@@ -50,7 +100,7 @@ const realProfiles = (()=>{
     const first = ok.indexOf(true), last = ok.lastIndexOf(true);
     const inst = {id:'ARGO-'+p.w, kind:'argo', real:true, lat:p.la, lon:p.lo, snap:p.s, time:p.t, mode:p.m,
       cycle:p.c, levels:A.levels, maxDepth:A.levels[last], bgc:Cn.some(Number.isFinite), hasOxy:On.some(Number.isFinite), salOk};
-    if(MT) inst.model = {T:cut(MT), S:cut(MS), time:A.model.times[n]};
+    if(MT) inst.model = inst.atObs = {T:cut(MT), S:cut(MS), time:A.model.times[n]};   // the main model at the float
     const D = Tn.map((v,k)=>ok[k] && Number.isFinite(Sn[k]) ? sigmaT(Sn[k], v) : NaN);
     const missing = new Uint8Array(nL);
     for(let k=first;k<=last;k++) if(!ok[k]) missing[k] = 1;

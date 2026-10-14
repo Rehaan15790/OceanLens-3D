@@ -28,6 +28,7 @@ window.addEventListener('keydown', e=>{
   }
   if(VARIABLE_KEYS[k]){ stopTour(); setVariable(VARIABLE_KEYS[k]); }
   else if(MODE_KEYS[k] && !is2D(state.variable)){ stopTour(); setMode(MODE_KEYS[k]); }
+  else if(k==='m' && dataMode==='real' && REAL_MODELS.length > 1) setRealModel(nextRealModel());
   else if(k==='s') setSectionDraw(!state.sectionDraw);
   else if(k==='p'){ e.preventDefault(); if(isTourRunning()) stopTour({restore:true}); else startTour(); }
   else if(k==='r') resetView();

@@ -43,6 +43,14 @@ class Captions(AppTestCase):
             self.b.pump(0.3)
             words = self.js(r"tourSteps.map(s => String(s.caption).trim().split(/\s+/).length)")
             long += [f'{mode} step {i + 1}: {n} words' for i, n in enumerate(words) if n > 35]
+        self.b.click('#dataToggle button[data-mode="real"]')
+        for model in (self.js('__ol.models') or [])[1:]:          # the captions name and quote the model on screen
+            self.js(f"__ol.actions.setRealModel('{model}')")
+            words = self.js(r"tourSteps.map(s => String(s.caption).trim().split(/\s+/).length)")
+            long += [f'{model} step {i + 1}: {n} words' for i, n in enumerate(words) if n > 35]
+            caps = self.js("tourSteps.map(s => String(s.caption) + ' ' + s.title)")
+            self.assertFalse([c for c in caps if 'HYCOM' in c], f'a {model} caption names HYCOM')
+            self.js("__ol.actions.setRealModel(__ol.models[0])")
         self.assertFalse(long, 'captions over 35 words:\n' + '\n'.join(long))
 
 

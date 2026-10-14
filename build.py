@@ -12,7 +12,8 @@ src/index.html is the manifest. The build
   - inlines every <script src="..."> as its own <script> ending in //# sourceURL=<path>, so DevTools
     and stack traces name the source file and line;
   - inlines <script type="application/json" id="..." src="....json"> as JSON, with every "<" written
-    as \\u003c so nothing in the data can close the element;
+    as \\u003c so nothing in the data can close the element; with data-embed="model" only the model fields of a
+    snapshot are kept (the second model of the HYCOM/GLORYS switch: floats, track and relief come from the main one);
   - stamps the VERSION file into <meta name="version">.
 It stops with an error if any src, href or url() would point outside the file, if a file under src/css
 or src/js is missing from the manifest or listed twice, if the data is not valid JSON, or if the result
@@ -30,7 +31,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, 'src')
 SHIPPED = os.path.join(ROOT, 'OceanLens3D.html')
 DEFAULT_OUT = os.path.join(ROOT, 'dist', 'OceanLens3D.html')
-BUDGET = 3_500_000                  # bytes; the pitch promises "about 3 MB"
+BUDGET = 6_000_000                  # bytes; with two models (HYCOM and GLORYS) the page is about 5.4 MB
 BANNER = '<!-- Built by build.py from src/. Edit the sources, not this file. -->\n'
 # the page's content security policy; script-src and style-src get a hash for every inline script and style that runs,
 # so neither allows 'unsafe-inline' (nothing here uses eval, inline handlers, javascript: URLs or style="" markup)
@@ -48,7 +49,10 @@ NOT_FOUND = ('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\
              '<p><a href="/">Open OceanLens 3D</a></p>\n</body>\n</html>\n')
 
 CSS_LINK = re.compile(r'<link rel="stylesheet" href="(css/[\w.-]+\.css)">\n')
-JSON_TAG = re.compile(r'<script type="application/json" id="([\w-]+)" src="([\w./-]+\.json)"></script>')
+JSON_TAG = re.compile(r'<script type="application/json" id="([\w-]+)" src="([\w./-]+\.json)"( data-embed="model")?>'
+                      r'</script>')
+# what a model-only embed keeps of a snapshot's meta: enough to draw and compare the model on the main snapshot's grid
+MODEL_META = ('title', 'times', 'lat0', 'lon0', 'step', 'nlat', 'nlon', 'depths', 'vars', 'quant', 'missing', 'model')
 SCRIPT_TAG = re.compile(r'<script src="([\w./-]+\.js)"></script>')
 ASSET_URL = re.compile(r"url\('\.\./assets/([\w.-]+)'\)")
 MIME = {'.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.webp': 'image/webp'}
@@ -56,6 +60,21 @@ MIME = {'.png': 'image/png', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.we
 
 class BuildError(Exception):
     """The sources cannot be built: a missing or unlisted file, a bad reference, invalid JSON, over budget."""
+
+
+def model_only(snap, name):
+    """A snapshot reduced to its model: grid, times, packing, model name, its citation, model note and provenance,
+    the fields and the wet mask."""
+    try:
+        m = snap['meta']
+        meta = {k: m[k] for k in MODEL_META if k in m}
+        meta['sources'] = {'model': m['sources']['model']}
+        meta['provenance'] = {'model': m['provenance']['model']}
+        model_id = m.get('model', {}).get('short', '').lower()
+        meta['citations'] = [c for c in m.get('citations', []) if c.get('id') == model_id]
+        return {'schema': snap['schema'], 'meta': meta, 'model': snap['model'], 'mask': snap['mask']}
+    except (KeyError, TypeError, AttributeError) as e:
+        raise BuildError(f'{name} cannot be embedded as a model: {type(e).__name__}: {e}')
 
 
 def read_text(path):
@@ -129,9 +148,11 @@ def build():
         path = src_path(m.group(2))
         text = read_text(path).strip()
         try:
-            json.loads(text)
+            obj = json.loads(text)
         except ValueError as e:
             raise BuildError(f'{rel(path)} is not valid JSON: {e}')
+        if m.group(3):
+            text = json.dumps(model_only(obj, rel(path)), separators=(',', ':'), ensure_ascii=True, allow_nan=False)
         sizes['data'] = sizes.get('data', 0) + len(text.encode('utf-8'))
         return f'<script type="application/json" id="{m.group(1)}">' + text.replace('<', '\\u003c') + '</script>'
     page = JSON_TAG.sub(json_tag, page)

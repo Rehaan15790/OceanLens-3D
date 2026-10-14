@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>OceanLens 3D · ocean model and Argo viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Interactive 3D view of HYCOM ocean analyses and Argo float profiles for Cyclone Amphan, May 2020. A student prototype for Smart India Hackathon 2026, problem statement 26067.">
+<meta name="description" content="Interactive 3D view of two ocean models, HYCOM and Copernicus Marine GLORYS, and Argo float profiles for Cyclone Amphan, May 2020. A student prototype for Smart India Hackathon 2026, problem statement 26067.">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23151b21'/%3E%3Cpath d='M2.5 9.5c1.8-2 3.7 2 5.5 0s3.7 2 5.5 0' stroke='%235aa9e6' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/tokens.css">
@@ -27,8 +27,8 @@
   <div class="splash-inner">
     <p class="splash-eyebrow">Smart India Hackathon 2026 · Problem statement 26067</p>
     <h1 id="splashTitle">OceanLens 3D</h1>
-    <p id="splashLede" class="splash-lede">HYCOM ocean analyses and Argo float profiles for Cyclone Amphan (May 2020)
-      in one 3D view, with the model checked against the floats.</p>
+    <p id="splashLede" class="splash-lede">Two ocean models, HYCOM and Copernicus Marine GLORYS, and Argo float profiles
+      for Cyclone Amphan (May 2020) in one 3D view, with each model checked against the floats.</p>
     <div class="splash-actions">
       <!-- boot-guard (platform) will disable both with "Loading data…" until the app is ready -->
       <button id="enterBtn" class="btn btn-primary" disabled>Loading data…</button>
@@ -93,6 +93,13 @@
         <label for="sourceSel" class="sr-only">Data set on the server</label>
         <select id="sourceSel"></select>
         <p id="sourceStatus" class="source-status" data-state="live" aria-live="polite"><span class="status-dot" aria-hidden="true"></span><span id="sourceStatusText">Live: connected to the OceanLens server</span></p>
+      </section>
+
+      <!-- real data with a second model embedded: data-real.js fills #modelToggle from the snapshots in the page -->
+      <section class="grp" id="modelGrp" aria-labelledby="grpModel" hidden>
+        <h2 id="grpModel" class="grp-label">Model</h2>
+        <div id="modelToggle" class="segmented model-toggle" role="group" aria-labelledby="grpModel"></div>
+        <p id="modelNote" class="note"></p>
       </section>
 
       <section class="grp" aria-labelledby="grpVar">
@@ -387,6 +394,7 @@
       <tr><th scope="row"><kbd>U</kbd> <kbd>L</kbd> <kbd>D</kbd> <kbd>I</kbd> <kbd>O</kbd></th><td>Surface, all depth levels, depth slice, depth of a value, isosurface (3D)</td></tr>
       <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Depth slice up or down</td></tr>
       <tr><th scope="row"><kbd>Space</kbd></th><td>Play or pause the analyses</td></tr>
+      <tr><th scope="row"><kbd>M</kbd></th><td>Switch the model, HYCOM or GLORYS (real data)</td></tr>
       <tr><th scope="row"><kbd>S</kbd></th><td>Draw a vertical section (drag across the sea)</td></tr>
       <tr><th scope="row"><kbd>P</kbd></th><td>Start or end the guided tour</td></tr>
       <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous or next tour step</td></tr>
@@ -417,12 +425,18 @@
 
     <h3>Real data: Cyclone Amphan, May 2020</h3>
     <dl class="about-list">
-      <dt>Model</dt>
+      <dt>Model: HYCOM</dt>
       <dd>HYCOM + NCODA global analysis (GOFS 3.1), <span data-fact="analysis.count" data-fmt="int"></span> analyses
         at 12:00 UTC, three days apart, from <span data-fact="analysis.times.0" data-fmt="dayMonth"></span> to
         <span data-fact="analysis.times.last" data-fmt="dayMonthYear"></span>. Sampled every 0.24° and averaged into
         0.5° cells on 11 levels from 0 to 1000 m (75 m and 750 m interpolated between model levels). Temperature,
         salinity (PSS-78) and currents.</dd>
+      <dt>Model: GLORYS</dt>
+      <dd>Copernicus Marine GLORYS12V1 global reanalysis (GLOBAL_MULTIYEAR_PHY_001_030): the daily means of the same
+        days, centred on the same times. Read from the native 1/12° NetCDF-4 files, only the parts over this map, and
+        averaged into the same 0.5° cells, interpolated linearly between its levels to the same 11 depths. Potential
+        temperature (HYCOM and Argo give in-situ temperature, about 0.1 °C warmer at 1000 m), salinity and currents.
+        Switch between the models under Model, or with <kbd>M</kbd>.</dd>
       <dt>Argo</dt>
       <dd><span data-fact="argo.profiles" data-fmt="int"></span> profiles from
         <span data-fact="argo.floats" data-fmt="int"></span> floats, from the Argo GDAC via Ifremer ERDDAP. Delayed-mode
@@ -441,7 +455,10 @@
 
     <h3>Read with care</h3>
     <ul class="about-bullets">
-      <li>HYCOM assimilates Argo, so the model–Argo comparison is a consistency check, not independent validation.</li>
+      <li>Both models assimilate Argo profiles, so the model–Argo comparison is a consistency check, not independent
+        validation. The two models differ from each other, which shows how uncertain a single model is.</li>
+      <li>HYCOM is matched to each float at its own time (3-hourly output); GLORYS, which has daily means, at the
+        nearest of the 8 days.</li>
       <li>The model is shown on 11 levels and 0.5° cells; features smaller than that are smoothed out.</li>
       <li>Heat potential uses EOS-80 density and c<sub>p</sub> = 4000 J kg⁻¹ K⁻¹; some operational products use
         4178, about 4.5 % higher.</li>
@@ -450,8 +467,8 @@
         <span data-fact="view.deepCompression" data-fmt="int"></span> times.</li>
       <li>Current labels mark where these currents usually flow; they are not drawn from this data.</li>
       <li>Current streaks move at an illustrative speed, not a physical one.</li>
-      <li>HYCOM has no chlorophyll or oxygen. In real mode those come only from BGC-Argo floats, so there is no model
-        column to compare them with.</li>
+      <li>Neither model has chlorophyll or oxygen. In real mode those come only from BGC-Argo floats, so there is no
+        model column to compare them with.</li>
       <li>No glider data is included for this period.</li>
     </ul>
 
@@ -478,6 +495,7 @@
       <li data-cite="argo"></li>
       <li data-cite="bgc_argo"></li>
       <li data-cite="hycom"></li>
+      <li data-cite="glorys"></li>
       <li data-cite="ibtracs"></li>
       <li data-cite="etopo1"></li>
       <li>Methods: UNESCO EOS-80 equation of state; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test.</li>
@@ -549,6 +567,7 @@
 </div>
 
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
+<script type="application/json" id="snapshot-glorys" src="../data/amphan-2020-glorys.json" data-embed="model"></script>
 <!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element.
      They are classic scripts sharing one global scope. Code that runs while a file loads may use only what the files
      above it define; functions called later (events, updates) may use any of them. main.js comes last and boots the

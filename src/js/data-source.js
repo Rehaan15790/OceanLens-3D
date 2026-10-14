@@ -1,7 +1,7 @@
 /* ============================================================
    DATA SOURCES
-   'real'  : HYCOM analysis, Argo profiles and the IBTrACS track around Cyclone
-             Amphan (4–25 May 2020), from the embedded snapshot (data-real.js)
+   'real'  : the model on screen (HYCOM, or GLORYS: realModel), Argo profiles and the IBTrACS track around
+             Cyclone Amphan (4–25 May 2020), from the embedded snapshots (data-real.js)
    'synth' : the analytic demo ocean (data-synthetic.js)
    Everything else reads the ocean, the instruments, the track and every mode-dependent
    string through dataSource(), so switching source is one variable (dataMode).
@@ -11,14 +11,14 @@ const SOURCES = {
     temp: (lat, lon, depth, t)=>realAt(0, lat, lon, depth, t),
     sal:  (lat, lon, depth, t)=>realAt(1, lat, lon, depth, t),
     uv:   (lat, lon, depth, t)=>({u:realAt(2, lat, lon, depth, t), v:realAt(3, lat, lon, depth, t)}),
-    chl:  ()=>NaN,                      // HYCOM is a physics-only model: no chlorophyll
+    chl:  ()=>NaN,                      // both models are physics only: no chlorophyll
     instruments: t=>realProfiles.filter(p=>p.snap===t),
     fixes: ()=>REAL_TRACK,
     hasGliders: false,
 
     // ---- copy table (ux edits the strings in 3.1b) ----
     ctx: {badge:'Real data',
-          text: t=>`Cyclone Amphan · HYCOM analysis ${fmt.analysisTime(META.times[t])} · ${t+1} of ${NT}`},
+          text: t=>`Cyclone Amphan · ${MODEL().product} ${fmt.analysisTime(META.times[t])} · ${t+1} of ${NT}`},
     time: {now: t=>fmt.analysisTime(META.times[t]), tick: t=>fmt.dayMonth(META.times[t])},
     track: {name:'Cyclone Amphan', badge:'IBTrACS v04r01', mapLabel:'Amphan (IBTrACS)',
             landfallLabel: fix=>`Landfall ${fmt.fixTime(fix.t)}`,
@@ -29,16 +29,17 @@ const SOURCES = {
     val: {heading:'Model–Argo comparison',
           sub: (t, nArgo)=>`${fmt.analysisTime(META.times[t])} · ${nArgo} Argo profiles`,
           get foot(){ const F = facts().real;
+            const M = MODEL();
             return (F.comparison && F.comparison.matchedInTime
-              ? 'The model is matched to each profile’s time and place (nearest 3-hourly HYCOM output) and interpolated '
-              : 'Each profile is compared with the HYCOM analysis nearest in time (within 1.5 days), interpolated ') +
-              'to its depths, as in GODAE Class 4 verification. HYCOM assimilates Argo, so this is a consistency check, ' +
+              ? `The model is matched to each profile’s time and place (nearest 3-hourly ${M.short} output) and interpolated `
+              : `Each profile is compared with the ${M.product} nearest in time (within 1.5 days), interpolated `) +
+              `to its depths, as in GODAE Class 4 verification. ${M.short} assimilates Argo, so this is a consistency check, ` +
               'not independent validation.'; }},
     profile: {kind: inst=>inst.bgc ? 'BGC-Argo float' : 'Argo float',
               none:(id, t)=>`${id} has no profile within 1.5 days of ${fmt.dayMonth(META.times[t])}.`},
-    vars: {chlNote:'From BGC-Argo floats only. HYCOM has no chlorophyll, so the map has no model field: click a float to see its profile.',
-           chlKey:'HYCOM has no chlorophyll; only BGC-Argo floats carry it.'},
-    export: {caveat:'Data: HYCOM GOFS 3.1 · Argo GDAC incl. BGC-Argo · IBTrACS v04r01 · ETOPO1. Not for operational use.',
+    vars: {get chlNote(){ return `From BGC-Argo floats only. ${MODEL().short} has no chlorophyll, so the map has no model field: click a float to see its profile.`; },
+           get chlKey(){ return `${MODEL().short} has no chlorophyll; only BGC-Argo floats carry it.`; }},
+    export: {get caveat(){ return `Data: ${MODEL().data} · Argo GDAC incl. BGC-Argo · IBTrACS v04r01 · ETOPO1. Not for operational use.`; },
              file: (t, variable, view)=>`oceanlens3d_real_${META.times[t].slice(0, 10)}_${variable}_${view}.png`}
   },
   synth: {
@@ -105,3 +106,35 @@ function setDataMode(mode){
   requestUpdate('full');
 }
 ui.dataToggle.querySelectorAll('button').forEach(b=>b.addEventListener('click', ()=>setDataMode(b.dataset.mode)));
+
+/* ---- action: switch the real-data model (HYCOM / GLORYS) ----
+   The floats, track and relief stay; the fields, the comparison and every number in captions and panels follow the
+   model. An open profile or track panel is redrawn for the new model rather than closed, to compare the two. */
+function setRealModel(id){
+  const m = REAL_MODELS.find(x=>x.id===id);
+  if(!m || id===realModel) return;
+  if(isTourRunning()) stopTour({restore:false});
+  if(!m.decoded) m.decoded = decodeModel(m.data());
+  Object.assign(REAL, m.decoded);
+  realModel = id;
+  realProfiles.forEach(p=>{ if(p.atObs){ if(m.atObs) p.model = p.atObs; else delete p.model; } });
+  datasetRev++;                        // markers, hover readouts and 2D fields key on it
+  validationFor = null;
+  if(dataMode==='real'){
+    if(state.panel==='profile' && profileState.current && profileState.inst){
+      const tab = profileState.tab;
+      openProfile(profileState.current);
+      profileState.tab = tab;
+      syncProfileTabs();
+      drawProfileChart();
+    } else if(state.panel==='track'){
+      openTrack();
+    }
+  }
+  requestUpdate('full');
+}
+// the next model in REAL_MODELS (the M key)
+function nextRealModel(){
+  const i = REAL_MODELS.findIndex(x=>x.id===realModel);
+  return REAL_MODELS[(i+1) % REAL_MODELS.length].id;
+}

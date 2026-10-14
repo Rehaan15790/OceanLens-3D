@@ -51,8 +51,8 @@ function openWorstFloat(){
 let validationFor = null;
 // the comparison summary shown when nothing is selected; rebuilt when the source or time changes
 function renderValidation(){
-  const key = dataMode+state.time;
-  if(validationFor===key) return;   // depends on the source and time step only
+  const key = dataMode+realModel+state.time;
+  if(validationFor===key) return;   // depends on the source, the model and the time step only
   validationFor = key;
   const src = dataSource(), t = state.time, bands = [[0,100],[100,300],[300,1000]];
   const insts = instrumentsNow().filter(i=>!i.imported);   // the summary is the built-in comparison (facts)

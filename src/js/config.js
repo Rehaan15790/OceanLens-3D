@@ -82,7 +82,7 @@ function bindIds(ids){
   return out;
 }
 const ui = bindIds([
-  'splash', 'enterBtn', 'roVar', 'roRange', 'roMean', 'dataToggle', 'presentBtn', 'aboutBtn', 'aboutOverlay',
+  'splash', 'enterBtn', 'roVar', 'roRange', 'roMean', 'dataToggle', 'modelGrp', 'modelToggle', 'modelNote', 'presentBtn', 'aboutBtn', 'aboutOverlay',
   'aboutClose', 'helpBtn', 'helpOverlay', 'helpClose', 'varPills', 'modeGrp', 'modePills', 'tchpNote', 'depthGrp',
   'depthVal', 'depthSlider', 'isoGrp', 'isoVal', 'isoSlider', 'isoPresets', 'swArgo', 'swMisfit', 'swGlider',
   'rowGlider', 'swTrack', 'swFlow', 'swGrid', 'opVal', 'opSlider', 'exVal', 'exSlider', 'paletteSel', 'cbMin', 'cbMax',

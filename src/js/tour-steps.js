@@ -1,6 +1,7 @@
 /* ---- guided tour: the steps and their captions ----
    Captions are built from the runtime facts (facts.js) and formatters (fmt.js), so no data-derived number is
-   typed here. Each is at most 35 words and keeps its qualifiers ("in HYCOM", "mostly", "consistency check");
+   typed here. Each is at most 35 words and keeps its qualifiers ("in HYCOM", "mostly", "consistency check"); M()
+   names the model on screen (HYCOM or GLORYS);
    detail lives in the panel the step opens. Literal numbers are definitions (26 °C, 50 kJ/cm², 300 m,
    1000 m) or grid constants. Until facts exist, real-mode steps show a caption without numbers.
    tour.js reads title, caption and time as plain values: they are getters for the current data mode. */
@@ -9,10 +10,10 @@ const TOUR_STEP_DEFS = [
   {id:'temperature', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:0,
    title:{real:'Temperature', synth:'Temperature (synthetic)'},
    caption:{
-     real:(f,fmt,t)=>`HYCOM analysis, ${fmt.dayMonth(f.analysis.times[t])}. The Bay of Bengal surface is mostly above ` +
+     real:(f,fmt,t)=>`${M().product}, ${fmt.dayMonth(f.analysis.times[t])}. The Bay of Bengal surface is mostly above ` +
        `${fmt.int(Math.floor(f.bay.sstP25[t]))} °C; below it the water cools to about ` +
        `${fmt.int(f.bay.t1000Mean[t])} °C by 1000 m (a depth slice shows it).`,
-     plain:'HYCOM analysis: warm surface water above a sharp thermocline. The sides of the block show the whole ' +
+     plain:()=>`${M().product}: warm surface water above a sharp thermocline. The sides of the block show the whole ` +
        'column down to 1000 m.',
      synth:'Synthetic demo data, not a real ocean state. Warm surface water cools through the thermocline towards ' +
        'cold deep water; the sides of the block show the whole column.'}},
@@ -28,7 +29,7 @@ const TOUR_STEP_DEFS = [
   {id:'d26', variable:'temp', mode:'iso', isoVal:26, time:0,
    title:{real:'D26, the 26 °C isotherm', synth:'D26, the 26 °C isotherm'},
    caption:{
-     real:(f,fmt,t)=>`D26, the 26 °C isotherm: water above it can feed a cyclone. In HYCOM it lies at ` +
+     real:(f,fmt,t)=>`D26, the 26 °C isotherm: water above it can feed a cyclone. In ${M().short} it lies at ` +
        `${fmt.int(fmt.roundDown(f.bay.d26P10[t],10))}–${fmt.int(fmt.roundUp(f.bay.d26P90[t],10))} m across most of ` +
        `the Bay. Shelf columns warm to the sea floor stay open.`,
      plain:'D26, the 26 °C isotherm: water above it can feed a cyclone. Shelf columns that are warm to the sea floor ' +
@@ -40,20 +41,20 @@ const TOUR_STEP_DEFS = [
    title:{real:'Surface currents', synth:'Surface currents (synthetic)'},
    caption:{
      real:(f,fmt,t)=>`Surface currents on ${fmt.dayMonth(f.analysis.times[t])}: the sea's colour shows speed; arrows and ` +
-       `streaks show direction. In HYCOM the East India Coastal Current runs north along the coast at up to about ` +
+       `streaks show direction. In ${M().short} the East India Coastal Current runs north along the coast at up to about ` +
        `${fmt.dp(f.currents.eiccMaxNorth[t].v,1)} m/s.`,
-     plain:'Surface currents in HYCOM: the sea\'s colour shows speed; arrows and streaks show direction. The labels mark ' +
-       'where the named currents usually flow.',
+     plain:()=>`Surface currents in ${M().short}: the sea's colour shows speed; arrows and streaks show direction. The ` +
+       'labels mark where the named currents usually flow.',
      synth:'Synthetic currents: the sea\'s colour shows speed; arrows and streaks show direction. The labels mark where ' +
        'real currents usually flow; this field does not reproduce them.'}},
 
   {id:'salinity', variable:'sal', mode:TOUR_DEFAULT_VIEW, time:0,
    title:{real:'Salinity', synth:'Salinity (synthetic)'},
    caption:{
-     real:(f,fmt,t)=>`In HYCOM the Bay of Bengal surface is far fresher than the Arabian Sea: about ` +
+     real:(f,fmt,t)=>`In ${M().short} the Bay of Bengal surface is far fresher than the Arabian Sea: about ` +
        `${fmt.int(f.bay.salMedian[t])} against ${fmt.int(f.arabian.salMedian[t])} PSU, fed mainly by the ` +
        `Ganges–Brahmaputra and other rivers. The fresh layer sits on saltier water.`,
-     plain:'In HYCOM the Bay of Bengal surface is far fresher than the Arabian Sea, fed mainly by the ' +
+     plain:()=>`In ${M().short} the Bay of Bengal surface is far fresher than the Arabian Sea, fed mainly by the ` +
        'Ganges–Brahmaputra and other rivers. The fresh layer sits on saltier water.',
      synth:'The synthetic field makes the Bay of Bengal fresher than the Arabian Sea, as river runoff does in the ' +
        'real ocean.'}},
@@ -62,7 +63,7 @@ const TOUR_STEP_DEFS = [
    title:{real:'Heat before Amphan', synth:'Cyclone heat potential (synthetic)'},
    caption:{
      real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, ${fmt.countWord(Math.round(f.track.leadDays[t]))} days before ` +
-       `Amphan's first best-track position. In HYCOM, heat under its future path averaged ` +
+       `Amphan's first best-track position. In ${M().short}, heat under its future path averaged ` +
        `${fmt.int(f.path.heatBefore)} kJ/cm², well above the 50 kJ/cm² mark. Right panel: before and after.`,
      plain:'Heat stored above 26 °C before Amphan formed. The white contour marks 50 kJ/cm²; the right panel ' +
        'compares heat under the path before and after the storm.',
@@ -73,24 +74,24 @@ const TOUR_STEP_DEFS = [
    title:{real:'Amphan’s cold wake', synth:'A vertical section'},
    caption:{
      real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, ${fmt.countWord(tourDaysAfterLandfall(f, t))} days after ` +
-       `landfall, on the genesis-to-landfall line. In HYCOM the surface is about ${fmt.dp(f.section.track.cooling,1)} °C ` +
+       `landfall, on the genesis-to-landfall line. In ${M().short} the surface is about ${fmt.dp(f.section.track.cooling,1)} °C ` +
        `cooler than on ${fmt.dayMonth(f.analysis.times[f.path.beforeIndex])}, while D26 stays near ` +
        `${fmt.int(fmt.round(f.section.track.d26After,5))} m: a cold wake.`,
-     plain:'After landfall, on the genesis-to-landfall line: in HYCOM the surface along the path has cooled while D26 ' +
-       'stays at a similar depth, a cold wake.',
+     plain:()=>`After landfall, on the genesis-to-landfall line: in ${M().short} the surface along the path has cooled ` +
+       'while D26 stays at a similar depth, a cold wake.',
      synth:'A section along the sample track, surface to sea floor. In the right panel, solid is D26 and dashed D20. ' +
        'Drag across the sea, or press S, to cut your own.'}},
 
   {id:'argo', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:f=>f ? tourOverBay(f) : 5, openFloat:'worst',
-   title:{real:'Argo against HYCOM', synth:'Floats against the model (synthetic)'},
+   title:{real:()=>`Argo against ${M().short}`, synth:'Floats against the model (synthetic)'},
    caption:{
-     real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, Amphan over the Bay. Solid: Argo; dashed: HYCOM ` +
+     real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, Amphan over the Bay. Solid: Argo; dashed: ${M().short} ` +
        `${f.comparison.matchedInTime ? 'matched in place and time' : 'at the nearest analysis'}. Below 300 m the RMS ` +
        `difference is ${fmt.dp(fmt.roundDown(f.comparison.deepRmse.min,0.05),2)}–` +
-       `${fmt.dp(fmt.roundUp(f.comparison.deepRmse.max,0.05),2)} °C. HYCOM assimilates Argo: a consistency check, ` +
+       `${fmt.dp(fmt.roundUp(f.comparison.deepRmse.max,0.05),2)} °C. ${M().short} assimilates Argo: a consistency check, ` +
        `not independent validation.`,
-     plain:'Argo profiles (solid) against HYCOM (dashed) while Amphan was over the Bay. HYCOM assimilates Argo, so ' +
-       'this is a consistency check, not independent validation.',
+     plain:()=>`Argo profiles (solid) against ${M().short} (dashed) while Amphan was over the Bay. ${M().short} ` +
+       'assimilates Argo, so this is a consistency check, not independent validation.',
      synth:'Synthetic floats sample a slightly different ocean from the model, with noise and gaps. Solid: observed; ' +
        'dashed: model. One float has a bad salinity sample that the QC check flags.'}},
 ];
@@ -111,13 +112,16 @@ function tourCaption(def){
     try{ return c.real(f, fmt, typeof def.time==='function' ? def.time(f) : def.time); }
     catch(e){ console.warn('tour caption', def.id, e); }
   }
-  return c.plain;
+  return typeof c.plain==='function' ? c.plain() : c.plain;
 }
+// the model on screen, for captions
+function M(){ return MODEL(); }
 const tourSteps = TOUR_STEP_DEFS.map(def=>{
   const step = {};
   Object.keys(def).forEach(k=>{ if(!['title','caption','time'].includes(k)) step[k] = def[k]; });
   Object.defineProperties(step, {
-    title:  {enumerable:true, get:()=>def.title[dataMode==='real' ? 'real' : 'synth']},
+    title:  {enumerable:true, get:()=>{ const x = def.title[dataMode==='real' ? 'real' : 'synth'];
+      return typeof x==='function' ? x() : x; }},
     caption:{enumerable:true, get:()=>tourCaption(def)},
     time:   {enumerable:true, get:()=>typeof def.time==='function' ? def.time(tourFacts()) : def.time},
   });

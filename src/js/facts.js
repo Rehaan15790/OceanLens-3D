@@ -19,10 +19,15 @@ function lazyProp(obj, key, fn){
   }});
   return obj;
 }
-let FACTS_CACHE = null;
+// one set per real-data model (the floats and the track are shared, the model numbers are not); synth is shared
+const FACTS_CACHE = {};
+const SYNTH_FACTS = lazyProp({}, 'v', synthFacts);
 function facts(){
-  if(!FACTS_CACHE) FACTS_CACHE = lazyProp(lazyProp({}, 'real', realFacts), 'synth', synthFacts);
-  return FACTS_CACHE;
+  if(!FACTS_CACHE[realModel]){
+    FACTS_CACHE[realModel] = lazyProp({}, 'real', realFacts);
+    Object.defineProperty(FACTS_CACHE[realModel], 'synth', {enumerable:true, get:()=>SYNTH_FACTS.v});
+  }
+  return FACTS_CACHE[realModel];
 }
 
 function percentile(values, p){
@@ -130,7 +135,7 @@ function realFacts(){
   F.ranges = rangeFacts((vi, t, k, i, j)=>node(t, vi, k, i, j),
     (t, k, i, j)=>Math.hypot(node(t,2,k,i,j), node(t,3,k,i,j)),
     (p, t, seabed)=>tchpAt(p.lat, p.lon, t, seabed),
-    k=>{ const L = P.length ? P[0].levels : [], n = nearestLevel(L, DEPTHS[k]);   // floats only: HYCOM has no chlorophyll
+    k=>{ const L = P.length ? P[0].levels : [], n = nearestLevel(L, DEPTHS[k]);   // floats only: no model chlorophyll
       return P.map(p=>p.obs.C[n]).filter(Number.isFinite); });
   return F;
 }

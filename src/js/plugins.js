@@ -238,7 +238,7 @@ registerVariable('cur', {label:'Current speed', unit:'m/s', palette:'speed',
 registerVariable('tchp', {label:'Cyclone heat potential', unit:'kJ/cm²', palette:'heat', dims:2,
   sample:(lat, lon, z, t)=>{ const q = modelTchp(lat, lon, t, bathyDepth(lat, lon)).q; return q===null ? NaN : q; },
   grid:t=>tchpGrid(t).map(c=>c && c.q!==null ? c.q : null), range:[0, 200]});
-// HYCOM is a physics-only model: in real mode chlorophyll comes from BGC-Argo floats only
+// both real-data models are physics only: in real mode chlorophyll comes from BGC-Argo floats only
 registerVariable('chl', {label:'Chlorophyll', unit:'mg/m³', palette:PALETTES.chlorophyll ? 'chlorophyll' : 'speed', scale:'log',
   sample:(lat, lon, z, t)=>fieldChl(lat, lon, z, t), model:{real:false}, ranges:{real:[0.02, 5], synth:[0.02, 1.5]},
   iso:{step:0.01, dp:2, def:0.2}});

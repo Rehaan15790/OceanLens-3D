@@ -47,8 +47,9 @@ function modelAt(varKey, lat, lon, z, t){
   return null; // below the deepest model level
 }
 
-// Real profiles carry HYCOM at their own position and time (the pipeline's argo.model, native levels
-// interpolated to the Argo levels); synthetic ones, and real ones without it, read the gridded model.
+// Real profiles carry the main model (HYCOM) at their own position and time while it is on screen (the pipeline's
+// argo.model, native levels interpolated to the Argo levels); synthetic ones, and real ones without it (GLORYS), read
+// the gridded model at the nearest analysis.
 function modelAtObs(inst, varKey, z){
   const M = inst.model;
   if(!M) return modelAt(varKey, inst.lat, inst.lon, z, inst.real ? inst.snap : state.time);
@@ -206,9 +207,9 @@ function obsTchp(inst, p, seabed){
   return r;
 }
 const tchpCache = new Map();
-// TCHP at every grid node at analysis t (null on land), cached per data mode
+// TCHP at every grid node at analysis t (null on land), cached per data mode and model
 function tchpGrid(t){
-  const key = dataMode+t;
+  const key = dataMode+realModel+t;
   if(!tchpCache.has(key)){
     tchpCache.set(key, gridPts.map((p,idx)=> gridLand[idx] ? null : modelTchp(p.lat, p.lon, t, gridSeabed[idx])));
   }

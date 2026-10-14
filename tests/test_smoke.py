@@ -440,6 +440,42 @@ class Controls:
 class RealMode(Controls, AppTestCase):
     data_mode = 'real'
 
+    def test_model_switch_by_click_and_key(self):
+        if len(self.js('__ol.models') or []) < 2:
+            self.skipTest('this build has one model')
+        ctx = "document.getElementById('ctxText').textContent"
+        legend = "document.getElementById('obsLegend').textContent"
+        pressed = "document.querySelector('#modelToggle button[data-model=glorys]').getAttribute('aria-pressed')"
+        self.assertTrue(self.visible('#modelGrp'))
+        self.assertIn('HYCOM analysis', self.js(ctx))
+        self.b.click('#modelToggle button[data-model="glorys"]')
+        self.b.pump(0.3)
+        self.assertEqual(self.js('__ol.realModel'), 'glorys')
+        self.assertIn('GLORYS daily mean', self.js(ctx))
+        self.assertEqual(self.js(pressed), 'true')
+        heat = self.js('__ol.facts().real.path.heatBefore')
+        # an open profile is redrawn against the other model, not closed
+        self.js('__ol.actions.openWorstFloat()')
+        name = self.js("document.getElementById('profName').textContent")
+        self.assertIn('GLORYS', self.js(legend))
+        self.b.key('m')
+        self.b.pump(0.3)
+        self.assertEqual(self.js('__ol.realModel'), 'hycom')
+        self.assertEqual(self.js('__ol.state.panel'), 'profile')
+        self.assertEqual(self.js("document.getElementById('profName').textContent"), name)
+        self.assertIn('HYCOM', self.js(legend))
+        self.assertNotEqual(self.js('__ol.facts().real.path.heatBefore'), heat)
+        # the switch belongs to real data: hidden in the synthetic demo, and M does nothing there
+        self.js('__ol.actions.closePanels()')
+        self.b.click('#dataToggle button[data-mode="synth"]')
+        self.b.pump(0.3)
+        self.assertFalse(self.visible('#modelGrp'))
+        self.b.key('m')
+        self.assertEqual(self.js('__ol.realModel'), 'hycom')
+        self.b.click('#dataToggle button[data-mode="real"]')
+        self.b.pump(0.3)
+        self.assertNoProblems()
+
     def test_chlorophyll_iso_views_have_an_empty_key(self):
         self.pill('v', 'chl')
         self.pill('m', 'iso')

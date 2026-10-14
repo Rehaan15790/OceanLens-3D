@@ -104,8 +104,11 @@ function exposeTestSurface(){
   const now = f => (...args)=>{ const r = f(...args); flushUpdate(); return r; };   // actions apply at once
   ol.state = state;
   Object.defineProperty(ol, 'dataMode', {get: ()=>dataMode, configurable:true});
+  Object.defineProperty(ol, 'realModel', {get: ()=>realModel, configurable:true});
+  ol.models = REAL_MODELS.map(m=>m.id);
   ol.actions = Object.fromEntries(Object.entries({
-    setVariable, setMode, setDepth, setIso, setTime, setPlaying, setDataMode, setOverlay, setOpacity, setExaggeration,
+    setVariable, setMode, setDepth, setIso, setTime, setPlaying, setDataMode, setRealModel, setOverlay, setOpacity,
+    setExaggeration,
     setRange, setPalette, setScale, setShowAllImported, resetRange: ()=>{ resetRange(); requestUpdate('full'); },
     openPanel, closePanels:closeSidePanels, openProfile, openWorstFloat, startTour, stopTour, goToTourStep, nextTourStep, setTourAutoplay,
     showSectionPreset, clearSection

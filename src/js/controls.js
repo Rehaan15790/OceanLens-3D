@@ -226,6 +226,9 @@ function syncControls(){
   ui.rowGlider.title = gliders ? '' : 'No glider data in this data set';
   updateColorbarUI();
   ui.dataToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.mode===dataMode));
+  ui.modelGrp.hidden = dataMode!=='real' || REAL_MODELS.length < 2;
+  ui.modelToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.model===realModel));
+  ui.modelNote.textContent = MODEL().note + '.';
   ui.secTrackBtn.textContent = src.section.trackPreset;
   ui.secTrackBtn.disabled = currentTrack().length===0;
   syncTimeline();

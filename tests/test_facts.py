@@ -1,7 +1,8 @@
 """Every number the UI states comes from the runtime `facts` module; this checks each one against an independent
 Python recomputation by science (data-pipeline/facts_reference.py).
 
-tests/facts_expected.json maps a dotted path under window.__ol.facts to its expected value, for example
+tests/facts_expected.json (HYCOM, the main snapshot) and tests/facts_expected_glorys.json (GLORYS, recomputed from
+data/amphan-2020-glorys.json) map a dotted path under window.__ol.facts to its expected value, for example
     "real.path.heatBefore": {"value": 85.1, "tol": 0.05, ...}
     "real.comparison.worst[5].id": {"value": "ARGO-2902769"}
 Numbers compare within `tol`; everything else compares exactly. The test skips until the build exposes
@@ -14,6 +15,7 @@ import unittest
 from helpers import REPO, AppTestCase
 
 EXPECTED = REPO / 'tests' / 'facts_expected.json'
+EXPECTED_GLORYS = REPO / 'tests' / 'facts_expected_glorys.json'
 MISSING = object()
 
 
@@ -41,12 +43,26 @@ class Facts(AppTestCase):
         if not EXPECTED.exists():
             self.skipTest('tests/facts_expected.json does not exist yet')
         self.expected = json.loads(EXPECTED.read_text(encoding='utf-8'))
-        self.facts = self.js("JSON.parse(JSON.stringify(typeof __ol.facts === 'function' ? __ol.facts() : __ol.facts))")
+
+    def facts_now(self):
+        return self.js("JSON.parse(JSON.stringify(typeof __ol.facts === 'function' ? __ol.facts() : __ol.facts))")
 
     def test_facts_match_the_independent_recomputation(self):
+        self.compare(self.expected, self.facts_now())
+
+    def test_glorys_facts_match_their_recomputation(self):
+        if 'glorys' not in (self.js('__ol.models || []') or []):
+            self.skipTest('this build has no GLORYS model')
+        try:
+            self.js("__ol.actions.setRealModel('glorys')")
+            self.compare(json.loads(EXPECTED_GLORYS.read_text(encoding='utf-8')), self.facts_now())
+        finally:
+            self.js("__ol.actions.setRealModel(__ol.models[0])")
+
+    def compare(self, expected, facts):
         missing, wrong = [], []
-        for path, spec in self.expected.items():
-            got, want = resolve(self.facts, path), spec['value']
+        for path, spec in expected.items():
+            got, want = resolve(facts, path), spec['value']
             if got is MISSING:
                 missing.append(path)
             elif isinstance(want, (int, float)) and not isinstance(want, bool):
@@ -55,7 +71,7 @@ class Facts(AppTestCase):
             elif got != want:
                 wrong.append(f'{path}: app {got!r}, recomputed {want!r}')
         self.assertFalse(missing or wrong, f'{len(missing)} facts missing, {len(wrong)} differ '
-                         f'(of {len(self.expected)}):\n' + '\n'.join(wrong[:30] + [f'missing: {p}' for p in missing[:20]]))
+                         f'(of {len(expected)}):\n' + '\n'.join(wrong[:30] + [f'missing: {p}' for p in missing[:20]]))
 
 
 if __name__ == '__main__':
