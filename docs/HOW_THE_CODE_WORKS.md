@@ -306,16 +306,17 @@ The tests click and type in a real browser, exactly as a user would, against the
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| unit | 10 + 59 pipeline | Science functions in the real page; every on-screen number against the Python recomputation; the NetCDF reader and writer; byte-identical snapshot rebuilds |
-| server | 25+ | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
+| unit | 10 + 95 pipeline | Science functions in the real page; every on-screen number against the Python recomputation; the NetCDF reader and writer; byte-identical snapshot rebuilds |
+| server | 42 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
 | smoke | 51 | Every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
 | extend | 16 | Plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
 | tour | 7 | All eight steps in both modes; captions of 35 words or fewer; timing races |
 | robust | 6 | No WebGL, a lost graphics context and recovery, no memory growth over 20 rebuilds |
+| security | 33 | Hostile file contents stay text, damaged files end with a message instead of hanging, the Content Security Policy is enforced and never violated |
 | render | 9 | Pixel checks: a slice matches its colour bar, streaks stand out, floats aren't cut by the sea surface, the seabed is closed |
 | a11y | 6 | Accessible names, keyboard reach, text at least 12 px, WCAG AA contrast |
 | sizes | 3 | Six screen sizes from 1024×768 to 1920×1080 plus the phone notice |
-| perf | 2 | Splash paints before boot; ready within 2.5 s at 4× CPU throttling (fails on software rendering, a known limit) |
+| perf | 2 | Splash paints before boot; ready within 2.5 s at 4× CPU throttling (machine-dependent: fails on a slow machine with software rendering) |
 | fingerprint | 1 run | 84 recorded outputs; a refactor must leave them identical |
 
 ### Continuous integration

@@ -29,7 +29,9 @@ Double-click `OceanLens3D.html`. That one file holds the app, three.js, the Amph
 
 **Before you present:**
 
-- Use current Chrome or Edge with hardware acceleration on. Firefox and Safari 15+ should work but are untested.
+- Use current Chrome, Edge or Firefox with hardware acceleration on. Chrome and Edge run the automated tests; Firefox was checked by hand. Safari is untested.
+- Run the 3-minute walkthrough on the laptop you will present from, plugged in, and check that it feels smooth. Without hardware acceleration the browser either renders in software, which is visibly slower (`docs/TESTING.md`, Measured performance), or refuses WebGL.
+- Keep a screen recording of the 3-minute walkthrough on that laptop and on a USB stick, in case the venue machine has WebGL blocked.
 - Use a laptop or desktop screen. Below 900 px wide a "Built for laptop and desktop screens" notice appears.
 - If WebGL is off, the app shows a clear message instead of a blank page. Turn on hardware acceleration in the browser settings.
 
@@ -282,7 +284,7 @@ flowchart LR
   SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3 models"]
   CLI["<b>Other clients</b><br/>GIS tools via WMS<br/>netCDF-C via OPeNDAP<br/>scripts via REST"]
   FILES["<b>Your files</b><br/>CSV, NetCDF-3<br/>read in the browser,<br/>never uploaded"]
-  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>194 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
+  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>280 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
   SRC --> PIPE --> SNAP --> BUILD --> APP
   SNAP --> SRV --> CLI
   FILES --> APP
@@ -294,6 +296,30 @@ flowchart LR
 - **The numbers on screen** (tour captions, About panel) are computed at runtime from the data, never typed in, and an independent Python recomputation checks them.
 - **Science methods:** UNESCO EOS-80 density, Mackenzie (1981) sound speed, Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26, and the Argo QC manual's density-inversion test.
 - **Security:** the page has a strict Content Security Policy, imported files are size-capped and parsed defensively, and the server binds to this machine only by default.
+
+## A 1-minute pitch
+
+For an elevator pitch or the opening of a longer slot. Start with the app open on the heat-potential map (`4`) at 13 May, the track showing. One click.
+
+> Forecasters compare ocean model output with what Argo floats measured by switching between desktop software and 2D map portals. OceanLens 3D puts both in one 3D scene: HYCOM temperature, salinity, currents and cyclone heat potential down to 1000 metres, with 206 real Argo profiles placed where and when they were measured.
+>
+> This is Cyclone Amphan, May 2020. Before it, about 85 kilojoules per square centimetre of heat under its path. *(Click a float near the track.)* Every float is compared with the model at the same place and time, with bias and RMSE.
+>
+> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 280 automated tests check the rest.
+
+## A 3-minute walkthrough
+
+The core of the 7-minute script below. Start in **Real data** mode, temperature, Surface view, at the 4 May analysis.
+
+| Time | Do | Say |
+| --- | --- | --- |
+| 0:00 | Show the splash, click **Enter** | "One HTML file: no install, no server, no internet. HYCOM and Argo for Cyclone Amphan, May 2020, as a hindcast." |
+| 0:20 | Drag to orbit | "Arabian Sea and Bay of Bengal, surface to 1000 m." |
+| 0:40 | `I`, click **D26** | "How deep the 26 °C water goes: the heat a cyclone can feed on." |
+| 1:00 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path, far above the 50 mark. IMD winds went from 55 to 120 kt in 24 h." |
+| 1:40 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler: the cold wake." |
+| 2:10 | `1`, close the section, **Compare the worst-fitting float** | "Argo solid, HYCOM dashed, matched in place and time, with bias and RMSE. HYCOM assimilates Argo, so this is a consistency check." |
+| 2:40 | Point at **Add data**, then stop | "Your own Argo, glider or CTD files open here, in the browser. The same data is served over WMS, WCS and OPeNDAP, and new sensors plug in through one API." |
 
 ## A 7-minute demo script
 
@@ -319,12 +345,14 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 
 ## Likely judge questions
 
-Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 42 requirement rows in `REQUIREMENTS.md`, 20 are Met, 14 Partly met and 8 Not met.
+Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 19 are Met, 13 Partly met and 7 Not met.
 
 | Question | Answer |
 | --- | --- |
 | Is this live or forecast data? | No. It is a hindcast of Amphan (May 2020) from 8 HYCOM analyses. Live ingestion is on the roadmap. |
-| Is the model validated against Argo? | It is compared, not independently validated: HYCOM assimilates Argo, so it is a consistency check. Deep RMSE (below 300 m) is about 0.26–0.37 °C. |
+| Is the model validated against Argo? | It is compared, not independently validated: HYCOM assimilates Argo, so it is a consistency check. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
+| Which browsers, and how fast? | Chrome and Edge run the automated tests; Firefox was checked by hand; Safari is untested. On a desktop GPU it is ready in under half a second and far above 60 fps; with software rendering, 18–35 fps (`docs/TESTING.md`). |
+| Can INCOIS use it? What is the licence? | The code is public to read but all rights reserved, so it cannot be copied during the competition. Using or hosting it needs written permission from the team (README, Copyright and licence). |
 | Is it real volume rendering? | Stacked translucent layers plus a marching-cubes isosurface, not ray-marched volume rendering. |
 | Why no React or Vue? | Deliberate: plain JavaScript and three.js keep it to one offline file with no build chain or CDN. Marked Not met against the "modern frameworks" wording. |
 | Why only to 1000 m? | The snapshot keeps 11 levels from 0 to 1000 m; the sea floor below is drawn, compressed 12×, with no data. |
@@ -333,7 +361,19 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Why no chlorophyll map in real mode? | HYCOM has no chlorophyll. The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
 | Does it work on INCOIS or Copernicus data? | Not tried. The INCOIS LAS and Copernicus GLORYS are Not met; Copernicus files are NetCDF-4/Zarr and would need conversion or a new reader. |
 | Search and rescue or fisheries? | Not implemented. Currents are shown but there is no particle tracking; there is no PFZ product. Both are listed as possible uses. |
-| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 194 automated tests run in a headless browser and on GitHub Actions. |
+| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 280 automated tests run in a headless browser and on GitHub Actions. |
 | How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, and the plugin API adds sensors and ML products. Production would add scheduled ingestion, auth and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |
+
+### The model–Argo comparison in numbers
+
+All 206 profiles, each compared with HYCOM at its own place and time (the nearest 3-hourly output), pooled over the 8 analyses that group them. Bias is observed minus model; *n* is the number of profile levels. The per-analysis values are in the app's **Model–Argo comparison** panel and in `tests/facts_expected.json`, which `data-pipeline/facts_reference.py` computes independently of the app.
+
+| Depth | Temperature bias | Temperature RMSE | *n* | Salinity bias | Salinity RMSE | *n* |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0–100 m | −0.12 °C | 1.07 °C | 3949 | −0.07 PSU | 0.28 PSU | 3274 |
+| 100–300 m | +0.16 °C | 0.82 °C | 4071 | +0.07 PSU | 0.12 PSU | 3371 |
+| 300–1000 m | +0.16 °C | 0.30 °C | 5753 | +0.03 PSU | 0.06 PSU | 4776 |
+
+The misfit is largest in the top 100 m and smallest below 300 m. 35 of the 206 profiles have no usable salinity, so the salinity counts are lower. Because HYCOM assimilates Argo, small numbers here show consistency, not independent skill.

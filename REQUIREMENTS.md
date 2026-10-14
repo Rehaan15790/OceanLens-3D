@@ -8,8 +8,9 @@ which test proves it. The status is one of **Met**, **Partly met** (what is miss
 - `python tools/check.py` runs everything: hygiene, the build check, a fresh build and every suite.
 - "By real clicks" means the test moves the mouse and clicks the control on screen, as a user would. Other tests set
   values through the app's own actions.
-- Last checked against the code and the tests on 6 October 2026: of 193 tests (every suite but `fingerprint`), 189
-  passed, 1 failed and 3 were skipped (see "How to re-run the evidence" at the end).
+- The rows were last checked against the code on 6 October 2026. The latest full test run, on 14 October 2026: of
+  280 tests (every suite but `fingerprint`), 279 passed, none failed and 1 was skipped (see "How to re-run the
+  evidence" at the end).
 
 ## Read this first
 
@@ -91,10 +92,12 @@ python -m unittest discover -s data-pipeline -p "test_*.py"   # pipeline, NetCDF
 ```
 
 - The browser is `$OCEANLENS_BROWSER` (or `$CHROME`), else Edge, Chrome or Chromium in their usual places (`docs/TESTING.md`).
-- The run on 6 October 2026 (all suites but `fingerprint`, headless Chromium with software rendering): 193 tests,
-  189 passed, 1 failed, 3 skipped. The failure is `perf`'s 2.5 s load budget at 4× CPU throttling (3.3 to 5.7 s that day). Two
-  pipeline tests skip because the raw data cache is not in the repository; one splash test skips when the loading
-  state is too short to observe.
+- The run on 14 October 2026 (`python tools/check.py`: every suite, headless Edge with software rendering, on a
+  Ryzen 7 9800X3D desktop): 280 tests, 279 passed, none failed, 1 skipped, and the `fingerprint` run recorded its 84 outputs. The skip
+  is a splash test that cannot observe a loading state that short. The two pipeline tests that need the raw data
+  cache ran, because the cache was present; without it they skip.
+- The run on 6 October 2026, on a slower machine with no GPU: 193 tests, 189 passed, 1 failed, 3 skipped. The failure
+  was `perf`'s 2.5 s load budget at 4× CPU throttling (3.3 to 5.7 s that day), so that budget depends on the machine.
 - The netCDF-C check in row 5c was done by hand: start `python server/serve.py`, then open
   `http://127.0.0.1:8080/opendap/amphan-2020` with netCDF4-python (or any netCDF-C client) and read a slice. It is not
   part of the automated suite, because netCDF-C is not a project dependency.

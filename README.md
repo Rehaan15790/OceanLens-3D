@@ -21,7 +21,8 @@ It is a student prototype and is not affiliated with or endorsed by INCOIS or th
 3. Press **Start the guided tour** for an 8-step walkthrough, or `?` for the keyboard shortcuts.
 
 It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, or Safari 15 or later, on a laptop or
-desktop screen. The automated tests run in Chromium-based browsers; Firefox and Safari have not been tested.
+desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 was checked by hand on 14 October 2026
+(every view, a float comparison, no console errors). Safari has not been tested.
 
 ## Features
 
@@ -49,6 +50,20 @@ desktop screen. The automated tests run in Chromium-based browsers; Firefox and 
   </tr>
 </table>
 
+## Example: a cyclone desk
+
+The built-in case replays what a cyclone desk would have seen before and after Amphan, from data that existed then.
+
+1. **Where is the heat?** Cyclone heat potential with its 50 kJ/cm² contour, and the D26 depth below it. On
+   13 May 2020 the water under Amphan's path held about 85 kJ/cm².
+2. **Does the model agree with the floats?** Click the floats near the track: each opens its profile against the
+   model column at the same place and time, with bias, RMSE and a QC check.
+3. **What did the storm leave behind?** A section along the track after landfall shows the cold wake: the surface
+   about 2.3 °C cooler and the heat potential down to about 52 kJ/cm².
+4. **Brief the team.** Export the view as a PNG, or send the single HTML file, which opens offline.
+
+This is a hindcast: OceanLens has no forecasts or live data yet (see Limitations).
+
 ## The data
 
 There are two data modes, switched in the header.
@@ -56,7 +71,8 @@ There are two data modes, switched in the header.
 - **Real data: Cyclone Amphan, May 2020 (a hindcast).** Eight HYCOM GOFS 3.1 analyses and 206 quality-controlled
   Argo profiles from 70 floats. BGC-Argo floats add chlorophyll (36 profiles from 13 floats) and oxygen (24 profiles
   from 9). The scene also has ETOPO1 relief and the IBTrACS track. HYCOM assimilates Argo, so the model–Argo
-  comparison is a consistency check, not independent validation.
+  comparison is a consistency check, not independent validation. Over all 206 profiles the temperature RMSE is
+  1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (the table is in `docs/PRESENTER_GUIDE.md`).
 - **Synthetic demo:** analytic fields with synthetic floats and gliders, labelled as such. It is not a real ocean
   state.
 
@@ -105,10 +121,10 @@ python server/serve.py                    # the app and its data at http://127.0
 python data-pipeline/build_snapshot.py    # rebuild the data snapshot from the raw cache
 ```
 
-The build is deterministic: the same sources always give the same bytes. A full test run has one known failure:
-the `perf` load budget, which our runs miss because the test browser renders WebGL in software
-(`docs/TESTING.md`). Rebuilding the snapshot needs the raw cache, or network access with `--fetch`
-(`data-pipeline/README.md`).
+The build is deterministic: the same sources always give the same bytes. The `perf` load budget depends on the
+machine, because the test browser renders WebGL in software: it fails on our slower machine with no GPU and passes
+on a fast desktop. Measured load times and frame rates, with and without a GPU, are in `docs/TESTING.md`.
+Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`data-pipeline/README.md`).
 
 ### Repository layout
 

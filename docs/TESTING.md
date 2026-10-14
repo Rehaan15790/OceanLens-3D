@@ -34,27 +34,61 @@ It does not look at git remotes, so it also passes in a GitHub Actions checkout.
 
 ## Suites
 
-`python tools/run.py --list` names 135 tests in ten suites, plus the `fingerprint` run. The `unit` suite also runs
-the 59 data-pipeline tests, so there are 194 tests in all. A full run takes them in this order:
+`python tools/run.py --list` names 185 tests in eleven suites, plus the `fingerprint` run. The `unit` suite also runs
+the 95 data-pipeline tests, so there are 280 tests in all. A full run takes them in this order:
 
 | Suite | Tests | What it checks |
 |---|---|---|
-| `unit` | 10 + 59 | The app's pure functions called inside the real page (EOS-80, TCHP, crossings, contours, bias and RMSE, `realAt`); the runtime `facts` against an independent recomputation (`tests/facts_expected.json`, dotted paths under `__ol.facts`, written by `data-pipeline/facts_reference.py --expected`); the 59 data-pipeline tests in `data-pipeline/test_*.py` (2 skip when the raw cache is absent) |
-| `server` | 25 | `server/serve.py` in-process, no browser: REST shapes and values against the snapshot, JSON errors (a negative or too-deep depth among them), CORS, the Host check, the busy limit, the `?dataset=` page and dropping compressed pages of an older build; OPeNDAP `.ascii` read by the pipeline's own parser, the `.dods` byte layout, DDS/DAS and DAP errors; WMS capabilities, a valid PNG with the palette colour at a known node (linear, log, both axis orders), transparent land, GetFeatureInfo, exceptions; WCS capabilities, DescribeCoverage, a CF NetCDF-3 round trip through `data-pipeline/ncio.py`, CSV; a CF NetCDF model file as a dataset |
+| `unit` | 10 + 95 | The app's pure functions called inside the real page (EOS-80, TCHP, crossings, contours, bias and RMSE, `realAt`); the runtime `facts` against an independent recomputation (`tests/facts_expected.json`, dotted paths under `__ol.facts`, written by `data-pipeline/facts_reference.py --expected`); the 95 data-pipeline tests in `data-pipeline/test_*.py` (2 skip when the raw cache is absent) |
+| `server` | 42 | `server/serve.py` in-process, no browser: REST shapes and values against the snapshot, JSON errors (a negative or too-deep depth among them), CORS, the Host check, the busy limit, the `?dataset=` page and dropping compressed pages of an older build; OPeNDAP `.ascii` read by the pipeline's own parser, the `.dods` byte layout, DDS/DAS and DAP errors; WMS capabilities, a valid PNG with the palette colour at a known node (linear, log, both axis orders), transparent land, GetFeatureInfo, exceptions; WCS capabilities, DescribeCoverage, a CF NetCDF-3 round trip through `data-pipeline/ncio.py`, CSV; a CF NetCDF model file as a dataset |
 | `smoke` | 51 | The splash and the ready state. Real mouse and keyboard input in both data modes: every variable × display mode, the Depth slider and the depth keys, the iso-value slider and the D20 preset, sections, a float click, the BGC profile tabs, a storm-fix click, timeline and playback, overlays, the cyclone heat note and track legend, the Ramp menu, the colour key in the Surface, Depth slice, Depth of a value, Isosurface (3D) and heat-map views (real end labels, the isosurface value, the empty key for real-data chlorophyll) and in the PNG export, the header readout at 1280, 1366 and 1600 px, the controls the tour names, Ctrl chords left to the browser, help and about. Any console error or uncaught exception fails the test. No network requests. |
 | `extend` | 16 | A variable and an instrument registered at runtime through `window.OceanLens` (the variable is drawn exactly as sampled); the ADCP and HF radar plugins; every file in `samples/` imports with its expected profile count, shows markers and opens its profile; real file layouts (an Argo GDAC `_prof.nc`, copies cut short refused, ERDDAP's units row, whole glider dives and climbs); Argo NetCDF in CDF-2 and CDF-5; EGO glider and CF profile NetCDF; CF units and valid ranges; a dense trajectory split into dives (a mooring is not split); imported profiles brought into view; the import dialog adds and removes; the colour bar editor, opacity and exaggeration controls; the log scale matches the bar; the 3D isosurface builds and follows the value; the page served by `server/serve.py` lists the server's datasets |
 | `tour` | 7 | All eight steps in both modes; captions of 35 words or fewer; the timer races (stop at once, skip the section step, stop before a panel opens, playback paused) |
 | `robust` | 6 | No WebGL (a message, no dead button); context loss (a notice, recovery); an error after boot is shown; GPU geometries flat over 20 rebuild cycles |
+| `security` | 33 | Hostile data stays data: names and metadata from a file are shown as text; damaged or hostile NetCDF and CSV end quickly with a message instead of hanging the page; the URL and storage are not trusted; the shipped file's Content Security Policy is present, enforced by the browser and never violated during boot, import, export or the tour; `build.py` embedding cannot be broken out of. Opens several browsers, so it is not in the quick set. |
 | `render` | 9 | A depth slice matches the colour bar; profiling stems show through the layers; the 3D look (`Look3D`): current streaks and arrows stand out from the field, float marks are whole on the sea and the heat map, the grid shows on the heat-potential map but not on land, the 3D isosurface is shaded by its relief, land keeps its colour when the view is pulled back, the seabed is closed below Sri Lanka, and the basins show below India from the north |
 | `a11y` | 6 | Accessible names, keyboard reachability, no text under 12 px, WCAG AA contrast, dialogs, page language (at 1366×768) |
 | `sizes` | 3 | 1024×768, 1280×720, 1366×768, 1536×864, 1920×1080, 1280×720 at DPR 1.5: canvas fills the viewport, header fits, no scrolling, colour key visible; the small-screen notice at 390×844 |
 | `perf` | 2 | Splash painted before boot finishes (over `file://`); ready within 2.5 s at 4× CPU throttling. Run on its own. See the note below. |
 | `fingerprint` | 1 run | `tools/fingerprint.js` records 84 deterministic outputs (panel text, colour-buffer hashes). `--fp-baseline FILE` compares against a saved fingerprint; a refactor must leave it identical. |
 
-**The `perf` load budget fails on a software renderer.** Every browser test, this one included, starts the browser
+**The `perf` load budget depends on the machine.** Every browser test, this one included, starts the browser
 with the default `backend='swiftshader'`, so WebGL runs on the CPU. On 6 October 2026 our headless runs on a
 machine with no GPU were ready in 3.3 to 5.7 s at 4× throttling, so `test_ready_within_2_5_s_at_4x_cpu` failed; it
-was the only failure in the full run. The budget has not been timed with GPU rendering.
+was the only failure in the full run. On 14 October 2026 the same test passed on a fast desktop (below).
+
+### Measured performance
+
+Measured on 14 October 2026 with the shipped `OceanLens3D.html` over `file://`, on a desktop with an AMD Ryzen 7
+9800X3D, 32 GB of memory and an NVIDIA GeForce RTX 4070 SUPER, in headless Edge 1920×1080 driven by `tools/cdp.py`.
+"Ready" is the median time from navigation until the app reports ready (3 runs each). Frame rates are counted over
+3 s while the camera orbits, so every frame redraws.
+
+| | GPU (`backend='gpu'`) | Software (`backend='swiftshader'`) |
+| --- | --- | --- |
+| Ready | 0.43 s | 0.67 s |
+| Ready at 4× CPU throttling | 1.20 s | 1.39 s |
+| Frame rate: Surface, All depth levels | 320 fps | 18 fps |
+| Frame rate: Depth slice, Depth of a value, Isosurface (3D) | 320 fps | 31–35 fps |
+| Slowest frame | 3.4 ms | 122 ms (All depth levels) |
+| JavaScript heap after the five views | 17 MB | 7 MB |
+
+- This is a fast desktop. A laptop with integrated graphics will be slower: time the laptop you will present from
+  before the demo.
+- The page is 3.4 MB on disk, of which 2.35 MB is the data snapshot. The JavaScript heap does not include GPU
+  buffers or the browser's own memory.
+- Headless frames are not tied to a screen. On a monitor the frame rate stops at its refresh rate, usually 60 Hz.
+- With software rendering the app stays usable but visibly slower, worst in the two views that draw all 11
+  translucent layers. Without a usable GPU a browser either renders WebGL like this or refuses it; the app then
+  says so instead of showing a blank page.
+
+### Browsers
+
+| Browser | How it was checked | Result |
+| --- | --- | --- |
+| Edge, Chrome or Chromium | Every automated suite, in whichever is installed | Pass in Edge on 14 October 2026 |
+| Firefox 157 (Windows, GPU) | By hand on 14 October 2026, driven over WebDriver BiDi: boot, all five views, the heat-potential map, the worst-fitting float's profile | Works: ready in 0.55 s, about 315 fps in every view, no console errors or warnings |
+| Safari | Not checked | Unknown: the README's Safari 15 minimum has not been tried |
 
 **Results.** Every test ends in one of three states:
 - **pass** or **fail**;
