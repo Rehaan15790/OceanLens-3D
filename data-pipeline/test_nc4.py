@@ -8,6 +8,7 @@ netCDF-C and HDF5 (from the raw cache) and checks it against the same values in 
 decoded independently by blosc.py; it skips when the cache is absent.
 """
 import os, random, sys, tempfile, unittest, zlib
+from unittest import mock
 
 import numpy as np
 
@@ -315,6 +316,69 @@ class Blosc(unittest.TestCase):
             blosc.lz4_block(bytes([0x0f]) + (9).to_bytes(2, 'little'), 100)   # a match before the start
 
 
+class RangeReads(unittest.TestCase):
+    """build_snapshot.RangeSource: a NetCDF-4 file read in cached, hashed byte ranges (the network is faked)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        dims, vars, attrs, groups = F.model_fixture()
+        self.file = F.write_bytes(dims, vars, attrs, groups=groups)
+        self.requests = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def fake_download(self, short=False):
+        def download(fetcher, url, headers=None, timeout=180, retries=4):
+            a, b = (int(x) for x in headers['Range'].split('=')[1].split('-'))
+            self.requests.append((a, b))
+            body = self.file[a:b + 1]
+            return body[:-1] if short else body
+        return download
+
+    def test_a_file_read_in_ranges_equals_the_file(self):
+        with mock.patch.object(B.Fetcher, 'download', self.fake_download()):
+            Fe = B.Fetcher(self.tmp.name, fetch=True)
+            f = nc4.open_source(B.RangeSource(Fe, 'https://example.test/f.nc', 'glorys/f.nc', len(self.file)))
+            got = f.vars['thetao'].read()
+        np.testing.assert_array_equal(got, ncio.read_bytes(self.file)['vars']['thetao']['data'])
+        self.assertTrue(self.requests)
+        self.assertTrue(all(n.startswith('glorys/f.nc/') for n in Fe.used))
+        # offline, from the cache alone: the same values, nothing downloaded
+        self.requests.clear()
+        f = nc4.open_source(B.RangeSource(B.Fetcher(self.tmp.name), 'https://example.test/f.nc', 'glorys/f.nc',
+                                          len(self.file)))
+        np.testing.assert_array_equal(f.vars['thetao'].read(), got)
+        self.assertEqual(self.requests, [])
+
+    def test_a_short_range_is_refused_and_not_cached(self):
+        with mock.patch.object(B.Fetcher, 'download', self.fake_download(short=True)):
+            with self.assertRaises(B.FetchError):
+                nc4.open_source(B.RangeSource(B.Fetcher(self.tmp.name, fetch=True), 'https://example.test/f.nc',
+                                              'glorys/f.nc', len(self.file)))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, 'glorys')))
+
+    def test_bucket_listing(self):
+        key = f'{B.GLORYS_PREFIX}/2020/05/mercatorglorys12v1_gl12_mean_20200504_R20200506.nc'
+        good = (f'<?xml version="1.0"?><ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>{key}</Key>'
+                f'<Size>1336924139</Size></Contents></ListBucketResult>').encode()
+        self.assertEqual(B.parse_s3_listing(good), {key: 1336924139})
+        for bad in (good.replace(b'false', b'true'), b'<html>error</html>',
+                    b'<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>'):
+            with self.assertRaises(B.InvariantError):
+                B.parse_s3_listing(bad)
+
+    def test_one_native_file_per_date(self):
+        listing = {f'{B.GLORYS_PREFIX}/{t:%Y/%m}/mercatorglorys12v1_gl12_mean_{t:%Y%m%d}_R20200603.nc': 1
+                   for t in B.SNAPS}
+        with mock.patch.object(B.Fetcher, 'get', lambda *a, **k: dict(listing)):
+            self.assertEqual(len(B.glorys_files(B.Fetcher(self.tmp.name))), 8)
+        listing[f'{B.GLORYS_PREFIX}/2020/05/mercatorglorys12v1_gl12_mean_20200504_R20200610.nc'] = 1
+        with mock.patch.object(B.Fetcher, 'get', lambda *a, **k: dict(listing)):
+            with self.assertRaisesRegex(B.InvariantError, '2 native files for 04 May'):
+                B.glorys_files(B.Fetcher(self.tmp.name))
+
+
 class RealGlorys(unittest.TestCase):
     """A Copernicus Marine GLORYS12V1 native file (NetCDF-4 as netCDF-C and HDF5 wrote it), read from the raw cache,
     against the same values in the Copernicus ARCO Zarr store decoded by blosc.py."""
@@ -322,8 +386,6 @@ class RealGlorys(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.cache = os.environ.get('OCEANLENS_CACHE') or os.path.join(HERE, 'cache')
-        if not hasattr(B, 'glorys_check_files'):
-            raise unittest.SkipTest('the pipeline has no GLORYS step yet')
         cls.files = B.glorys_check_files(cls.cache)
         if cls.files is None:
             raise unittest.SkipTest('no GLORYS files in the raw cache')

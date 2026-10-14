@@ -50,6 +50,15 @@ HYCOM + NCODA Global 1/12° Analysis (GOFS 3.1, GLBy0.08/expt_93.0), provided by
 Naval Research Laboratory (hycom.org). Chassignet et al. (2007), J. Mar. Syst. 65, 60–83; Cummings (2005),
 Q. J. R. Meteorol. Soc. 131, 3583–3604.
 
+### Copernicus Marine GLORYS12V1 reanalysis
+
+`data/amphan-2020-glorys.json` is derived from it. Generated using E.U. Copernicus Marine Service Information:
+Global Ocean Physics Reanalysis (GLOBAL_MULTIYEAR_PHY_001_030, GLORYS12V1, daily means), doi:10.48670/moi-00021.
+Lellouche, J.-M. et al. (2021), The Copernicus Global 1/12° Oceanic and Sea Ice GLORYS12 Reanalysis, Front. Earth
+Sci. 9:698876, doi:10.3389/feart.2021.698876. Used under the Copernicus Marine Service commitments and licence
+(https://marine.copernicus.eu/user-corner/service-commitments-and-licence), which allows free use and
+redistribution with this acknowledgement. The files were read anonymously over HTTPS; no account was used.
+
 ### Argo float data
 
 These data were collected and made freely available by the International Argo Program and the national programs

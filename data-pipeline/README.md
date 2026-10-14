@@ -2,7 +2,8 @@
 
 `build_snapshot.py` builds `data/amphan-2020.json`, the real-data snapshot that `build.py` inlines into
 `OceanLens3D.html`: eight HYCOM GOFS 3.1 analyses (4–25 May 2020, 12 UTC), QC'd Argo and BGC-Argo profiles,
-ETOPO1 relief and Cyclone Amphan's IBTrACS track. It needs Python 3 and numpy only.
+ETOPO1 relief and Cyclone Amphan's IBTrACS track. With `--model glorys` it builds `data/amphan-2020-glorys.json`, the
+same case with the Copernicus Marine GLORYS12V1 reanalysis as the model. It needs Python 3 and numpy only.
 
 ## Running it
 
@@ -11,6 +12,7 @@ python data-pipeline/build_snapshot.py                   # rebuild from the raw 
 python data-pipeline/build_snapshot.py --check --temperature-only --model-at-obs   # rebuild and compare with the committed file
 python data-pipeline/build_snapshot.py --fetch --allow-host tds.hycom.org   # download what the cache lacks, from HYCOM only
 python data-pipeline/build_snapshot.py --temperature-only --model-at-obs    # the committed configuration
+python data-pipeline/build_snapshot.py --model glorys --temperature-only    # data/amphan-2020-glorys.json (GLORYS)
 python -m unittest discover -s data-pipeline -v          # tests (no network, no cache needed)
 ```
 
@@ -90,11 +92,43 @@ like temperature. The committed file holds chlorophyll on 36 profiles from 13 fl
 from 9. HYCOM has no biogeochemistry, so real mode has no chlorophyll or oxygen field, only floats. Rules and counts
 are in `meta.provenance.bgc`.
 
-## CF NetCDF-3 model output
+## GLORYS12V1 (Copernicus Marine)
+
+    python data-pipeline/build_snapshot.py --model glorys --temperature-only [--fetch]
+
+writes `data/amphan-2020-glorys.json`: the same case, the same Argo profiles, relief and track, with the model
+fields from the Copernicus Marine GLORYS12V1 reanalysis (GLOBAL_MULTIYEAR_PHY_001_030, the product the problem
+statement lists) instead of HYCOM.
+
+- **Source:** the native daily-mean files, NetCDF-4 (HDF5), 1/12°, 50 levels, 1.34 GB each and global, on
+  Copernicus Marine's public object store (`s3.waw3-1.cloudferro.com`, no account). The pipeline does not download
+  them whole. `nc4.py` reads each file's metadata and chunk index in HTTPS byte ranges, then only the deflated chunks
+  that cover the map (about 6.7 MB per variable and day). The 8 dates are the daily means centred on the HYCOM
+  analysis times (12:00 UTC); a file whose time is anything else stops the build.
+- **What is read:** `thetao` (potential temperature), `so`, `uo` and `vo`, on the 21 levels the interpolation to the
+  app depths uses (the two around each app depth). Each 0.5° cell is the mean of the native points inside it, as
+  for `--model-netcdf` (`model_from_dataset`).
+- **Checked every build:** two `thetao` chunks are also read from Copernicus Marine's ARCO Zarr store (Blosc/LZ4,
+  decoded by `blosc.py`) and must equal the NetCDF-4 values exactly, at the surface and at 1062 m.
+  `test_nc4.RealGlorys` repeats the check from the cache.
+- **The cache:** every range is a cache file of its own, hashed in `manifest.json` like any download. They live
+  under `cache/glorys/`, with a bucket listing per month and the Zarr check chunks. That is 386 files, 238 MB;
+  `CACHE_MANIFEST_GLORYS.txt` lists them with the Argo, relief and track files the build also reads.
+- **No `--model-at-obs`:** GLORYS daily means have no 3-hourly output, so profiles are compared with the daily
+  mean of their analysis date (within 1.5 days), as the app does without `argo.model`.
+- **Assimilation:** GLORYS assimilates in-situ temperature and salinity profiles, Argo among them, so the
+  model–Argo comparison is a consistency check here too.
+
+`meta.model` names the model (`GLORYS12V1`, short `GLORYS`, product and DOI); the HYCOM snapshot has no such key,
+and the app takes it as HYCOM. The citation and licence (Copernicus Marine service commitments and licence:
+free use and redistribution with acknowledgement) are in `meta.citations` and `THIRD_PARTY_NOTICES.md`.
+
+## CF model output (NetCDF-3 or NetCDF-4)
 
     python data-pipeline/build_snapshot.py --model-netcdf FILE --out data/other.json
 
-replaces HYCOM with one CF NetCDF-3 file. What works today:
+replaces HYCOM with one CF NetCDF-3 or NetCDF-4 file, for example a `copernicusmarine subset` download as it comes.
+What works today:
 
 - The file holds all four variables: temperature, salinity and both current components (u and v). They are found
   by `standard_name` (then common names such as thetao/so/uo/vo). A file with one variable, as some exports give,
@@ -110,10 +144,22 @@ Longitudes are wrapped, axes sorted, kelvin and cm/s converted, each 0.5° cell 
 inside it and levels are interpolated to the app depths. Argo, bathymetry and the track still come from the cache;
 Argo profiles are matched to the file's times. `--model-at-obs` works with HYCOM only.
 
-NetCDF-4 files are refused. Copernicus Marine's native files, including GLOBAL_MULTIYEAR_PHY_001_030, are
-NetCDF-4/HDF5, so a subset must be converted first: `nccopy -k classic in.nc out.nc`, or download it with
-`copernicusmarine subset ... --netcdf3-compatible`. That toolbox needs a free Copernicus Marine account. The raw
-files and ARCO Zarr stores can be read over HTTPS without an account, but this project reads neither format. The
-tests use a synthetic CF file only (no real Copernicus file), and no real INCOIS LAS export has been tried.
+The whole file is read into memory, so a model file for `--model-netcdf` should be a subset of the map, not a
+global field (the GLORYS route above reads global files in ranges instead). The tests check that a CF file gives the
+same snapshot fields as NetCDF-3 and as NetCDF-4 (`test_nc4.ModelThroughNetcdf4`). No real INCOIS LAS export has
+been tried.
 
-`ncio.py` is the numpy NetCDF classic reader/writer (CDF-1, CDF-2, CDF-5) used here and by `server/serve.py`.
+## The NetCDF readers
+
+- `ncio.py` is the numpy NetCDF classic reader/writer (CDF-1, CDF-2, CDF-5) used here and by `server/serve.py`.
+  `ncio.read_bytes()` hands NetCDF-4 files to `nc4.py` and returns the same dict, so everything that takes NetCDF-3
+  takes NetCDF-4 too.
+- `nc4.py` reads NetCDF-4 (HDF5) with numpy and zlib only: the HDF5 structures netCDF-C writes, in the classic
+  and the newest format layouts, with every chunk index and the deflate, shuffle and fletcher32 filters. A selection
+  decodes only the chunks it touches, from bytes, a file, or any object with `.size` and `.read(offset, n)` (the
+  GLORYS route passes HTTPS byte ranges). Other filters (szip, zstd), shared datatypes in attributes and external
+  storage are refused with a message. Offsets, sizes and inflation are checked, and loops refused, so a damaged or
+  hostile file raises `NetCDFError` and nothing else.
+- `nc4_fixtures.py` writes small NetCDF-4 files in both layouts for the tests. It shares `nc4.py`'s reading of the
+  HDF5 specification, which is why the tests also read a real GLORYS file and check it against the Zarr store.
+- `blosc.py` decodes Blosc frames with LZ4 and byte shuffle (the Copernicus ARCO Zarr chunks), for that check.

@@ -2,8 +2,10 @@
 """Build the real-data snapshot for OceanLens 3D (Cyclone Amphan, May 2020).
 
 Sources, all open and needing no account:
-  model       HYCOM + NCODA GOFS 3.1 analysis, GLBy0.08/expt_93.0 (tds.hycom.org, OPeNDAP ASCII)
-  in situ     Argo GDAC profiles via Ifremer ERDDAP (ArgoFloats); chlorophyll-a and oxygen from the
+  model       HYCOM + NCODA GOFS 3.1 analysis, GLBy0.08/expt_93.0 (tds.hycom.org, OPeNDAP ASCII); or, with
+              --model glorys, the Copernicus Marine GLORYS12V1 reanalysis (GLOBAL_MULTIYEAR_PHY_001_030), daily
+              means read from its native NetCDF-4 files in HTTPS byte ranges (s3.waw3-1.cloudferro.com)
+  in situ    Argo GDAC profiles via Ifremer ERDDAP (ArgoFloats); chlorophyll-a and oxygen from the
               BGC-Argo synthetic profiles (ArgoFloats-synthetic-BGC), adjusted values only
   bathymetry  ETOPO1 via NOAA ERDDAP (etopo180), every 0.1 degree
   track       IBTrACS v04r01, North Indian basin (NOAA NCEI)
@@ -14,7 +16,8 @@ TLS-inspecting proxy or antivirus). Nothing is written to the cache in offline r
 
     python build_snapshot.py [--cache DIR] [--out FILE] [--check]
     python build_snapshot.py --fetch [--ca-bundle PEM]
-    python build_snapshot.py --model-netcdf FILE --out OTHER.json   # any CF NetCDF-3 model output
+    python build_snapshot.py --model glorys [--fetch]                # ../data/amphan-2020-glorys.json
+    python build_snapshot.py --model-netcdf FILE --out OTHER.json   # any CF NetCDF-3 or NetCDF-4 model output
 
 The result is a JSON file (default ../data/amphan-2020.json) that build.py inlines into OceanLens3D.html.
 The same cache always gives byte-identical output.
@@ -44,10 +47,19 @@ ARGO = 'https://erddap.ifremer.fr/erddap/tabledap/ArgoFloats.csv'
 ETOPO = 'https://upwell.pfeg.noaa.gov/erddap/griddap/etopo180.csv'
 IBTRACS = ('https://www.ncei.noaa.gov/data/international-best-track-archive-for-climate-stewardship-ibtracs/'
            'v04r01/access/csv/ibtracs.NI.list.v04r01.csv')
+# Copernicus Marine GLORYS12V1 daily means: the native NetCDF-4 files, read in byte ranges, and the ARCO Zarr store,
+# from which two chunks are read to check the NetCDF-4 reader against an independent format
+GLORYS_ROOT = 'https://s3.waw3-1.cloudferro.com/mdl-native-14'
+GLORYS_PREFIX = 'native/GLOBAL_MULTIYEAR_PHY_001_030/cmems_mod_glo_phy_my_0.083deg_P1D-m_202311'
+GLORYS_ZARR = ('https://s3.waw3-1.cloudferro.com/mdl-arco-time-025/arco/GLOBAL_MULTIYEAR_PHY_001_030/'
+               'cmems_mod_glo_phy_my_0.083deg_P1D-m_202311/timeChunked.zarr')
+GLORYS_VARS = {'temp': 'thetao', 'sal': 'so', 'u': 'uo', 'v': 'vo'}
+RANGE_BLOCK = 1 << 18
 # Downloads go over https to these hosts only (keep in step with the URLs above and BGC below; --allow-host
 # replaces this list), redirects included, and a response may not exceed MAX_DOWNLOAD bytes (the largest raw file is
-# 7 MB, the whole cache 43 MB).
-DEFAULT_HOSTS = frozenset({'tds.hycom.org', 'erddap.ifremer.fr', 'upwell.pfeg.noaa.gov', 'www.ncei.noaa.gov'})
+# 7 MB, the HYCOM cache 43 MB; the GLORYS ranges add about 220 MB in pieces of 1.4 MB or less).
+DEFAULT_HOSTS = frozenset({'tds.hycom.org', 'erddap.ifremer.fr', 'upwell.pfeg.noaa.gov', 'www.ncei.noaa.gov',
+                           's3.waw3-1.cloudferro.com'})
 MAX_DOWNLOAD = 128 * 1024 * 1024
 # the files in the original cache were downloaded on this date; later downloads record their own in manifest.json
 DEFAULT_ACCESSED = '2026-09-27'
@@ -92,6 +104,13 @@ CITATIONS = [
              'doi:10.1175/2009BAMS2755.1; IBTrACS v04r01, NOAA NCEI, doi:10.25921/82ty-9e16. Positions and winds '
              'from RSMC New Delhi (IMD) and the Joint Typhoon Warning Center.'},
 ]
+GLORYS_CITATION = {
+    'id': 'glorys', 'doi': '10.48670/moi-00021',
+    'text': 'Generated using E.U. Copernicus Marine Service Information: Global Ocean Physics Reanalysis '
+            '(GLOBAL_MULTIYEAR_PHY_001_030, GLORYS12V1, daily means), doi:10.48670/moi-00021. Lellouche, J.-M. et al. '
+            '(2021), The Copernicus Global 1/12° Oceanic and Sea Ice GLORYS12 Reanalysis, Front. Earth Sci. 9:698876, '
+            'doi:10.3389/feart.2021.698876. Used under the Copernicus Marine Service commitments and licence '
+            '(marine.copernicus.eu/user-corner/service-commitments-and-licence).'}
 
 
 class CacheMiss(Exception):
@@ -907,20 +926,28 @@ MAX_MODEL_TIMES = 16
 
 
 def model_from_netcdf(path, log=print):
-    """Snapshot model fields from a CF NetCDF-3 file: variables found by standard_name (then by common
-    names), longitudes wrapped, axes sorted, each 0.5 deg cell the mean of the native points inside it
-    (the nearest point when the native grid is coarser), levels interpolated to DEPTHS as for HYCOM."""
+    """Snapshot model fields from a CF NetCDF-3 or NetCDF-4 file (model_from_dataset)."""
     import ncio
     with open(path, 'rb') as f:
         raw = f.read()
     ds = ncio.read_bytes(raw)
+    model, wet, when, info = model_from_dataset(ds, os.path.basename(path), log)
+    info.update({'file': os.path.basename(path), 'sha256': sha256(raw), 'bytes': len(raw)})
+    return model, wet, when, info
+
+
+def model_from_dataset(ds, label, log=print):
+    """Snapshot model fields from CF model output in ncio's dict: variables found by standard_name (then by common
+    names), longitudes wrapped, axes sorted, each 0.5 deg cell the mean of the native points inside it
+    (the nearest point when the native grid is coarser), levels interpolated to DEPTHS as for HYCOM."""
+    import ncio
     found = {}
     for key, (sns, names) in CF_MODEL.items():
         nm = ncio.cf_find(ds, sns, names)
-        require(nm is not None, f'{os.path.basename(path)}: no {key} variable (standard_name one of {", ".join(sns)})')
+        require(nm is not None, f'{label}: no {key} variable (standard_name one of {", ".join(sns)})')
         found[key] = nm
     ax = {a: ncio.cf_axis(ds, a, found['temp']) for a in 'XYZT'}
-    require(ax['X'] and ax['Y'] and ax['Z'], f'{os.path.basename(path)}: longitude, latitude and depth axes are needed')
+    require(ax['X'] and ax['Y'] and ax['Z'], f'{label}: longitude, latitude and depth axes are needed')
     lon = np.mod(np.asarray(ds['vars'][ax['X']]['data'], 'f8') + 180, 360) - 180
     lat = np.asarray(ds['vars'][ax['Y']]['data'], 'f8')
     dep = ncio.cf_depth(ds['vars'][ax['Z']])
@@ -981,11 +1008,178 @@ def model_from_netcdf(path, log=print):
                 model[t, vi, di] = fill_nans(g)
     require(wet[0].any(), 'the model has no water inside the map')
     when = [t or SNAPS[0] for t in times[:nt]]
-    info = {'file': os.path.basename(path), 'sha256': sha256(raw), 'bytes': len(raw), 'variables': found,
+    info = {'variables': found,
             'axes': ax, 'native_levels_m': [float(dep[k]) for lv in levels for k, _ in lv],
             'native_step_deg': [float(round(np.median(np.diff(lat)), 4)) if len(lat) > 1 else None,
                                 float(round(np.median(np.diff(lon)), 4)) if len(lon) > 1 else None],
             'attrs': {k: str(ds['attrs'][k]) for k in ('title', 'source', 'institution', 'product_id') if k in ds['attrs']}}
+    return model, wet, when, info
+
+
+# ------------------------------------------------------------------ GLORYS12V1 (Copernicus Marine)
+class RangeSource:
+    """A remote file read in byte ranges through the Fetcher, so every range is cached and hashed like any raw file.
+    Reads up to a quarter block go through aligned RANGE_BLOCK blocks (headers and B-tree nodes sit close together),
+    larger ones (chunks) as asked; the cache name of a range says which bytes it holds. nc4.open_source() reads it."""
+    def __init__(self, F, url, name, size):
+        self.F, self.url, self.name, self.size = F, url, name, int(size)
+        self._blocks, self._lock = {}, threading.Lock()
+
+    def _range(self, off, n, cname):
+        def parse(d):
+            if len(d) != n:
+                raise FetchError(f'{cname}: {len(d)} bytes for a range of {n}')
+            return d
+        return self.F.get(self.url, cname, parse, headers={'Range': f'bytes={off}-{off + n - 1}'})
+
+    def read(self, off, n):
+        if n <= 0:
+            return b''
+        if n > RANGE_BLOCK // 4:
+            return self._range(off, n, f'{self.name}/{off}-{n}')
+        out = []
+        for k in range(off // RANGE_BLOCK, (off + n - 1) // RANGE_BLOCK + 1):
+            with self._lock:
+                have = self._blocks.get(k)
+            if have is None:
+                a = k * RANGE_BLOCK
+                have = self._range(a, min(RANGE_BLOCK, self.size - a), f'{self.name}/b{k}')
+                with self._lock:
+                    self._blocks[k] = have
+            out.append(have)
+        s = off % RANGE_BLOCK
+        return b''.join(out)[s:s + n]
+
+
+def parse_s3_listing(data):
+    """An S3 ListObjectsV2 reply -> {key: size}. Read with regular expressions, not an XML parser."""
+    text = data.decode('utf-8', 'replace')
+    require('<ListBucketResult' in text, 'not an S3 bucket listing')
+    require('<IsTruncated>false</IsTruncated>' in text, 'the bucket listing is truncated')
+    out = {}
+    for block in re.findall(r'<Contents>(.*?)</Contents>', text, re.S):
+        key, size = re.search(r'<Key>([^<]+)</Key>', block), re.search(r'<Size>(\d+)</Size>', block)
+        if key and size:
+            out[key.group(1)] = int(size.group(1))
+    require(out, 'the bucket listing is empty')
+    return out
+
+
+def glorys_files(F):
+    """[(key, size)] of the native daily-mean file for each analysis date (the R<date> part varies by month)."""
+    found = {}
+    for m in sorted({t.strftime('%Y/%m') for t in SNAPS}):
+        prefix = urllib.parse.quote(f'{GLORYS_PREFIX}/{m}/', safe='/')
+        found.update(F.get(f'{GLORYS_ROOT}?list-type=2&prefix={prefix}', f'glorys/listing-{m.replace("/", "-")}.xml',
+                           parse_s3_listing))
+    out = []
+    for t in SNAPS:
+        pat = re.compile(re.escape(f'{GLORYS_PREFIX}/{t:%Y/%m}/mercatorglorys12v1_gl12_mean_{t:%Y%m%d}_R') + r'\d{8}\.nc$')
+        keys = sorted(k for k in found if pat.match(k))
+        require(len(keys) == 1, f'GLORYS: {len(keys)} native files for {t:%d %b %Y}')
+        out.append((keys[0], found[keys[0]]))
+    return out
+
+
+def glorys_open(F):
+    """The native files of the 8 dates as nc4 Files, and the index box of the map (with a 0.4 deg margin)."""
+    import nc4, ncio
+    opened = []
+    for key, size in glorys_files(F):
+        src = RangeSource(F, f'{GLORYS_ROOT}/{key}', 'glorys/' + key.rsplit('/', 1)[1], size)
+        opened.append((key, nc4.open_source(src, max_bytes=1 << 28)))
+    f0 = opened[0][1]
+    lat, lon, dep = (f0.vars[n].read() for n in ('latitude', 'longitude', 'depth'))
+    for d, (key, f) in enumerate(opened):
+        for n, a in (('latitude', lat), ('longitude', lon), ('depth', dep)):
+            require(np.array_equal(f.vars[n].read(), a), f'GLORYS: {key} has another {n} axis')
+        tv = f.vars['time']
+        require(ncio.cf_times({'attrs': tv.attrs, 'data': tv.read()}) == [SNAPS[d]],
+                f'GLORYS: {key} is not the daily mean centred on {SNAPS[d]:%d %b %H}Z')
+    i0, i1 = int(np.searchsorted(lat, LAT0 - 0.4)), int(np.searchsorted(lat, LAT1 + 0.4))
+    j0, j1 = int(np.searchsorted(lon, LON0 - 0.4)), int(np.searchsorted(lon, LON1 + 0.4))
+    return opened, lat, lon, dep, (i0, i1, j0, j1)
+
+
+def glorys_crosscheck(F, opened, dep, box):
+    """thetao at the surface and the deepest level read, as nc4 reads the native NetCDF-4 file and as the Copernicus
+    ARCO Zarr store holds it (decoded by blosc.py): [(depth, native int16, zarr int16)] for the first date."""
+    import blosc
+    i0, i1, j0, j1 = box
+    meta = F.get(f'{GLORYS_ZARR}/.zmetadata', 'glorys/zarr/zmetadata.json', lambda d: json.loads(d)['metadata'])
+    za = meta['thetao/.zarray']
+    require(za['chunks'] == [1, 1, 512, 2048] and za['dtype'] == '<i2' and za['compressor']['cname'] == 'lz4',
+            f'the GLORYS Zarr layout changed: {za["chunks"]} {za["dtype"]} {za["compressor"]}')
+    require(i0 // 512 == (i1 - 1) // 512 and j0 // 2048 == (j1 - 1) // 2048, 'the map spans more than one Zarr chunk')
+
+    def axis(name):
+        return np.frombuffer(F.get(f'{GLORYS_ZARR}/{name}/0', f'glorys/zarr/{name}-0', blosc.decompress), '<f4')
+    f0 = opened[0][1]
+    require(np.array_equal(axis('latitude'), f0.vars['latitude'].read().astype('f4')) and
+            np.array_equal(axis('longitude'), f0.vars['longitude'].read().astype('f4')),
+            'the GLORYS Zarr store has another latitude or longitude axis')
+    elev, hours = axis('elevation'), axis('time')
+    t_native = float(f0.vars['time'].read()[0])
+    t = int(np.argmin(np.abs(hours - (t_native - 12))))             # the Zarr store stamps daily means at 00:00
+    require(hours[t] == t_native - 12, 'the GLORYS Zarr store has no matching day')
+    out = []
+    for k in (0, int(np.searchsorted(dep, DEPTHS[-1]))):
+        z = len(elev) - 1 - k                                       # elevation runs bottom to top
+        require(abs(-elev[z] - dep[k]) < 1e-3, 'the GLORYS Zarr depth axis does not mirror the native one')
+        c = np.frombuffer(F.get(f'{GLORYS_ZARR}/thetao/{t}.{z}.{i0 // 512}.{j0 // 2048}',
+                                f'glorys/zarr/thetao-{t}.{z}.{i0 // 512}.{j0 // 2048}', blosc.decompress), '<i2')
+        zarr = c.reshape(512, 2048)[i0 % 512:i0 % 512 + i1 - i0, j0 % 2048:j0 % 2048 + j1 - j0]
+        native = f0.vars['thetao'].read((0, k, slice(i0, i1), slice(j0, j1)), raw=True)
+        out.append((float(dep[k]), native, zarr))
+    return out
+
+
+def glorys_check_files(cache):
+    """For test_nc4.RealGlorys: (native reader, {(var, level): Zarr int16}) from the raw cache, or None without it."""
+    F = Fetcher(cache)
+    try:
+        opened, lat, lon, dep, box = glorys_open(F)
+        pairs = glorys_crosscheck(F, opened, dep, box)
+    except CacheMiss:
+        return None
+    native = {('thetao', d): n for d, n, _ in pairs}
+    return (lambda var, level: native[(var, level)]), {('thetao', d): z for d, _, z in pairs}
+
+
+def fetch_glorys(F, log=print):
+    """GLORYS12V1 daily means for the 8 analysis dates on the app grid, through model_from_dataset."""
+    opened, lat, lon, dep, box = glorys_open(F)
+    i0, i1, j0, j1 = box
+    for d, native, zarr in glorys_crosscheck(F, opened, dep, box):
+        require(np.array_equal(native, zarr), f'GLORYS: the NetCDF-4 reader and the Zarr store disagree at {d:g} m')
+    log(f'  GLORYS native NetCDF-4 equals the Copernicus Zarr store at the surface and {dep[np.searchsorted(dep, 1000)]:.0f} m')
+    # only the levels the interpolation to DEPTHS uses: the brackets of each app depth
+    levels = [[(0, 1.0)] if z <= dep[0] else level_weights(dep, [z])[0] for z in DEPTHS]
+    need = sorted({k for lv in levels for k, _ in lv})
+    top = need[-1] + 1
+
+    def one(job):
+        d, key = job
+        a = opened[d][1].vars[GLORYS_VARS[key]].read((0, slice(0, top), slice(i0, i1), slice(j0, j1)))
+        return d, key, np.asarray(a, 'f8')[need].astype('f4')
+    jobs = [(d, key) for d in range(len(opened)) for key in GLORYS_VARS]
+    with ThreadPoolExecutor(6) as ex:
+        got = {(d, key): a for d, key, a in ex.map(one, jobs)}
+    f0 = opened[0][1]
+    hours = np.array([float(f.vars['time'].read()[0]) for _, f in opened])
+    ds = {'dims': {'time': len(opened), 'depth': len(need), 'latitude': i1 - i0, 'longitude': j1 - j0},
+          'unlimited': 'time', 'attrs': dict(f0.attrs),
+          'vars': {'time': {'dims': ('time',), 'attrs': dict(f0.vars['time'].attrs), 'data': hours},
+                   'depth': {'dims': ('depth',), 'attrs': dict(f0.vars['depth'].attrs), 'data': dep[need]},
+                   'latitude': {'dims': ('latitude',), 'attrs': dict(f0.vars['latitude'].attrs), 'data': lat[i0:i1]},
+                   'longitude': {'dims': ('longitude',), 'attrs': dict(f0.vars['longitude'].attrs),
+                                 'data': lon[j0:j1]}}}
+    for key, nm in GLORYS_VARS.items():
+        ds['vars'][nm] = {'dims': ('time', 'depth', 'latitude', 'longitude'), 'attrs': dict(f0.vars[nm].attrs),
+                          'data': np.stack([got[(d, key)] for d in range(len(opened))])}
+    model, wet, when, info = model_from_dataset(ds, 'GLORYS12V1', log)
+    info.update({'files': [k for k, _ in opened], 'levels_read': [float(dep[k]) for k in need],
+                 'box': {'lat': [float(lat[i0]), float(lat[i1 - 1])], 'lon': [float(lon[j0]), float(lon[j1 - 1])]}})
     return model, wet, when, info
 
 
@@ -1002,7 +1196,9 @@ def inputs_block(F):
     """meta.inputs: hash and access date of every raw file the build read (HYCOM files in groups)."""
     man = F.manifest()
     groups = {'hycom': [n for n in F.used if n.startswith('hycom_') and not n.startswith('hycom_obs/')],
-              'hycom_obs': [n for n in F.used if n.startswith('hycom_obs/')]}
+              'hycom_obs': [n for n in F.used if n.startswith('hycom_obs/')],
+              'glorys': [n for n in F.used if n.startswith('glorys/') and not n.startswith('glorys/zarr/')],
+              'glorys_zarr_check': [n for n in F.used if n.startswith('glorys/zarr/')]}
     single = sorted(n for n in F.used if not any(n in g for g in groups.values()))
     out = {}
     for n in single:
@@ -1016,14 +1212,18 @@ def inputs_block(F):
 
 
 def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=False, log=print, allow_hosts=None,
-          model_netcdf=None):
+          model_netcdf=None, model_source='hycom'):
     """The whole snapshot as a dict, and the Fetcher (for --cache-manifest). Raises CacheMiss, FetchError or
     InvariantError; main turns each into a message and an exit status."""
     F = Fetcher(cache, fetch, cafile, allow_hosts=allow_hosts)
 
+    glorys = model_source == 'glorys' and not model_netcdf
     if model_netcdf:
         require(not model_at_obs, '--model-at-obs works with HYCOM only')
         model, wet, times, hinfo = model_from_netcdf(model_netcdf, log)
+    elif glorys:
+        require(not model_at_obs, '--model-at-obs works with HYCOM only (GLORYS has daily means, no 3-hourly output)')
+        model, wet, times, hinfo = fetch_glorys(F, log)
     else:
         model, wet, times, hinfo = fetch_hycom(F)
     require(np.isfinite(model).all(), 'model has gaps after filling')
@@ -1033,7 +1233,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
     require(np.abs(model[:, 2:]).max() < 3, 'model current above 3 m/s')
     require(1000 < wet[0].sum() < len(LATS) * len(LONS), f'{wet[0].sum()} wet surface cells is implausible')
     speed = np.hypot(model[:, 2], model[:, 3])
-    log(('Model' if model_netcdf else 'HYCOM') + ' analysis times:', ', '.join(f'{t:%d %b %H}Z' for t in times))
+    log(('Model' if model_netcdf else 'GLORYS daily mean' if glorys else 'HYCOM') + ' analysis times:', ', '.join(f'{t:%d %b %H}Z' for t in times))
     log(f'  temperature {t_w.min():.2f}..{t_w.max():.2f} C, salinity {s_w.min():.2f}..{s_w.max():.2f}, '
         f'surface speed p99 {np.percentile(speed[:, 0][:, wet[0]], 99):.2f} m/s (model water only)')
 
@@ -1086,7 +1286,22 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
 
     filled = ('model values in cells without model water are filled from neighbours; mask.wet marks the cells that '
               'hold model water')
-    if model_netcdf:
+    model_meta = None
+    if glorys:
+        model_note = ('Copernicus Marine GLORYS12V1 global ocean physics reanalysis (GLOBAL_MULTIYEAR_PHY_001_030), daily '
+                      'means centred on each analysis time, read from the native 1/12 deg NetCDF-4 files; each 0.5 deg '
+                      'cell the mean of the native points inside it, levels interpolated linearly to the app depths.')
+        model_prov = {'url': GLORYS_ROOT, 'files': hinfo['files'], 'variables': list(GLORYS_VARS.values()),
+                      'read': 'NetCDF-4 (HDF5) chunks in HTTPS byte ranges by data-pipeline/nc4.py',
+                      'checked_against': {'store': GLORYS_ZARR, 'variable': 'thetao', 'date': times[0].strftime('%Y-%m-%d'),
+                                          'levels': 'the first and the first at or below 1000 m',
+                                          'result': 'identical int16 values in the map box'},
+                      'box': hinfo['box'], 'levels_read_m': hinfo['levels_read'],
+                      'native_levels_m': hinfo['native_levels_m'], 'native_step_deg': hinfo['native_step_deg'],
+                      'attrs': hinfo['attrs'], 'filled_cells': filled}
+        model_meta = {'name': 'GLORYS12V1', 'short': 'GLORYS', 'kind': 'reanalysis, daily means',
+                      'product': 'GLOBAL_MULTIYEAR_PHY_001_030', 'doi': GLORYS_CITATION['doi']}
+    elif model_netcdf:
         model_note = (f'CF NetCDF model output {hinfo["file"]}; each 0.5 deg cell the mean of the native points inside '
                       'it, levels interpolated linearly to the app depths.')
         model_prov = {'file': hinfo['file'], 'sha256': hinfo['sha256'], 'variables': hinfo['variables'],
@@ -1118,7 +1333,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
                        'biogeochemistry: chlorophyll and oxygen come from the floats only.',
                 'bathymetry': 'ETOPO1 via upwell.pfeg.noaa.gov ERDDAP (etopo180), sampled every 0.1 deg',
                 'track': 'IBTrACS v04r01 North Indian basin (NOAA NCEI); JTWC 1-minute and IMD 3-minute winds'},
-            'citations': CITATIONS,
+            'citations': [GLORYS_CITATION] + CITATIONS[1:] if glorys else CITATIONS,
             'provenance': {
                 'pipeline': {'script': 'data-pipeline/build_snapshot.py', 'version': PIPELINE_VERSION},
                 'model': model_prov,
@@ -1145,6 +1360,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
                 'track': {'url': IBTRACS, 'storm': f'{STORM} {STORM_YEAR}', 'hours': ['00', '06', '12', '18']},
             },
             'inputs': inputs_block(F),
+            **({'model': model_meta} if model_meta else {}),
         },
         # Int16, laid out [time][variable][level][lat][lon]
         'model': base64.b64encode(b''.join(
@@ -1173,7 +1389,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--cache', default=os.environ.get('OCEANLENS_CACHE') or os.path.join(here, 'cache'),
                     help='raw download cache (default: $OCEANLENS_CACHE or data-pipeline/cache)')
-    ap.add_argument('--out', default=os.path.join(here, '..', 'data', 'amphan-2020.json'))
+    ap.add_argument('--out', help='output file (default ../data/amphan-2020.json, or amphan-2020-glorys.json with '
+                                  '--model glorys)')
     ap.add_argument('--fetch', action='store_true', help='download files missing from the cache')
     ap.add_argument('--ca-bundle', default=os.environ.get('OCEANLENS_CA_BUNDLE'),
                     help='PEM bundle for HTTPS (e.g. behind a TLS-scanning antivirus)')
@@ -1186,14 +1403,19 @@ def main(argv=None):
                     help='keep Argo profiles whose salinity failed QC (temperature comparisons only)')
     ap.add_argument('--model-at-obs', action='store_true',
                     help='add HYCOM columns at each profile\'s position and time (argo.model)')
+    ap.add_argument('--model', choices=('hycom', 'glorys'), default='hycom',
+                    help='the model: HYCOM GOFS 3.1 analyses (default) or Copernicus Marine GLORYS12V1 daily means')
     ap.add_argument('--model-netcdf', metavar='FILE',
-                    help='take the model fields from a CF NetCDF-3 file instead of HYCOM (Argo, bathymetry and track '
-                         'still come from the cache)')
+                    help='take the model fields from a CF NetCDF-3 or NetCDF-4 file instead (Argo, bathymetry and '
+                         'track still come from the cache)')
     args = ap.parse_args(argv)
+    if args.out is None:
+        args.out = os.path.join(here, '..', 'data', 'amphan-2020-glorys.json' if args.model == 'glorys' and
+                                not args.model_netcdf else 'amphan-2020.json')
 
     try:
         payload, F = build(args.cache, args.fetch, args.ca_bundle, args.temperature_only, args.model_at_obs,
-                           allow_hosts=args.allow_host, model_netcdf=args.model_netcdf)
+                           allow_hosts=args.allow_host, model_netcdf=args.model_netcdf, model_source=args.model)
     except CacheMiss as e:
         print(f'error: {e} is not in the cache ({args.cache}); rerun with --fetch to download it', file=sys.stderr)
         return 2
