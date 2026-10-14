@@ -16,7 +16,7 @@ dims[:-1]). raw=True returns the stored values untouched.
 On write a variable may carry 'dtype' ('i1', 'S1', 'i2', 'i4', 'f4', 'f8'; CDF-5 adds 'u1', 'u2', 'u4',
 'i8', 'u8'); otherwise the type follows the data. With an integer dtype and scale_factor or add_offset in
 attrs, float data is packed; NaN becomes _FillValue. NaN in float data is written as _FillValue when
-the variable has one. NetCDF-4 (HDF5) files are refused with a message.
+the variable has one. NetCDF-4 (HDF5) files are read by nc4.py into the same dict.
 """
 import math, os, re, struct
 from datetime import datetime, timedelta, timezone
@@ -97,11 +97,12 @@ def _read_attrs(r, nsz):
 
 
 def read_bytes(data, raw=False):
-    """NetCDF classic bytes -> the dict described at the top of this module; NetCDFError for anything else."""
+    """NetCDF classic or NetCDF-4 bytes -> the dict described at the top of this module; NetCDFError for anything
+    else."""
     data = bytes(data)
-    if data[:4] == b'\x89HDF' or data[:8] == b'\x89HDF\r\n\x1a\n':
-        raise NetCDFError('NetCDF-4 file: convert it to NetCDF-3 first (e.g. nccopy -k classic, or '
-                          'copernicusmarine subset --netcdf3-compatible)')
+    if data[:4] == b'\x89HDF':
+        import nc4                                   # NetCDF-4 is HDF5: its own reader, the same dict
+        return nc4.read_bytes(data, raw)
     if data[:3] != b'CDF' or len(data) < 8 or data[3] not in (1, 2, 5):
         raise NetCDFError('not a NetCDF classic file')
     ver = data[3]
@@ -200,7 +201,9 @@ def _unpack(a, t, attrs):
         flat = a.reshape(-1, a.shape[-1]) if a.shape[-1] else a.reshape(-1, 1)
         strs = [row.tobytes().decode('utf-8', 'replace').rstrip('\x00 ') for row in flat]
         return np.array(strs, dtype=str).reshape(a.shape[:-1])
-    unsigned = str(attrs.get('_Unsigned', '')).lower() == 'true' and t in ('i1', 'i2', 'i4', 'i8')
+    if a.ndim == 0:                                  # arithmetic on a 0-d array gives a scalar: unpack as 1 value
+        return _unpack(a.reshape(1), t, attrs).reshape(())
+    unsigned =str(attrs.get('_Unsigned', '')).lower() == 'true' and t in ('i1', 'i2', 'i4', 'i8')
     if unsigned:
         a = a.view('u' + t[1:])
 
