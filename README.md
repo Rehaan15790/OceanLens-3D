@@ -45,11 +45,12 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/images/cyclone-heat-potential.png" alt="Cyclone heat potential map with Amphan's track and the track panel"><br><sub><b>Heat before Amphan.</b> Cyclone heat potential on 13 May 2020, with the 50 kJ/cm² contour and the track details.</sub></td>
-    <td width="50%"><img src="docs/images/cold-wake-section.png" alt="Vertical temperature section along Amphan's track"><br><sub><b>The cold wake.</b> A section along the track after landfall, with D26 and D20 marked.</sub></td>
+    <td width="50%"><img src="docs/images/cyclone-heat-potential.png" alt="Cyclone heat potential in HYCOM with Amphan's track and the track panel"><br><sub><b>Heat before Amphan, HYCOM.</b> Cyclone heat potential on 13 May 2020, with the 50 kJ/cm² contour: about 85 kJ/cm² under the path.</sub></td>
+    <td width="50%"><img src="docs/images/cyclone-heat-potential-glorys.png" alt="Cyclone heat potential in Copernicus GLORYS on the same day, with the track panel"><br><sub><b>The same day, GLORYS.</b> One click on Model: the Copernicus reanalysis puts about 109 kJ/cm² under the same path.</sub></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/images/argo-vs-hycom.png" alt="An Argo float's temperature profile compared with HYCOM"><br><sub><b>Argo against HYCOM.</b> The worst-fitting float during the storm: observed profile solid, model dashed, with bias and RMSE.</sub></td>
+    <td width="50%"><img src="docs/images/cold-wake-section.png" alt="Vertical temperature section along Amphan's track"><br><sub><b>The cold wake.</b> A section along the track after landfall, with D26 and D20 marked.</sub></td>
+    <td width="50%"><img src="docs/images/argo-vs-hycom.png" alt="An Argo float's temperature profile compared with HYCOM"><br><sub><b>Argo against HYCOM.</b> The worst-fitting float during the storm: observed profile solid, model dashed, with bias and RMSE.</sub></td>
   </tr>
 </table>
 

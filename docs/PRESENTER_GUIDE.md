@@ -351,7 +351,7 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 
 ## Likely judge questions
 
-Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 19 are Met, 13 Partly met and 7 Not met.
+Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 21 are Met, 12 Partly met and 6 Not met.
 
 | Question | Answer |
 | --- | --- |
