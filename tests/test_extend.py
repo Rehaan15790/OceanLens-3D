@@ -1,8 +1,9 @@
 """Round-6 features in the real page: the public plugin API (a variable and an instrument registered at runtime),
 importing every file in samples/ (markers appear, a click opens the profile), real-world file layouts (Argo GDAC
 multi-profile NetCDF, ERDDAP CSV with a units row, OceanGliders glider tables), the import dialog (new profiles are
-brought into view and opened), the log colour scale, the 3D isosurface, and server mode (the page served by
-server/serve.py lists the server's datasets)."""
+brought into view and opened), NetCDF-4 in the browser (netcdf4.js against the pipeline's nc4.py on every variable),
+the log colour scale, the 3D isosurface, and server mode (the page served by server/serve.py lists the server's
+datasets)."""
 import base64
 import datetime
 import json
@@ -23,7 +24,8 @@ ISO3D = "typeof iso3dStats === 'undefined'"
 SAMPLES = sorted(p for p in (REPO / 'samples').glob('*') if p.suffix.lower() in ('.nc', '.csv'))
 # profiles each sample must give (gliders: dives and climbs, not one profile per sample)
 SAMPLE_PROFILES = {'argo-5907328_prof.nc': 3, 'argo-amphan-samples.csv': 3, 'argo-erddap-2020-05-18.csv': 3,
-                   'bgc-argo-2902120-c227.nc': 1, 'ctd-synthetic-cast.csv': 1, 'glider-humpback504-2016-07-05.nc': 4,
+                   'bgc-argo-2902120-c227.nc': 1, 'bgc-argo-SD2902174_371.nc': 1, 'bgc-argo-SD2902275_072.nc': 1,
+                   'ctd-synthetic-cast.csv': 1, 'glider-humpback504-2016-07-05.nc': 4,
                    'glider-marlin505-2016-07-06.csv': 6}
 READ_SAMPLE = """(async()=>{{ const bin=atob('{b64}'), u8=new Uint8Array(bin.length);
     for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
@@ -465,6 +467,97 @@ class ImportSamples(AppTestCase):
             self.b.click(f'#userDataList button[data-id="{i}"]')
             self.b.pump(0.3)
         self.js("__ol.actions.setTime(0); __ol.actions.setVariable('temp')")
+        self.assertNoProblems()
+
+
+NC4_READ = """(async b64=>{ const s = atob(b64), u = new Uint8Array(s.length);
+  for(let i=0;i<s.length;i++) u[i] = s.charCodeAt(i);
+  let nc;
+  try { nc = await NetCDF4.parse(u.buffer); } catch(e){ return {error:e.message}; }
+  const vars = {};
+  for(const k of Object.keys(nc.vars)){
+    const v = nc.vars[k], r = nc.read(k);
+    vars[k] = {dims:v.dims, type:v.type, attrs:v.attrs,
+               data:v.type==='char' || v.type==='string' ? Array.from(r) : Array.from(r, x=>Number.isNaN(x) ? null : x)};
+  }
+  return {dims:nc.dims, vars}; })"""
+
+
+class NetCDF4InTheBrowser(AppTestCase):
+    """src/js/import/netcdf4.js reads what data-pipeline/nc4.py reads: the same variables, dimensions, values, strings
+    and attributes, in both HDF5 layouts of nc4_fixtures.py and in the two real BGC-Argo S-files in samples/."""
+    data_mode = 'real'
+
+    def files(self):
+        import nc4_fixtures as F
+        d, v, a, g = F.model_fixture()
+        out = {'model-classic': F.write_bytes(d, v, a, style='classic', groups=g),
+               'model-latest': F.write_bytes(d, v, a, style='latest', groups=g)}
+        d, v, a, kw = F.latest_fixture()
+        out['every-chunk-index'] = F.write_bytes(d, v, a, **kw)
+        for p in sorted((REPO / 'samples').glob('bgc-argo-SD*.nc')):
+            out[p.name] = p.read_bytes()
+        return out
+
+    def test_the_browser_reader_matches_the_pipeline_reader(self):
+        import numpy as np
+        import ncio
+        for name, data in self.files().items():
+            with self.subTest(file=name):
+                r = self.js(NC4_READ + f"('{base64.b64encode(data).decode()}')", await_promise=True)
+                self.assertNotIn('error', r, f"{name}: {r.get('error')}")
+                ds = ncio.read_bytes(data)
+                self.assertEqual(sorted(r['vars']), sorted(ds['vars']), name)
+                self.assertEqual({d['name']: d['size'] for d in r['dims']}, ds['dims'], name)
+                for k, pv in ds['vars'].items():
+                    jv = r['vars'][k]
+                    self.assertEqual(tuple(jv['dims']), tuple(pv['dims']), f'{name} {k}')
+                    if pv['data'].dtype.kind in 'US':
+                        self.assertEqual([x.strip() for x in jv['data']], [str(x).strip() for x in np.ravel(pv['data'])],
+                                         f'{name} {k}')
+                        continue
+                    js = np.array([np.nan if x is None else x for x in jv['data']], 'f8')
+                    np.testing.assert_allclose(js, np.ravel(np.asarray(pv['data'], 'f8')), rtol=1e-6, atol=1e-9,
+                                               err_msg=f'{name} {k}')
+                    for ak, av in pv['attrs'].items():
+                        ja = jv['attrs'].get(ak)
+                        if isinstance(av, str):
+                            self.assertEqual(ja, av, f'{name} {k}.{ak}')
+                        else:
+                            np.testing.assert_allclose(np.ravel(np.asarray(ja, 'f8')), np.ravel(np.asarray(av, 'f8')),
+                                                       err_msg=f'{name} {k}.{ak}')
+        self.assertNoProblems()
+
+    def test_s_files_import_with_their_parameter_modes(self):
+        # S files have no DATA_MODE: each parameter has its own (PARAMETER_DATA_MODE), and a delayed-mode parameter
+        # takes adjusted values only
+        import numpy as np
+        import ncio
+        cases = {'bgc-argo-SD2902275_072.nc': ('ARGO-2902275', '2020-05-08T18:30Z', 'D'),
+                 'bgc-argo-SD2902174_371.nc': ('ARGO-2902174', '2020-05-14T21:14Z', 'A')}
+        for name, (pid, time, mode) in cases.items():
+            with self.subTest(file=name):
+                path = REPO / 'samples' / name
+                r = self.js(sample_js(path, f"""const p = await OceanLens.readData({json.dumps(name)}, u8.buffer);
+                    if (p.error) return {{error:p.error}};
+                    const q = p._dataset.profiles[0];
+                    return {{format:p.format, label:p.formatLabel, warnings:p.warnings, id:q.id, time:q.time, mode:q.meta.mode,
+                      z:q.z, temp:q.vars.temp.map(x=>Number.isFinite(x) ? x : null),
+                      chl:q.vars.chl.filter(Number.isFinite).length}};"""), await_promise=True)
+                self.assertNotIn('error', r, f"{name}: {r.get('error')}")
+                self.assertEqual((r['format'], r['id'], r['time'], r['mode']), ('netcdf4', pid, time, mode))
+                self.assertIn('NetCDF-4', r['label'])
+                v = ncio.read(path)['vars']
+                adj = np.ravel(v['TEMP_ADJUSTED']['data'])
+                good = np.isin(np.ravel(v['TEMP_ADJUSTED_QC']['data'].view('S1') if v['TEMP_ADJUSTED_QC']['data'].dtype.kind == 'S'
+                                        else np.array(list(''.join(np.ravel(v['TEMP_ADJUSTED_QC']['data']))))), list('1258'))
+                want = np.sort(adj[np.isfinite(adj) & good]).astype('f8')
+                got = np.sort(np.array([x for x in r['temp'] if x is not None], 'f8'))
+                # every temperature kept is exactly a good TEMP_ADJUSTED value (float32 read as double on both sides;
+                # samples closer than 5 cm are merged, so a few fewer are kept)
+                self.assertTrue(np.isin(got, want).all(), f'{name}: a value not in TEMP_ADJUSTED')
+                self.assertGreaterEqual(len(got), len(want) - 5, f'{name}: temperatures kept')
+                self.assertGreater(r['chl'], 40, f'{name}: chlorophyll levels')
         self.assertNoProblems()
 
 

@@ -1,13 +1,15 @@
 # Sample files for "Add data"
 
 Drop any of these on the 3D view (or use "Add data") in real-data mode. All fall inside the map (6–22° N, 61–92° E).
-Four fall inside the analysis window (4–25 May 2020). For those the timeline moves to the nearest analysis after
+Six fall inside the analysis window (4–25 May 2020). For those the timeline moves to the nearest analysis after
 import. The Argo float from 2026 and the two 2016 gliders fall outside it, so "Show all times" switches on. In both
 cases the first new profile opens.
 
 | File | Real or synthetic | What it is |
 |---|---|---|
 | `bgc-argo-2902120-c227.nc` | Real | One BGC-Argo profile: float 2902120, cycle 227, 17 May 2020 11:30 UTC, 15.11° N 66.77° E (Arabian Sea). NetCDF-3 table straight from Ifremer ERDDAP, 172 rows: pressure, temperature, salinity, chlorophyll-a and dissolved oxygen, raw and adjusted, with QC flags. |
+| `bgc-argo-SD2902275_072.nc` | Real, unmodified | A BGC-Argo synthetic (S) profile file as the Argo GDAC serves it: **NetCDF-4** (HDF5, superblock version 2, deflated chunks). Float 2902275 (INCOIS), cycle 72, 8 May 2020 18:30 UTC, 21.08° N 67.14° E (Arabian Sea). Pressure, temperature, salinity, oxygen, nitrate, chlorophyll-a and backscatter, raw and adjusted, 1054 levels to 1997 dbar. No `DATA_MODE`: each parameter has its own in `PARAMETER_DATA_MODE` (here `DDDDRAR`: pressure, temperature, salinity and oxygen delayed, chlorophyll adjusted). 1 profile. |
+| `bgc-argo-SD2902174_371.nc` | Real, unmodified | The same kind of file: float 2902174 (INCOIS), cycle 371, 14 May 2020 21:14 UTC, 13.50° N 73.28° E (Arabian Sea, off the west coast of India). 1 profile. |
 | `argo-amphan-samples.csv` | Real (processed) | Three Argo profiles taken from this app's snapshot (`data/amphan-2020.json`), so already QC'd and on the app's levels: 2902120 cycle 227 (with chlorophyll and oxygen), 2902230 cycle 307 and 2902280 cycle 71 (Bay of Bengal, 15–17 May). One row per level; units in the headers. |
 | `argo-5907328_prof.nc` | Real, unmodified | An Argo GDAC multi-profile file as the GDAC serves it: float 5907328 (INCOIS, Argo India; an ARVOR float), cycles 2–4 (the file has no cycle 1), 14 Sep – 3 Oct 2026, 17.70–17.87° N 63.84–64.07° E (Arabian Sea), real-time data. Every profile is whole: 102–103 levels from 0.3–0.4 dbar down to 1980–2008 dbar, at most 26 dbar apart. Its `HISTORY_*` variables use the record dimension `N_HISTORY` with no records, as many real-time `<WMO>_prof.nc` files do. 3 profiles. |
 | `argo-erddap-2020-05-18.csv` | Real, unmodified | ERDDAP's default `.csv`, so a units row sits under the header: three Argo profiles in the Bay of Bengal (2902234 cycle 306, 18 May 04:27 UTC, 13.15° N 82.90° E; 2902285 cycle 327, 18 May 13:57, 15.85° N 82.93° E; 2902236 cycle 213, 19 May 01:07, 17.92° N 86.45° E), pressure, temperature and salinity with their QC flags, 475 rows. 3 profiles. |
@@ -34,6 +36,19 @@ queries are written unencoded: `"`, `>`, `<` and `|` must be percent-encoded whe
   The same file is in `data-pipeline/cache/bgc_sample_2902120_227.nc`, and its sha256 is in
   `data-pipeline/cache/manifest.json`. On import, only adjusted chlorophyll and oxygen with flags 1, 2, 5 or 8 are
   kept.
+- `bgc-argo-SD2902275_072.nc` and `bgc-argo-SD2902174_371.nc`: the Argo GDAC (Ifremer mirror), byte for byte,
+  downloaded on 2026-10-15. Both floats are in the snapshot; their adjusted chlorophyll and oxygen equal the values
+  the snapshot took from Ifremer ERDDAP (`ArgoFloats-synthetic-BGC`) at every common pressure, to float precision.
+
+  ```
+  https://data-argo.ifremer.fr/dac/incois/2902275/profiles/SD2902275_072.nc
+  https://data-argo.ifremer.fr/dac/incois/2902174/profiles/SD2902174_371.nc
+  ```
+
+  sha256 `46a433c47d546c57c2366bc075b9992323df71d828b58493dce14912bc3850f9` and
+  `a281bc1bacb2f87c3d129fdfe8772c9b26b3f477de481a9730c1e9952e00cc4e`. The data centres rewrite these files when
+  they reprocess a float, so a fresh download may differ. On import, each parameter uses its own data mode, and
+  adjusted chlorophyll and oxygen with flags 1, 2, 5 or 8 are kept.
 - `argo-amphan-samples.csv`: the Argo and BGC-Argo values in the snapshot (see `data-pipeline/README.md`).
 - `argo-5907328_prof.nc`: the Argo GDAC (Ifremer mirror), byte for byte. The GDAC rewrites this file as the float
   reports new cycles, so a fresh download will hold more profiles than this copy.

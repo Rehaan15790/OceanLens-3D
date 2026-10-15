@@ -15,7 +15,7 @@ const NetCDF3 = (()=>{
   // read the header and check every variable lies inside the file; data is read later, on request
   function parse(buffer){
     const u8 = new Uint8Array(buffer), dv = new DataView(buffer);
-    if(HDF5.every((b, i)=>u8[i]===b)) throw new Error('NetCDF-4 file: convert it to NetCDF-3 first (nccopy -k classic) or export it as CSV.');
+    if(HDF5.every((b, i)=>u8[i]===b)) throw new Error('This is a NetCDF-4 file: read it with NetCDF4.parse.');
     if(!(u8[0]===0x43 && u8[1]===0x44 && u8[2]===0x46) || ![1, 2, 5].includes(u8[3])) throw new Error('Not a NetCDF classic file.');
     const version = u8[3];
     let pos = 4;
@@ -128,39 +128,45 @@ const NetCDF3 = (()=>{
     }
     function read(k){
       const v = get(k), a = raw(k);
-      if(v.type==='char'){
-        const len = v.shape.length ? v.shape[v.shape.length-1] : a.length, out = [];
-        const dec = new TextDecoder('utf-8');
-        for(let i=0; i<a.length; i+=len) out.push(dec.decode(a.subarray(i, i+len)).replace(/\0+$/, '').trim());
-        return out;
-      }
-      // _Unsigned = "true" (NUG): signed integers that hold unsigned data, and so do their fill and valid values
-      const bits = {byte:8, short:16, int:32, int64:64}[v.type];
-      const unsigned = !!bits && String(v.attrs._Unsigned || '').trim().toLowerCase()==='true';
-      const stored = x=>unsigned && x < 0 ? x + 2**bits : x;
-      if(unsigned) for(let i=0; i<a.length; i++) a[i] = stored(a[i]);
-      const at = v.attrs, num = x=>(Array.isArray(x) ? x.map(Number) : x===undefined ? [] : [Number(x)]).map(stored);
-      const fills = num(at._FillValue).concat(num(at.missing_value));
-      if(!('_FillValue' in at) && DEFAULT_FILL[v.type]!==undefined) fills.push(stored(DEFAULT_FILL[v.type]));
-      const isFloat = v.type==='float' || v.type==='double';
-      const fill = x=>fills.some(f=>isFloat ? Math.abs(x - f) <= Math.abs(f)*1e-6 : x===f) || (isFloat && Math.abs(x) >= 9.96e36) || Number.isNaN(x);
-      // no valid range on times and coordinates, nor one that rejects every value: both are wrong metadata
-      // (ERDDAP glider tables give time, in seconds since 1970, valid_max 90000)
-      const coord = /\bsince\b/i.test(String(at.units || '')) || /^[TXY]$/i.test(String(at.axis || '')) || (v.dims.length===1 && v.dims[0]===k);
-      const vr = num(at.valid_range);
-      let lo = coord ? undefined : vr.length===2 ? vr[0] : num(at.valid_min)[0], hi = coord ? undefined : vr.length===2 ? vr[1] : num(at.valid_max)[0];
-      const out = x=>(lo!==undefined && x < lo) || (hi!==undefined && x > hi);
-      if((lo!==undefined || hi!==undefined) && a.some(x=>!fill(x)) && a.every(x=>fill(x) || out(x))) lo = hi = undefined;
-      const sc = at.scale_factor!==undefined ? Number(at.scale_factor) : 1, off = at.add_offset!==undefined ? Number(at.add_offset) : 0;
-      for(let i=0; i<a.length; i++){
-        const x = a[i];
-        if(fill(x) || out(x)) a[i] = NaN;
-        else a[i] = x*sc + off;
-      }
-      return a;
+      return v.type==='char' ? chars(v, a) : unpack(v, a, k);
     }
     const attr = (k, name)=>k ? (get(k).attrs[name]) : attrs[name];
     return {version, numrecs, dims, attrs, vars, read, raw, attr};
   }
-  return {parse};
+  // char values -> one string per row of the last dimension
+  function chars(v, a){
+    const len = v.shape.length ? v.shape[v.shape.length-1] : a.length, out = [];
+    const dec = new TextDecoder('utf-8');
+    for(let i=0; i<a.length; i+=len) out.push(dec.decode(a.subarray(i, i+len)).replace(/\0+$/, '').trim());
+    return out;
+  }
+  // raw numbers (a Float64Array, changed in place) -> values: _Unsigned, fill values, the valid range, scale and
+  // offset. The NetCDF-4 reader (netcdf4.js) uses it too, so both formats unpack by the same rules.
+  function unpack(v, a, k){
+    // _Unsigned = "true" (NUG): signed integers that hold unsigned data, and so do their fill and valid values
+    const bits = {byte:8, short:16, int:32, int64:64}[v.type];
+    const unsigned = !!bits && String(v.attrs._Unsigned || '').trim().toLowerCase()==='true';
+    const stored = x=>unsigned && x < 0 ? x + 2**bits : x;
+    if(unsigned) for(let i=0; i<a.length; i++) a[i] = stored(a[i]);
+    const at = v.attrs, num = x=>(Array.isArray(x) ? x.map(Number) : x===undefined ? [] : [Number(x)]).map(stored);
+    const fills = num(at._FillValue).concat(num(at.missing_value));
+    if(!('_FillValue' in at) && DEFAULT_FILL[v.type]!==undefined) fills.push(stored(DEFAULT_FILL[v.type]));
+    const isFloat = v.type==='float' || v.type==='double';
+    const fill = x=>fills.some(f=>isFloat ? Math.abs(x - f) <= Math.abs(f)*1e-6 : x===f) || (isFloat && Math.abs(x) >= 9.96e36) || Number.isNaN(x);
+    // no valid range on times and coordinates, nor one that rejects every value: both are wrong metadata
+    // (ERDDAP glider tables give time, in seconds since 1970, valid_max 90000)
+    const coord = /\bsince\b/i.test(String(at.units || '')) || /^[TXY]$/i.test(String(at.axis || '')) || (v.dims.length===1 && v.dims[0]===k);
+    const vr = num(at.valid_range);
+    let lo = coord ? undefined : vr.length===2 ? vr[0] : num(at.valid_min)[0], hi = coord ? undefined : vr.length===2 ? vr[1] : num(at.valid_max)[0];
+    const out = x=>(lo!==undefined && x < lo) || (hi!==undefined && x > hi);
+    if((lo!==undefined || hi!==undefined) && a.some(x=>!fill(x)) && a.every(x=>fill(x) || out(x))) lo = hi = undefined;
+    const sc = at.scale_factor!==undefined ? Number(at.scale_factor) : 1, off = at.add_offset!==undefined ? Number(at.add_offset) : 0;
+    for(let i=0; i<a.length; i++){
+      const x = a[i];
+      if(fill(x) || out(x)) a[i] = NaN;
+      else a[i] = x*sc + off;
+    }
+    return a;
+  }
+  return {parse, unpack, chars, DEFAULT_FILL};
 })();

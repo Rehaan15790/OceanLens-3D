@@ -39,12 +39,14 @@ async function readData(name, data){
   try {
     const u8 = typeof data==='string' ? null : new Uint8Array(data);
     const kind = u8 ? sniffFormat(u8) : 'text';
-    if(kind==='hdf5') throw new Error('NetCDF-4 file: convert it to NetCDF-3 first (nccopy -k classic) or export it as CSV.');
-    if(kind==='netcdf3'){
-      const nc = NetCDF3.parse(u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength));
+    if(kind==='netcdf3' || kind==='hdf5'){
+      // NetCDF-4 is HDF5: its own reader, the same object, so the same layouts are recognised in both formats
+      const buf = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength);
+      const nc = kind==='hdf5' ? await NetCDF4.parse(buf) : NetCDF3.parse(buf);
       const f = bestFormat('netcdf', nc, name);
       if(!f) throw new Error('This NetCDF file is not a layout the app reads (Argo profile, EGO glider, ERDDAP table or CF profiles). Export it as CSV.');
-      return finishParsed(out, 'netcdf3', f.label, f.read(nc, {name}));
+      return finishParsed(out, kind==='hdf5' ? 'netcdf4' : 'netcdf3', f.label + (kind==='hdf5' ? ' (NetCDF-4)' : ''),
+                          f.read(nc, {name}));
     }
     const text = typeof data==='string' ? data : new TextDecoder('utf-8').decode(u8);
     if(/^\s*[{[]/.test(text)){

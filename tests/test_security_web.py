@@ -20,6 +20,7 @@ from helpers import AppTestCase, REPO, Browser, default_build, open_app
 from cdp import file_url
 
 sys.path.insert(0, str(REPO))          # for `import build` in the embedding tests
+sys.path.insert(0, str(REPO / 'data-pipeline'))      # nc4_fixtures, for crafted NetCDF-4 files
 
 IMG = '<img src=x onerror=window.__pwn=1>'
 SVG = '"><svg onload=window.__pwn=1>'
@@ -261,7 +262,8 @@ class ParserLimits(AppTestCase):
     """Legitimate files keep working (the fixes below are only worth having if they do)."""
     SAMPLES = {'argo-5907328_prof.nc': ('netcdf3', 3), 'argo-amphan-samples.csv': ('csv', 3), 'argo-erddap-2020-05-18.csv': ('csv', 3),
                'bgc-argo-2902120-c227.nc': ('netcdf3', 1), 'ctd-synthetic-cast.csv': ('csv', 1),
-               'glider-humpback504-2016-07-05.nc': ('netcdf3', 4), 'glider-marlin505-2016-07-06.csv': ('csv', 6)}
+               'glider-humpback504-2016-07-05.nc': ('netcdf3', 4), 'glider-marlin505-2016-07-06.csv': ('csv', 6),
+               'bgc-argo-SD2902174_371.nc': ('netcdf4', 1), 'bgc-argo-SD2902275_072.nc': ('netcdf4', 1)}
 
     @classmethod
     def setUpClass(cls):
@@ -298,6 +300,87 @@ class DamagedFiles(Throwaway):
             return out; })(FILES)""".replace('FILES', json.dumps(files)), await_promise=True, timeout=120)
         self.assertEqual(r['threw'], [])
         self.assertLess(r['slowest'], 5000, 'one damaged file took %.0f ms' % r['slowest'])
+
+
+# =============================================================================================================
+class HostileHDF5(Throwaway):
+    """NetCDF-4 (HDF5) files crafted against netcdf4.js: each ends quickly in a message, without a large allocation."""
+
+    @staticmethod
+    def nc4(vars, dims=None):
+        import numpy as np  # noqa: F401  (nc4_fixtures needs numpy)
+        import nc4_fixtures as F
+        return F.write_bytes(dims or {'x': 1000}, vars)
+
+    def expect(self, data, pattern, ms=3000):
+        r = self.read('hostile.nc', data)
+        self.assertTrue(r['error'] and re.search(pattern, r['error']), r)
+        self.assertLess(r['ms'], ms, f"took {r['ms']} ms")
+        return r
+
+    # attack: one deflated chunk of 64 MiB of zeros (about 64 KB stored) for a variable of 1000 bytes
+    def test_a_decompression_bomb_stops_at_the_chunk_size(self):
+        import zlib
+        import numpy as np
+        bomb = zlib.compress(b'\0' * (64 << 20), 9)
+        data = self.nc4({'v': {'dims': ('x',), 'dtype': 'i1', 'data': np.zeros(1000, 'i1'), 'chunks': (1000,),
+                               'deflate': 1, '_raw_chunks': {(0,): bomb}, 'attrs': {}}})
+        self.expect(data, 'inflates past')
+
+    # attack: a dataspace that declares 10^12 or 2^62 values for a variable a few bytes long
+    def test_declared_sizes_cannot_demand_gigabytes(self):
+        import numpy as np
+        for dims in ([1 << 20, 1 << 20], [(1 << 62) + 3]):
+            data = self.nc4({'v': {'dims': ('x',), 'data': np.zeros(4), 'attrs': {}, '_dims': dims}}, {'x': 4})
+            self.expect(data, 'too large|more values|more data|not plausible|outside|ends inside')
+
+    # attack: 40 variables whose data addresses all point at the same 400 KB: 16 MB of values from a 400 KB file
+    def test_variables_that_share_bytes_are_refused(self):
+        import numpy as np
+        n = 50000
+        vars = {'v00': {'dims': ('x',), 'data': np.arange(n, dtype='f8'), 'attrs': {}}}
+        for k in range(1, 40):
+            vars[f'v{k:02d}'] = {'dims': ('x',), 'data': np.zeros(n), 'attrs': {}, 'unallocated': True}
+        data = bytearray(self.nc4(vars, {'x': n}))
+        layout = bytes([3, 1]) + b'\xff' * 8 + (n * 8).to_bytes(8, 'little')
+        first = data.index(bytes([3, 1]), 96)
+        while data[first + 2:first + 10] == b'\xff' * 8:                    # the first variable that has data
+            first = data.index(bytes([3, 1]), first + 1)
+        addr = data[first + 2:first + 10]
+        k = data.find(layout)
+        while k >= 0:
+            data[k + 2:k + 10] = addr
+            k = data.find(layout, k + 1)
+        self.expect(bytes(data), 'claim more data')
+
+    # attack: a B-tree node whose child is itself, and an object header continuation block that continues itself
+    def test_loops_in_the_file_structure_are_refused(self):
+        import numpy as np
+        a = np.arange(30 * 40, dtype='f8').reshape(30, 40)
+        data = bytearray(self.nc4({'v': {'dims': ('y', 'x'), 'data': a, 'chunks': (3, 4), 'btree_leaf': 4, 'attrs': {}}},
+                                  {'y': 30, 'x': 40}))
+        k = 0
+        while True:
+            k = data.index(b'TREE', k + 1)
+            if data[k + 4] == 1 and data[k + 5] >= 1:
+                break
+        data[k + 8 + 16 + 8 + 24:k + 8 + 16 + 8 + 32] = k.to_bytes(8, 'little')
+        self.expect(bytes(data), 'loop')
+        data = bytearray(self.nc4({'v': {'dims': ('x',), 'data': np.arange(3.0), 'continuation': True,
+                                         'attrs': {'units': 'm', 'long_name': 'x'}}}, {'x': 3}))
+        p = data.index(b'\x10\x00\x10\x00\x00\x00\x00\x00')
+        addr, size = int.from_bytes(data[p + 8:p + 16], 'little'), int.from_bytes(data[p + 16:p + 24], 'little')
+        first = int.from_bytes(data[addr + 2:addr + 4], 'little')
+        data[addr:addr + 8] = (0x10).to_bytes(2, 'little') + first.to_bytes(2, 'little') + b'\0' * 4
+        data[addr + 8:addr + 24] = addr.to_bytes(8, 'little') + size.to_bytes(8, 'little')
+        self.expect(bytes(data), 'loop')
+
+    # a filter the browser cannot undo is named, not guessed at
+    def test_unsupported_filters_are_named(self):
+        import numpy as np
+        data = self.nc4({'v': {'dims': ('x',), 'data': np.zeros(8), 'chunks': (8,), 'attrs': {},
+                               '_filters': [(32015, 'zstd', [3])]}}, {'x': 8})
+        self.expect(data, 'filter 32015')
 
 
 # =============================================================================================================

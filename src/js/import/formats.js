@@ -123,6 +123,21 @@
       const lat = num(nc, 'LATITUDE'), lon = num(nc, 'LONGITUDE');
       const posQc = flags(nc, 'POSITION_QC', nP), tQc = flags(nc, 'JULD_QC', nP), mode = flags(nc, 'DATA_MODE', nP);
       const dir = flags(nc, 'DIRECTION', nP);
+      // B and S files have no DATA_MODE but a mode per parameter: PARAMETER_DATA_MODE, in STATION_PARAMETERS order
+      const nPar = (nc.dims.find(d=>d.name==='N_PARAM') || {}).size || 0;
+      const params = !mode && nPar ? strs(nc, 'STATION_PARAMETERS') : null;
+      const pmode = params ? flags(nc, 'PARAMETER_DATA_MODE', nP*nPar) : null;
+      const paramMode = (p, n)=>{
+        if(mode) return mode[p];
+        const i = params && pmode && params.length===nP*nPar ? params.slice(p*nPar, (p+1)*nPar).indexOf(n) : -1;
+        return i >= 0 ? pmode[p*nPar + i] : null;
+      };
+      // a profile's mode: delayed when its core parameters all are, adjusted when any is, else real time
+      const profileMode = p=>{
+        if(mode) return mode[p];
+        const m = ['PRES', 'TEMP', 'PSAL'].map(n=>paramMode(p, n)).filter(Boolean);
+        return m.length && m.every(x=>x==='D') ? 'D' : m.some(x=>x==='A' || x==='D') ? 'A' : 'R';
+      };
       const A = {}, Q = {};
       ['PRES', ...Object.values(ARGO_NAMES)].forEach(n=>{
         A[n] = num(nc, n); A[n+'_A'] = num(nc, n+'_ADJUSTED');
@@ -136,14 +151,16 @@
         if((posQc && !GOOD.has(posQc[p])) || (tQc && !GOOD.has(tQc[p])) || !Number.isFinite(t[p])
           || !Number.isFinite(lat[p]) || !Number.isFinite(lon[p])){ dropped++; continue; }
         const cut = a=>a ? a.slice(p*nL, (p+1)*nL) : null;
-        const m = mode ? mode[p] : 'R', delayed = m==='A' || m==='D';
+        const m = profileMode(p);
+        // a parameter in delayed or adjusted mode uses adjusted values only (its own mode in B and S files)
+        const delayed = n=>{ const x = paramMode(p, n) || m; return x==='A' || x==='D'; };
         const col = (key, n, adjOnly)=>{
           const r = cut(A[n]), rq = cut(Q[n]), a = cut(A[n+'_A']), aq = cut(Q[n+'_A']);
           return Array.from({length:nL}, (_,k)=>pick(key, r, rq, a, aq, k, adjOnly && !!a));
         };
-        const pres = col(null, 'PRES', delayed), vals = {};
+        const pres = col(null, 'PRES', delayed('PRES')), vals = {};
         for(const [key, n] of Object.entries(ARGO_NAMES)){
-          if(A[n] || A[n+'_A']) vals[key] = col(key, n, key==='chl' || key==='oxy' || delayed);
+          if(A[n] || A[n+'_A']) vals[key] = col(key, n, key==='chl' || key==='oxy' || delayed(n));
           if(LABEL[key] && !A[n+'_A'] && anyFinite(vals[key])) raw[key] = true;
         }
         const z = pres.map(x=>Number.isFinite(x) ? depthFromPressure(x, lat[p]) : NaN);

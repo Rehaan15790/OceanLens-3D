@@ -473,13 +473,15 @@
     </ul>
 
     <h3>Add your own data</h3>
-    <p>Add data (or a file dropped on the 3D view) reads CSV or tab-separated text and NetCDF-3 files: Argo profile
-      files, Ifremer EGO glider files, ERDDAP tabledap downloads and CF profile data. Profiles appear as markers, follow
-      the timeline (within 1.5 days of each analysis, unless you show all times) and open in the profile panel against
-      the model column. Files are read in this browser and never uploaded. NetCDF-4 files need converting to
-      NetCDF-3 first (for example <code>nccopy -k classic</code>) or exporting as CSV.</p>
+    <p>Add data (or a file dropped on the 3D view) reads CSV or tab-separated text and NetCDF files, NetCDF-3 or
+      NetCDF-4: Argo profile files (core, B and S files from the Argo data centres), Ifremer EGO glider files, ERDDAP
+      tabledap downloads and CF profile data. Profiles appear as markers, follow the timeline (within 1.5 days of each
+      analysis, unless you show all times) and open in the profile panel against the model column. Files are read in
+      this browser and never uploaded. NetCDF-4 files compressed with filters other than deflate and shuffle (szip,
+      zstd) are not read; convert them with <code>nccopy -k classic</code> or export them as CSV.</p>
     <p>The <code>samples/</code> folder next to this file has files to try: real Argo and BGC-Argo profiles (an
-      Argo data centre profile file, ERDDAP downloads as NetCDF-3 and CSV, and samples from this snapshot), two real
+      Argo data centre profile file, two BGC-Argo synthetic profile files in NetCDF-4 as the Argo data centres serve
+      them, ERDDAP downloads as NetCDF-3 and CSV, and samples from this snapshot), two real
       Bay of Bengal glider files from 2016, and a made-up CTD cast for testing, which is not real data.
       <code>samples/README.md</code> says which is which.</p>
 
@@ -528,10 +530,11 @@
       <ul class="about-bullets">
         <li>Comma-, tab- or semicolon-separated text with one row per sample: latitude, longitude, time, depth or
           pressure, and any of temperature, salinity, chlorophyll, oxygen and current (eastward and northward). Surface currents need no depth.</li>
-        <li>NetCDF-3 (.nc): Argo profile files, Ifremer EGO glider files, ERDDAP tabledap downloads, CF profile data.</li>
+        <li>NetCDF-3 or NetCDF-4 (.nc): Argo profile files (core, B and S), Ifremer EGO glider files, ERDDAP tabledap
+          downloads, CF profile data.</li>
       </ul>
-      <p class="field-note">NetCDF-4 files need converting first: convert them to NetCDF-3 (for example
-        <code>nccopy -k classic</code>) or export them as CSV.</p>
+      <p class="field-note">NetCDF-4 compressed with szip or zstd is not read: convert it (for example
+        <code>nccopy -k classic</code>) or export it as CSV.</p>
     </div>
 
     <div id="importReview" hidden>
@@ -605,6 +608,7 @@
 <script src="js/panels.js"></script>
 <script src="js/import/csv.js"></script>
 <script src="js/import/netcdf3.js"></script>
+<script src="js/import/netcdf4.js"></script>
 <script src="js/import/import.js"></script>
 <script src="js/import/formats.js"></script>
 <script src="js/import-ui.js"></script>
