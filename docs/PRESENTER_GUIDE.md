@@ -12,7 +12,8 @@ OceanLens 3D is a browser-based 3D viewer for ocean model output and Argo float 
 
 - It is a student prototype. It is not affiliated with or endorsed by INCOIS or the Ministry of Earth Sciences.
 - The real-data case is a **hindcast** of Cyclone Amphan (May 2020). There are no forecasts and no live data.
-- HYCOM assimilates Argo, so the model–Argo comparison is a **consistency check**, not independent validation.
+- Both models (HYCOM and GLORYS) assimilate Argo, so the model–Argo comparison is a **consistency check**, not
+  independent validation.
 
 **Who it is for:**
 
@@ -44,7 +45,7 @@ Double-click `OceanLens3D.html`. That one file holds the app, three.js, the Amph
 
 | Mode | What it shows | Labelled as |
 | --- | --- | --- |
-| Real data: Amphan 2020 | 8 HYCOM GOFS 3.1 analyses (12:00 UTC, three days apart), 206 QC'd Argo profiles from 70 floats, BGC-Argo chlorophyll (36 profiles, 13 floats) and oxygen (24 profiles, 9 floats), ETOPO1 relief, the IBTrACS track | "Real data" badge, real dates |
+| Real data: Amphan 2020 | Two models, switched under **Model** (or `M`): 8 HYCOM GOFS 3.1 analyses (12:00 UTC, three days apart) and the Copernicus Marine GLORYS12V1 daily means of the same days; 206 QC'd Argo profiles from 70 floats, BGC-Argo chlorophyll (36 profiles, 13 floats) and oxygen (24 profiles, 9 floats), ETOPO1 relief, the IBTrACS track | "Real data" badge, real dates |
 | Synthetic demo | Analytic fields with synthetic floats and gliders, including a float with a deliberate bad salinity sample | Floats SYN-F01…, gliders SYN-G1…, "demo days" not dates |
 
 **Optional server mode:** `python server/serve.py` serves the same app at `http://127.0.0.1:8080/`. A **Data source** dropdown then appears at the top of the left panel, listing the server's datasets. Only show this if a judge asks about deployment.
@@ -58,7 +59,7 @@ flowchart TB
   H["<b>Header</b><br/>Brand · live readout of the variable, its range and mean · Real data / Synthetic demo toggle<br/>Add data · Guided tour · About the data · panel toggles at both ends"]
   subgraph Body[" "]
     direction LR
-    L["<b>Left: controls</b><br/>Variable: keys 1–5<br/>View: keys U L D I O<br/>Depth slider (Depth slice)<br/>Value slider, D20 / D26<br/>Overlays: floats, misfit colours,<br/>gliders, track, current streaks, grid<br/>Your data: imported files<br/>View settings: opacity, depth stretch, colour scale"]
+    L["<b>Left: controls</b><br/>Model: HYCOM / GLORYS, key M<br/>Variable: keys 1–5<br/>View: keys U L D I O<br/>Depth slider (Depth slice)<br/>Value slider, D20 / D26<br/>Overlays: floats, misfit colours,<br/>gliders, track, current streaks, grid<br/>Your data: imported files<br/>View settings: opacity, depth stretch, colour scale"]
     V["<b>3D view (centre)</b><br/>Top: data badge, context, north arrow<br/>Drag to orbit, scroll to zoom<br/>Hover anywhere for a value readout<br/>Click a float: profile panel<br/>Click the track: track panel<br/>Colour key: always matches the view<br/>Bottom: Section menu, Reset view, Save PNG, Shortcuts<br/>Drop a CSV or NetCDF file to import"]
     R["<b>Right: analysis</b><br/>Start here: tour, track, worst float,<br/>validation table (bias, RMSE by depth)<br/>Profile: observed vs model, tabs, cards, QC badge<br/>Section: distance–depth chart, D26 and D20 lines<br/>Track: heat before/after, IMD and JTWC winds, fixes"]
     L --> V --> R
@@ -82,7 +83,7 @@ Pick **what** to look at with a Variable button (keys `1`–`5`) and **how** to 
 | `2` | Salinity | PSU | The Bay is far fresher than the Arabian Sea at the surface (about 33 vs 36 PSU), fed by the Ganges–Brahmaputra |
 | `3` | Current speed | m/s | Colour shows speed; white streaks and arrows show direction. The East India Coastal Current runs north at up to about 0.8 m/s. Streak speed is illustrative |
 | `4` | Cyclone heat potential (TCHP) | kJ/cm² | Heat stored in water above 26 °C, down to the 26 °C isotherm (D26), computed in the app from temperature and salinity. The white contour marks 50 kJ/cm², a common threshold for intensification. A 2-D map, so the View buttons are hidden |
-| `5` | Chlorophyll | mg/m³ | **Real mode:** HYCOM has no chlorophyll, so there is no map; the 36 BGC-Argo profiles show in the profile panel. **Synthetic mode:** a chlorophyll field is drawn, on a log scale |
+| `5` | Chlorophyll | mg/m³ | **Real mode:** neither model has chlorophyll, so there is no map; the 36 BGC-Argo profiles show in the profile panel. **Synthetic mode:** a chlorophyll field is drawn, on a log scale |
 
 ### The five views
 
@@ -169,8 +170,8 @@ Imported data shows in **Real data mode only**. It is listed under **Your data**
 **Formats read:**
 
 - CSV, tab- or semicolon-separated text, one row per sample (ERDDAP's units row is handled).
-- NetCDF-3 (.nc): Argo GDAC profile files, Ifremer EGO glider files, ERDDAP tabledap downloads, CF profile data. Classic, 64-bit offset and CDF-5 variants all work.
-- **Not NetCDF-4.** Convert first with `nccopy -k classic`, or export as CSV. Expect this question.
+- NetCDF-3 or NetCDF-4 (.nc): Argo GDAC profile files (core, B and S files), Ifremer EGO glider files, ERDDAP tabledap downloads, CF profile data. Classic, 64-bit offset and CDF-5 variants all work, and NetCDF-4 in both HDF5 layouts.
+- **NetCDF-4 is read in the browser** by the project's own reader. Only files compressed with szip or zstd need converting (`nccopy -k classic`). Demo it with `samples/bgc-argo-SD2902275_072.nc`, a BGC-Argo S-file exactly as the Argo data centre serves it.
 
 **Quality control on import:** only QC flags 1, 2, 5 and 8 are kept; for BGC data, only adjusted chlorophyll and oxygen. Glider trajectories are split into individual dives and climbs.
 
@@ -215,13 +216,13 @@ One Python file (standard library + numpy) serves the app at `http://127.0.0.1:8
 | OGC WCS 2.0.1 | `/wcs` | Raw subsets as CF NetCDF-3 or CSV |
 | OPeNDAP DAP2 | `/opendap/…` | Hyperslabs for netCDF-C, Python and other scientific clients |
 
-It also loads **CF NetCDF-3 model files** with `--netcdf`, so other model output can be served the same way.
+It also loads **CF NetCDF-3 or NetCDF-4 model files** with `--netcdf`, so other model output can be served the same way.
 
 **Limits to admit if asked:**
 
 - The 3D view still draws only the snapshot built into the page; model files given to the server reach other clients only through REST, WMS, WCS and OPeNDAP.
 - No authentication, TLS or rate limiting of its own; it belongs behind an institution's reverse proxy.
-- It reads NetCDF-3; NetCDF-4 must be converted first.
+- It reads NetCDF-3 and NetCDF-4 model files, whole: for large files use the pipeline, which reads parts of them.
 
 ## Shortcuts, the guided tour and export
 
@@ -233,6 +234,7 @@ It also loads **CF NetCDF-3 model files** with `--netcdf`, so other model output
 | `U` `L` `D` `I` `O` | Surface, all depth levels, depth slice, depth of a value, isosurface (3D) |
 | `[` `]` | Depth slice up / down |
 | `Space` | Play / pause the analyses |
+| `M` | Switch the model: HYCOM or GLORYS (real data) |
 | `S` | Draw a section (drag across the sea) |
 | `P` | Start / end the guided tour |
 | `←` `→` | Previous / next tour step |
@@ -255,7 +257,9 @@ Eight steps, each setting the variable, view and time for you, with a caption of
 5. **Salinity:** fresh Bay of Bengal vs salty Arabian Sea.
 6. **Heat before Amphan:** heat under the future path, track panel opens.
 7. **Amphan's cold wake:** the section along the track after landfall.
-8. **Argo against HYCOM:** the worst-fitting float during the storm.
+8. **Argo against the model:** the worst-fitting float during the storm.
+
+Every caption names and quotes the model on screen: run the tour under GLORYS and the numbers are GLORYS's.
 
 Controls on the strip: **Back**, **Next**, **Autoplay** (about 3.5 words a second plus 3 s per step, at least 8 s), **End tour**. Ending the tour restores your previous view.
 
@@ -276,15 +280,15 @@ A Python pipeline packs public data into one snapshot; a build script inlines it
 
 ```mermaid
 flowchart LR
-  SRC["<b>Public data</b><br/>HYCOM GOFS 3.1<br/>Argo and BGC-Argo<br/>ETOPO1 relief<br/>IBTrACS v04r01"]
+  SRC["<b>Public data</b><br/>HYCOM GOFS 3.1<br/>Copernicus GLORYS12V1<br/>Argo and BGC-Argo<br/>ETOPO1 relief<br/>IBTrACS v04r01"]
   PIPE["<b>Data pipeline</b><br/>build_snapshot.py<br/>cached downloads, QC<br/>0.5° cells, 11 levels<br/>Python + numpy"]
   SNAP["<b>Snapshot</b><br/>data/amphan-2020.json<br/>8 analyses + Argo<br/>profiles + track<br/>same bytes every run"]
   BUILD["<b>build.py</b><br/>inlines src/ JS, CSS<br/>three.js r128 and the<br/>snapshot: one file<br/>standard library only"]
   APP["<b>OceanLens3D.html</b><br/>runs in any WebGL<br/>browser, offline<br/>3D scene + panels<br/>imports files locally"]
-  SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3 models"]
+  SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3/4 models"]
   CLI["<b>Other clients</b><br/>GIS tools via WMS<br/>netCDF-C via OPeNDAP<br/>scripts via REST"]
-  FILES["<b>Your files</b><br/>CSV, NetCDF-3<br/>read in the browser,<br/>never uploaded"]
-  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>280 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
+  FILES["<b>Your files</b><br/>CSV, NetCDF-3, NetCDF-4<br/>read in the browser,<br/>never uploaded"]
+  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>315 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
   SRC --> PIPE --> SNAP --> BUILD --> APP
   SNAP --> SRV --> CLI
   FILES --> APP
@@ -299,13 +303,13 @@ flowchart LR
 
 ## A 1-minute pitch
 
-For an elevator pitch or the opening of a longer slot. Start with the app open on the heat-potential map (`4`) at 13 May, the track showing. One click.
+For an elevator pitch or the opening of a longer slot. Start with the app open on the heat-potential map (`4`) at 13 May, the track showing. One click and one key.
 
-> Forecasters compare ocean model output with what Argo floats measured by switching between desktop software and 2D map portals. OceanLens 3D puts both in one 3D scene: HYCOM temperature, salinity, currents and cyclone heat potential down to 1000 metres, with 206 real Argo profiles placed where and when they were measured.
+> Forecasters compare ocean model output with what Argo floats measured by switching between desktop software and 2D map portals. OceanLens 3D puts both in one 3D scene: temperature, salinity, currents and cyclone heat potential down to 1000 metres from two models, HYCOM and Copernicus GLORYS, with 206 real Argo profiles placed where and when they were measured.
 >
-> This is Cyclone Amphan, May 2020. Before it, about 85 kilojoules per square centimetre of heat under its path. *(Click a float near the track.)* Every float is compared with the model at the same place and time, with bias and RMSE.
+> This is Cyclone Amphan, May 2020. Before it, HYCOM puts about 85 kilojoules per square centimetre of heat under its path. *(Press M.)* GLORYS says 109: two good models, a quarter apart. Every float is compared with each model at the same place and time.
 >
-> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 280 automated tests check the rest.
+> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 315 automated tests check the rest.
 
 ## A 3-minute walkthrough
 
@@ -316,10 +320,11 @@ The core of the 7-minute script below. Start in **Real data** mode, temperature,
 | 0:00 | Show the splash, click **Enter** | "One HTML file: no install, no server, no internet. HYCOM and Argo for Cyclone Amphan, May 2020, as a hindcast." |
 | 0:20 | Drag to orbit | "Arabian Sea and Bay of Bengal, surface to 1000 m." |
 | 0:40 | `I`, click **D26** | "How deep the 26 °C water goes: the heat a cyclone can feed on." |
-| 1:00 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path, far above the 50 mark. IMD winds went from 55 to 120 kt in 24 h." |
-| 1:40 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler: the cold wake." |
-| 2:10 | `1`, close the section, **Compare the worst-fitting float** | "Argo solid, HYCOM dashed, matched in place and time, with bias and RMSE. HYCOM assimilates Argo, so this is a consistency check." |
-| 2:40 | Point at **Add data**, then stop | "Your own Argo, glider or CTD files open here, in the browser. The same data is served over WMS, WCS and OPeNDAP, and new sensors plug in through one API." |
+| 1:00 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path in HYCOM, far above the 50 mark. IMD winds went from 55 to 120 kt in 24 h." |
+| 1:25 | `M`, then `M` again | "Copernicus GLORYS, the reanalysis this problem statement lists, read from its own NetCDF-4 files: about 109 under the same path. The models differ by a quarter; that spread is the uncertainty." |
+| 1:50 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler: the cold wake." |
+| 2:15 | `1`, close the section, **Compare the worst-fitting float** | "Argo solid, HYCOM dashed, matched in place and time, with bias and RMSE. Both models assimilate Argo, so this is a consistency check." |
+| 2:40 | Point at **Add data**, then stop | "Your own Argo, glider or CTD files open here, in the browser, NetCDF-4 included. The same data is served over WMS, WCS and OPeNDAP, and new sensors plug in through one API." |
 
 ## A 7-minute demo script
 
@@ -334,10 +339,11 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 | 2:00 | `O` | "The same isotherm as a true 3D surface, from marching cubes." |
 | 2:20 | `2`, `U` | "Salinity: the Bay is much fresher than the Arabian Sea, from the rivers." |
 | 2:40 | `3`, `D` at 0 m | "Currents: colour is speed, streaks and arrows show direction. The coastal current runs north." |
-| 3:10 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path, far above the 50 mark. Rapid intensification followed: IMD 55 to 120 kt in 24 h." |
+| 3:10 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path in HYCOM, far above the 50 mark. Rapid intensification followed: IMD 55 to 120 kt in 24 h." |
+| 3:40 | `M`, then `M` again | "The Copernicus GLORYS reanalysis, the product this problem statement lists, read from Copernicus Marine's own NetCDF-4 files: about 109 under the same path. Two good models, a quarter apart: that is the uncertainty a forecaster should see." |
 | 4:00 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler and the heat is down to about 52: the cold wake." |
-| 4:50 | `1`, close the section, **Compare the worst-fitting float** | "Argo solid, HYCOM dashed, matched in place and time, with bias, RMSE and a QC check. HYCOM assimilates Argo, so this is a consistency check." |
-| 5:40 | **Add data** → `samples/argo-erddap-2020-05-18.csv` | "A real ERDDAP download, read in the browser, never uploaded. Bad samples dropped by QC; it opens against the model." |
+| 4:50 | `1`, close the section, **Compare the worst-fitting float**, then `M` | "Argo solid, HYCOM dashed, matched in place and time, with bias, RMSE and a QC check. *(M)* The same float against GLORYS. Both assimilate Argo, so this is a consistency check." |
+| 5:40 | **Add data** → `samples/bgc-argo-SD2902275_072.nc` | "A BGC-Argo file exactly as the Argo data centre serves it, NetCDF-4, read in the browser and never uploaded. Delayed-mode values only, QC applied; it opens against the model, with chlorophyll and oxygen." |
 | 6:20 | *(optional)* Synthetic demo, then back | "A synthetic ocean with known behaviour, including a float with a bad salinity sample that QC flags." |
 | 6:40 | **Save PNG**; mention the server and plugins | "Exports for reports. The same data is served over REST, WMS, WCS and OPeNDAP, and new instruments plug in through one API." |
 
@@ -349,26 +355,27 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 
 | Question | Answer |
 | --- | --- |
-| Is this live or forecast data? | No. It is a hindcast of Amphan (May 2020) from 8 HYCOM analyses. Live ingestion is on the roadmap. |
-| Is the model validated against Argo? | It is compared, not independently validated: HYCOM assimilates Argo, so it is a consistency check. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
+| Is this live or forecast data? | No. It is a hindcast of Amphan (May 2020) from 8 HYCOM analyses and the GLORYS daily means of the same days. Live ingestion is on the roadmap. |
+| Why two models, and which is right? | Neither is "right": they are two estimates of the same ocean. GLORYS fits the floats better here (temperature RMSE 0.22 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
+| Is the model validated against Argo? | It is compared, not independently validated: both models assimilate Argo, so it is a consistency check. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
 | Which browsers, and how fast? | Chrome and Edge run the automated tests; Firefox was checked by hand; Safari is untested. On a desktop GPU it is ready in under half a second and far above 60 fps; with software rendering, 18–35 fps (`docs/TESTING.md`). |
 | Can INCOIS use it? What is the licence? | The code is public to read but all rights reserved, so it cannot be copied during the competition. Using or hosting it needs written permission from the team (README, Copyright and licence). |
 | Is it real volume rendering? | Stacked translucent layers plus a marching-cubes isosurface, not ray-marched volume rendering. |
 | Why no React or Vue? | Deliberate: plain JavaScript and three.js keep it to one offline file with no build chain or CDN. Marked Not met against the "modern frameworks" wording. |
 | Why only to 1000 m? | The snapshot keeps 11 levels from 0 to 1000 m; the sea floor below is drawn, compressed 12×, with no data. |
 | Why are the coastlines blocky? | Fields are on 0.5° cells; features smaller than that are smoothed. |
-| Can it read NetCDF-4? | Not yet. Convert with `nccopy -k classic` or export CSV. NetCDF-3 (classic, 64-bit offset, CDF-5) is read in the browser. |
-| Why no chlorophyll map in real mode? | HYCOM has no chlorophyll. The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
-| Does it work on INCOIS or Copernicus data? | Not tried. The INCOIS LAS and Copernicus GLORYS are Not met; Copernicus files are NetCDF-4/Zarr and would need conversion or a new reader. |
+| Can it read NetCDF-4? | Yes, in the browser and in the pipeline, with our own readers (no HDF5 library). They were checked against independent sources: a GLORYS native file against the Copernicus Zarr store (identical values), and two Argo S-files against Ifremer ERDDAP. Only szip- or zstd-compressed files need converting. |
+| Why no chlorophyll map in real mode? | Neither model has chlorophyll (GLORYS's biogeochemistry product is not used). The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
+| Does it work on INCOIS or Copernicus data? | Copernicus, yes: GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. The INCOIS LAS has not been tried: it could not be reached when we checked. |
 | Search and rescue or fisheries? | Not implemented. Currents are shown but there is no particle tracking; there is no PFZ product. Both are listed as possible uses. |
-| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 280 automated tests run in a headless browser and on GitHub Actions. |
+| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 315 automated tests run in a headless browser and on GitHub Actions. |
 | How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, and the plugin API adds sensors and ML products. Production would add scheduled ingestion, auth and a pipeline not tied to one case. |
-| Where is the data from? | HYCOM GOFS 3.1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
+| Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |
 
 ### The model–Argo comparison in numbers
 
-All 206 profiles, each compared with HYCOM at its own place and time (the nearest 3-hourly output), pooled over the 8 analyses that group them. Bias is observed minus model; *n* is the number of profile levels. The per-analysis values are in the app's **Model–Argo comparison** panel and in `tests/facts_expected.json`, which `data-pipeline/facts_reference.py` computes independently of the app.
+HYCOM: all 206 profiles, each compared with HYCOM at its own place and time (the nearest 3-hourly output), pooled over the 8 analyses that group them. Bias is observed minus model; *n* is the number of profile levels. The per-analysis values are in the app's **Model–Argo comparison** panel and in `tests/facts_expected.json`, which `data-pipeline/facts_reference.py` computes independently of the app.
 
 | Depth | Temperature bias | Temperature RMSE | *n* | Salinity bias | Salinity RMSE | *n* |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -376,4 +383,12 @@ All 206 profiles, each compared with HYCOM at its own place and time (the neares
 | 100–300 m | +0.16 °C | 0.82 °C | 4071 | +0.07 PSU | 0.12 PSU | 3371 |
 | 300–1000 m | +0.16 °C | 0.30 °C | 5753 | +0.03 PSU | 0.06 PSU | 4776 |
 
-The misfit is largest in the top 100 m and smallest below 300 m. 35 of the 206 profiles have no usable salinity, so the salinity counts are lower. Because HYCOM assimilates Argo, small numbers here show consistency, not independent skill.
+The same for GLORYS, each profile compared with the daily mean of its analysis date (`tests/facts_expected_glorys.json`):
+
+| Depth | Temperature bias | Temperature RMSE | *n* | Salinity bias | Salinity RMSE | *n* |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0–100 m | −0.13 °C | 0.82 °C | 3949 | +0.05 PSU | 0.21 PSU | 3274 |
+| 100–300 m | −0.31 °C | 0.67 °C | 4071 | +0.01 PSU | 0.08 PSU | 3371 |
+| 300–1000 m | −0.01 °C | 0.22 °C | 5753 | +0.00 PSU | 0.04 PSU | 4776 |
+
+The misfit is largest in the top 100 m and smallest below 300 m, in both models; GLORYS fits better at every depth. 35 of the 206 profiles have no usable salinity, so the salinity counts are lower. Because both models assimilate Argo, small numbers here show consistency, not independent skill. GLORYS gives potential temperature (about 0.1 °C cooler than in-situ at 1000 m), which is part of its small deep bias.

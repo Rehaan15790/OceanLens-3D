@@ -25,6 +25,7 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | Data | Service | Protocol |
 | --- | --- | --- |
 | Ocean model (temperature, salinity, currents) | HYCOM GOFS 3.1, `tds.hycom.org` THREDDS | OPeNDAP ASCII |
+| Second ocean model | Copernicus Marine GLORYS12V1, its public object store `s3.waw3-1.cloudferro.com` | Native NetCDF-4 in HTTPS byte ranges; two ARCO Zarr chunks (Blosc/LZ4) as a check |
 | Argo profiles | Ifremer ERDDAP, `ArgoFloats` | ERDDAP tabledap CSV |
 | BGC-Argo chlorophyll and oxygen | Ifremer ERDDAP, `ArgoFloats-synthetic-BGC` | ERDDAP tabledap CSV |
 | Sea floor and coast | ETOPO1 on NOAA's `upwell.pfeg.noaa.gov` ERDDAP | ERDDAP griddap CSV |
@@ -34,6 +35,8 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 
 - **JSON:** the data snapshot (`data/amphan-2020.json`), with the big arrays packed as base64 16-bit integers.
 - **NetCDF-3:** read in the browser for imports, and read and written in Python by our own `ncio.py` (no netCDF4 library).
+- **NetCDF-4 (HDF5):** read in the browser for imports (`import/netcdf4.js`) and in Python by our own `nc4.py`, which the
+  GLORYS step uses on Copernicus Marine's native files (no HDF5 library).
 - **CSV / TSV:** imports, ERDDAP downloads and server exports.
 - **PNG:** Save PNG in the app, and WMS map images from the server (encoded by hand with `zlib`).
 
@@ -53,7 +56,7 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | Data | `data-source.js` | One interface over the two data modes, so the rest of the app doesn't care which is active |
 | | `ocean.js` | The science: equation of state, model values at observation points, misfit statistics, heat potential |
 | | `data-synthetic.js` | Generates the synthetic ocean, floats and gliders from formulas |
-| | `data-real.js` | Decodes the HYCOM fields, Argo profiles and Amphan track from the snapshot |
+| | `data-real.js` | Decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
 | | `facts.js` | Computes every number shown in captions and panels, once |
 | 3D | `render.js` | The only file that creates three.js materials: colour conversion, palette ramps, draw order, fog, test hooks |
 | | `scene.js` | Renderer, background, lights, fog and the frame loop |
@@ -73,6 +76,7 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | | `panels.js` | Right-hand panels: validation summary, float profile, track details |
 | Import | `import/csv.js` | Parses comma, tab or semicolon text and guesses which column is which |
 | | `import/netcdf3.js` | A NetCDF-3 reader written from scratch |
+| | `import/netcdf4.js` | A NetCDF-4 (HDF5) reader written from scratch, with the same interface |
 | | `import/import.js` | File → detect format → parse → dataset → add to the map |
 | | `import/formats.js` | Readers for Argo, EGO glider, ERDDAP and CF files, with QC and units |
 | | `import-ui.js` | The Add data dialog, drag-and-drop and the Your data list |
@@ -149,7 +153,7 @@ The ocean is drawn as a stack of flat coloured sheets, one per model level, insi
 
 ## Data layer
 
-The data is one JSON file built into the page, about 2.3 MB. The app never asks it directly; everything goes through one function, `getVal(variable, lat, lon, depth, time)`, so the real and synthetic oceans are interchangeable.
+The data is two JSON blocks built into the page: the main snapshot (HYCOM, the floats, the track and the relief, about 2.3 MB) and the GLORYS model fields (about 2 MB; `build.py` keeps only the model part of `data/amphan-2020-glorys.json`). The app never asks it directly; everything goes through one function, `getVal(variable, lat, lon, depth, time)`, so the real and synthetic oceans are interchangeable.
 
 ### The snapshot (`data/amphan-2020.json`)
 
@@ -199,7 +203,7 @@ The heat map runs this for every grid column at the current time (`tchpGrid`). T
 
 ### Comparing floats with the model
 
-1. **`modelAtObs`** gets the model at the float's own depths. Real profiles carry HYCOM sampled at their own place and time (nearest 3-hourly output), stored by the pipeline; otherwise the nearest analysis is interpolated.
+1. **`modelAtObs`** gets the model at the float's own depths. With HYCOM on screen, real profiles carry HYCOM sampled at their own place and time (nearest 3-hourly output), stored by the pipeline; with GLORYS (daily means), and for imports, the nearest analysis is interpolated.
 2. **`misfit`** pairs each good observed level with the model: difference = observed − model. Flagged levels are skipped.
 3. **`summarize`** turns the differences into **bias** (mean difference) and **RMSE** (root-mean-square difference), with the count of levels used.
 4. **Rating:** temperature RMSE under 0.5 °C is good, up to 1.0 °C fair, above that poor; salinity uses 0.15 and 0.30 PSU.
@@ -222,7 +226,7 @@ Imports run entirely in the browser: the file is read into memory with the File 
 ### The import pipeline (`import/import.js`)
 
 1. **Size check:** files over 50 MB are refused with advice to subset them.
-2. **Sniff the first bytes:** `CDF` means NetCDF-3; the HDF5 signature means NetCDF-4, which gets the "convert with nccopy" message; anything else is treated as text.
+2. **Sniff the first bytes:** `CDF` means NetCDF-3 (`NetCDF3.parse`); the HDF5 signature means NetCDF-4 (`await NetCDF4.parse`, which returns the same object); anything else is treated as text.
 3. **Pick a reader:** every registered format has a `detect()` that scores how well it matches (0 to 1). The highest score wins, e.g. an Argo `_prof.nc` file scores high for the Argo reader and low for generic CF.
 4. **Parse into a dataset:** a list of profiles, each with id, platform type, position, time, depths and values in standard units (°C, PSU, mg/m³, µmol/kg, metres).
 5. **Review and add:** the dialog shows what was found; `addDataset` puts it on the map and bumps a revision number so markers rebuild.
@@ -234,8 +238,9 @@ Errors never crash the app: every problem comes back as a plain-language message
 | File | How it works |
 | --- | --- |
 | `netcdf3.js` | Reads the NetCDF classic binary format from scratch with a `DataView`: header (dimensions, attributes, variables), then the data, including record (unlimited) variables. Handles CDF-1, CDF-2 (64-bit offsets) and CDF-5 (64-bit data), big-endian numbers, `scale_factor`/`add_offset`, fill values, valid ranges and `_Unsigned` |
+| `netcdf4.js` | Reads HDF5 from scratch as netCDF-C writes it: superblocks 0–3, object headers 1 and 2, groups (symbol tables and link messages, compact or dense in fractal heaps), attributes, every chunk index (v1 B-tree, single, implicit, fixed array, extensible array, v2 B-tree), the deflate filter through the browser's `DecompressionStream`, shuffle and fletcher32, and netCDF dimension scales. Every variable is decoded in `parse()`, so `read()` stays synchronous, and values unpack through `NetCDF3.unpack`. Inflation stops at each chunk's size, variables may not claim more stored bytes than the file holds, and loops are refused |
 | `csv.js` | Detects the delimiter (comma, tab, semicolon), skips ERDDAP's units row, and guesses which column is latitude, temperature and so on from names and units. Rows are grouped into profiles by platform + time; a glider trajectory is split into dives and climbs |
-| `formats.js` | Format-specific readers: **Argo** profile files (core, BGC, multi-profile), **EGO** glider files, **ERDDAP** tables and generic **CF** profiles. Each applies QC (flags 1, 2, 5, 8; adjusted values where they exist), converts CF units and time units including calendars, and turns pressure into depth |
+| `formats.js` | Format-specific readers: **Argo** profile files (core, B and S, multi-profile; S files take each parameter's own data mode), **EGO** glider files, **ERDDAP** tables and generic **CF** profiles. Each applies QC (flags 1, 2, 5, 8; adjusted values where they exist), converts CF units and time units including calendars, and turns pressure into depth |
 
 ### The plugin registry (`plugins.js`)
 
@@ -258,11 +263,11 @@ Three Python scripts do the work the browser can't: fetch and pack the data, ass
 
 - puts all CSS into one `<style>`, with images turned into `data:` URIs;
 - inlines each script as its own `<script>` ending in `//# sourceURL=<path>`, so browser DevTools still show the original file names and lines;
-- inlines the snapshot JSON, escaping every `<` so nothing in the data can break out of the page;
+- inlines the snapshot JSON, escaping every `<` so nothing in the data can break out of the page; a tag with `data-embed="model"` keeps only the model part of its snapshot (the second model);
 - stamps the version from `VERSION`;
 - adds a strict **Content Security Policy** with a SHA-256 hash of every inline script and style, so the page refuses to run any code it didn't ship with.
 
-It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 3.5 MB budget. The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
+It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 6 MB budget (the page is about 5.45 MB with both models). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
 
 ### `data-pipeline/build_snapshot.py`: making the data
 
@@ -273,7 +278,9 @@ It refuses to build if a file is missing from the manifest or listed twice, the 
 5. **Relief and track:** ETOPO1 every 0.1°; IBTrACS fixes inside the map.
 6. **Pack** everything as 16-bit integers in base64 and write the JSON. The same cache always gives a byte-identical file, which a test checks.
 
-`ncio.py` is our own NetCDF-3 reader and writer in numpy (classic, 64-bit offset, CDF-5), with CF helpers for scale factors, fill values and time units. `make_palettes.py` generates the colour ramps in `palettes.js`.
+With `--model glorys` step 2 reads Copernicus Marine GLORYS12V1 instead, for `data/amphan-2020-glorys.json`. The native daily-mean files are global NetCDF-4, 1.34 GB each; a bucket listing names them, and `nc4.py` reads each file's metadata, its chunk index and only the deflated chunks over the map, through a `RangeSource` that sends HTTPS `Range` requests via the same cached, hashed fetcher. The 21 levels around the app depths are kept, then gridded and interpolated by the same `model_from_dataset` that `--model-netcdf` uses. Each build also reads two `thetao` chunks from Copernicus's ARCO Zarr store (Blosc/LZ4, decoded by `blosc.py`) and stops unless they equal the NetCDF-4 values exactly.
+
+`ncio.py` is our own NetCDF-3 reader and writer in numpy (classic, 64-bit offset, CDF-5), with CF helpers for scale factors, fill values and time units; it hands NetCDF-4 files to `nc4.py` and returns the same dict. `nc4.py` reads only the chunks a selection touches, from bytes, a file or byte ranges; `nc4_fixtures.py` writes NetCDF-4 test files in both HDF5 layouts. `make_palettes.py` generates the colour ramps in `palettes.js`.
 
 ### `server/serve.py`: the data server
 
@@ -306,13 +313,13 @@ The tests click and type in a real browser, exactly as a user would, against the
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| unit | 10 + 95 pipeline | Science functions in the real page; every on-screen number against the Python recomputation; the NetCDF reader and writer; byte-identical snapshot rebuilds |
+| unit | 11 + 121 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for both models; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
 | server | 42 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
-| smoke | 51 | Every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
-| extend | 16 | Plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
-| tour | 7 | All eight steps in both modes; captions of 35 words or fewer; timing races |
+| smoke | 52 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
+| extend | 18 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
+| tour | 7 | All eight steps in both modes; captions of 35 words or fewer, under both models; timing races |
 | robust | 6 | No WebGL, a lost graphics context and recovery, no memory growth over 20 rebuilds |
-| security | 33 | Hostile file contents stay text, damaged files end with a message instead of hanging, the Content Security Policy is enforced and never violated |
+| security | 38 | Hostile file contents stay text, damaged files and crafted NetCDF-4 end with a message instead of hanging, the Content Security Policy is enforced and never violated |
 | render | 9 | Pixel checks: a slice matches its colour bar, streaks stand out, floats aren't cut by the sea surface, the seabed is closed |
 | a11y | 6 | Accessible names, keyboard reach, text at least 12 px, WCAG AA contrast |
 | sizes | 3 | Six screen sizes from 1024×768 to 1920×1080 plus the phone notice |

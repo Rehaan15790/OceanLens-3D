@@ -96,8 +96,8 @@ is made private again, where minutes and artifact storage are metered:
 internet access. It serves the single file at `/`, the API at `/api/v1`, WMS at `/wms`, WCS at `/wcs` and OPeNDAP
 at `/opendap` (`docs/API.md`). The page detects that it is served over HTTP and lists the server's datasets.
 Picking one loads its observed profiles or, for another snapshot, reloads the page with that snapshot embedded. The
-3D view draws only the snapshot in the page: a model file given with `--netcdf` is served through WMS, WCS, OPeNDAP
-and REST, not drawn in 3D. Opened from a file, the page behaves exactly as before.
+3D view draws only the snapshots in the page (HYCOM and GLORYS): a model file given with `--netcdf` is served through
+WMS, WCS, OPeNDAP and REST, not drawn in 3D. Opened from a file, the page behaves exactly as before.
 
 ```
 python build.py --out dist/OceanLens3D.html
@@ -142,14 +142,13 @@ Notes:
   at 127.0.0.1.
 - `--cors` is off by default. Turn it on only for the origins that embed the API (e.g. an existing INCOIS portal
   calling WMS from its own pages).
-- Model data: CF NetCDF-3 files given with `--netcdf`. The server takes every numeric variable on 1-D latitude and
-  longitude axes (depth and time axes are optional), so a file with a single variable works. NetCDF-4 files are
-  refused. Copernicus Marine's native files (for example GLOBAL_MULTIYEAR_PHY_001_030) are NetCDF-4/HDF5. Download
-  a regional subset with `copernicusmarine subset --netcdf3-compatible` (that toolbox needs a free account), or
-  convert a NetCDF-4 subset with `nccopy -k classic`. The raw files can also be downloaded over HTTPS without an
-  account, but each holds the whole globe for one day, so it must first be cut to the region with another tool and
-  then converted to NetCDF-3. A real INCOIS LAS export has not been tried.
-- `data-pipeline/build_snapshot.py --model-netcdf FILE` makes an app snapshot for `data/`, but it needs more: one
+- Model data: CF NetCDF-3 or NetCDF-4 files given with `--netcdf`. The server takes every numeric variable on 1-D
+  latitude and longitude axes (depth and time axes are optional), so a file with a single variable works. It reads
+  each file whole, so give it a regional subset, for example a `copernicusmarine subset` download as it comes (that
+  toolbox needs a free account). For Copernicus Marine's global native files, use the pipeline's
+  `--model glorys` route instead, which reads only the parts over the map (`data-pipeline/README.md`). NetCDF-4
+  compressed with szip or zstd is refused. A real INCOIS LAS export has not been tried.
+- `data-pipeline/build_snapshot.py --model-netcdf FILE` (NetCDF-3 or NetCDF-4) makes an app snapshot for `data/`, but it needs more: one
   file holding temperature, salinity and both current components (u and v) on 1-D latitude, longitude and depth
   axes, covering the map down to 1000 m. It uses the first 16 time steps. Files with one variable each must be
   merged into one file first.

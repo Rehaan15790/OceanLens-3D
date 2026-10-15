@@ -135,8 +135,8 @@
     <div class="h">WHAT IT IS</div>
     <div class="bl">
       <p>A web platform: a Python server (REST, OGC WMS/WCS, OPeNDAP) and a 3D browser client for the Arabian Sea and Bay of Bengal <span style="white-space:nowrap">(6–22°N, 61–92°E)</span></p>
-      <p>The client is one HTML file (~3.4 MB): no install or login; runs offline from a pen drive</p>
-      <p>Real case built in: Cyclone Amphan, May 2020 (hindcast) — HYCOM analyses, 206 Argo profiles from 70 floats, BGC-Argo chlorophyll and oxygen, IBTrACS track</p>
+      <p>The client is one HTML file (~5.5 MB): no install or login; runs offline from a pen drive</p>
+      <p>Real case built in: Cyclone Amphan, May 2020 (hindcast) — HYCOM + GLORYS models, 206 Argo profiles, BGC-Argo chlorophyll and oxygen, IBTrACS track</p>
     </div>
     <div class="h" style="color:var(--teal2)">HOW IT ADDRESSES THE PROBLEM</div>
     <div class="bl">
@@ -161,18 +161,18 @@
   <div class="logo img-logo"></div>
   <div class="h" style="left:32.4pt;top:95.75pt">TECHNOLOGIES USED</div>
   <div class="card tech" style="left:32.4pt"><b>FRONT END</b>HTML5 · vanilla JavaScript<br>Three.js r128 (WebGL)</div>
-  <div class="card tech" style="left:260.6pt"><b>DATA LAYER</b>Python · NumPy<br>NetCDF-3 / CF · OPeNDAP</div>
+  <div class="card tech" style="left:260.6pt"><b>DATA LAYER</b>Python · NumPy<br>NetCDF-3/4 · CF · OPeNDAP</div>
   <div class="card tech" style="left:488.9pt"><b>OCEANOGRAPHY</b>UNESCO/EOS-80 density<br>Mackenzie 1981 sound speed</div>
   <div class="card tech" style="left:717.1pt"><b>VALIDATION</b>Argo QC flags + density test<br>bias · RMSE at each profile's time</div>
   <div class="h" style="left:32.4pt;top:212.35pt">METHODOLOGY — DATA FLOW</div>
   <div class="flow">
-    <div class="box" style="width:182pt;background:var(--navy)"><b>DATA SOURCES</b>HYCOM GOFS 3.1 analysis<br>Argo + BGC-Argo (ERDDAP)<br>ETOPO1 relief<br>IBTrACS best tracks<small>next: INCOIS LAS · Copernicus</small></div>
+    <div class="box" style="width:182pt;background:var(--navy)"><b>DATA SOURCES</b>HYCOM GOFS 3.1 · GLORYS12V1<br>Argo + BGC-Argo (ERDDAP)<br>ETOPO1 relief<br>IBTrACS best tracks<small>next: INCOIS LAS · Copernicus BGC</small></div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
-    <div class="box" style="width:175pt;background:var(--teal)"><b>INGESTION (Python)</b>OPeNDAP · ERDDAP · CF NetCDF-3<br>0.5° regrid, 11 depths<br>Argo QC, pressure → depth<br>16-bit quantize</div>
+    <div class="box" style="width:175pt;background:var(--teal)"><b>INGESTION (Python)</b>OPeNDAP · ERDDAP · NetCDF-4<br>0.5° regrid, 11 depths<br>Argo QC, pressure → depth<br>16-bit quantize</div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
-    <div class="box" style="width:154pt;background:var(--teal2)"><b>PAYLOAD</b>16-bit arrays, base64<br>+ JSON header<br>~2.3 MB for 8 analyses</div>
+    <div class="box" style="width:154pt;background:var(--teal2)"><b>PAYLOAD</b>16-bit arrays, base64<br>+ JSON header<br>~2.3 MB per model, 8 times</div>
     <div class="arrow"><svg width="31pt" height="10pt" viewBox="0 0 31 10"><path d="M1 5H24" stroke="#8a97a9" stroke-width="2" stroke-linecap="round"/><path d="M23 1.4 30 5 23 8.6Z" fill="#8a97a9"/></svg></div>
-    <div class="box" style="width:176pt;background:var(--teal3)"><b>SERVER + CLIENT</b>REST · WMS · WCS · OPeNDAP<br>3D client: one .html file<br>CSV + NetCDF-3 import<br>also runs offline</div>
+    <div class="box" style="width:176pt;background:var(--teal3)"><b>SERVER + CLIENT</b>REST · WMS · WCS · OPeNDAP<br>3D client: one .html file<br>CSV + NetCDF-3/4 import<br>also runs offline</div>
   </div>
   <div class="h" style="left:32.4pt;top:426.95pt">RENDERING METHOD</div>
   <div class="render bl">
@@ -189,14 +189,14 @@
   <div class="title">FEASIBILITY AND VIABILITY</div>
   <div class="logo img-logo"></div>
   <div class="h" style="left:32.4pt;top:95.9pt;font-size:15pt;line-height:15pt;color:var(--green)">WHY IT IS FEASIBLE</div>
-  <div class="card feas g" style="top:123.8pt"><b>✓&nbsp; Prototype exists</b>3D scene, float comparison, file import and server already run on real Cyclone Amphan data, built by a working Python pipeline and checked by 193 automated tests.</div>
-  <div class="card feas g" style="top:214.5pt"><b>✓&nbsp; Data is free and open</b>HYCOM, Argo GDAC, ETOPO1 and IBTrACS are public: no account needed, free to use with attribution. Copernicus Marine raw files can also be read over HTTPS without an account.</div>
+  <div class="card feas g" style="top:123.8pt"><b>✓&nbsp; Prototype exists</b>3D scene, float comparison, file import and server already run on real Cyclone Amphan data, built by a working Python pipeline and checked by 315 automated tests.</div>
+  <div class="card feas g" style="top:214.5pt"><b>✓&nbsp; Data is free and open</b>HYCOM, Copernicus GLORYS, Argo GDAC, ETOPO1 and IBTrACS are public: no account needed, free to use with attribution. GLORYS is read from Copernicus's own files.</div>
   <div class="card feas g" style="top:305.2pt"><b>✓&nbsp; Built-in quality checks</b>Argo QC flags, a density-inversion test and bias / RMSE against the model run inside the app. Sparse float coverage is shown as measured, never interpolated into a map.</div>
-  <div class="card feas g" style="top:395.9pt"><b>→&nbsp; Next steps</b>Copernicus GLORYS and BGC ingestion · a drift tool for search and rescue · SST-front and chlorophyll maps for fisheries · anomalies against climatology · fields streamed from the server.</div>
+  <div class="card feas g" style="top:395.9pt"><b>→&nbsp; Next steps</b>INCOIS LAS and Copernicus BGC ingestion · a drift tool for search and rescue · SST-front and chlorophyll maps for fisheries · anomalies against climatology · fields streamed from the server.</div>
   <div class="h" style="left:493.2pt;top:95.9pt;font-size:15pt;line-height:15pt;color:var(--amber)">RISKS → MITIGATION</div>
   <div class="card feas a" style="top:123.8pt"><b>Payload size vs. detail</b>Regional subsetting + vertical regridding + 16-bit quantization keeps 8 analyses of model fields plus 206 Argo profiles to about 2.3 MB.</div>
   <div class="card feas a" style="top:214.5pt"><b>Weak GPUs on office laptops</b>Layered transparency instead of ray-marching: 11 textured depth layers, cheap on integrated GPUs. Browser + WebGL only, no GPU cluster or cloud bill.</div>
-  <div class="card feas a" style="top:305.2pt"><b>NetCDF-4 / HDF5 files</b>NCAR has deprecated PyNIO in favour of xarray. Our own NetCDF-3 readers (plain JavaScript; Python + NumPy) need no other library; NetCDF-4 via xarray in the pipeline is the next step.</div>
+  <div class="card feas a" style="top:305.2pt"><b>NetCDF-4 / HDF5 files</b>NCAR has deprecated PyNIO in favour of xarray. Our own NetCDF-3 and NetCDF-4 readers (plain JavaScript; Python + NumPy) need no other library; checked on Copernicus and Argo files.</div>
   <div class="card feas a" style="top:395.9pt"><b>Why no React or Vue</b>The PS names modern JS frameworks and also asks for no client-side dependencies. Plain JavaScript and one pinned library (Three.js) run on air-gapped machines; the plugin API is the component model.</div>
   <div class="foot"><span>@SIH Idea submission- Template</span><b>4</b></div>
 </section>
@@ -207,8 +207,8 @@
   <div class="title">IMPACT AND BENEFITS</div>
   <div class="logo img-logo"></div>
   <div class="card stat" style="left:32.4pt;background:var(--teal)"><b>0</b><span>installs or logins for users; server optional</span></div>
-  <div class="card stat" style="left:337.7pt;background:var(--teal2)"><b>~3.4 MB</b><span>client + real data, opens offline</span></div>
-  <div class="card stat" style="left:642.9pt;background:var(--navy)"><b>5 → 1</b><span>data sources in a single 3D view</span></div>
+  <div class="card stat" style="left:337.7pt;background:var(--teal2)"><b>~5.5 MB</b><span>client + two models, opens offline</span></div>
+  <div class="card stat" style="left:642.9pt;background:var(--navy)"><b>6 → 1</b><span>data sources in a single 3D view</span></div>
   <div class="h" style="left:32.4pt;top:202.35pt">IMPACT ON THE TARGET AUDIENCE</div>
   <div class="aud">
     <div><b>INCOIS scientists</b>Model–observation comparison with one click on a float; the server publishes the same data over REST, OGC WMS/WCS and OPeNDAP for GIS tools and portals.</div>
@@ -220,7 +220,7 @@
   <div class="card ben" style="top:229pt"><b>Social</b>Cyclone-relevant ocean heat information reaches district and coastal users, not only well-connected research labs.</div>
   <div class="card ben" style="top:290.9pt"><b>Economic</b>Runs on existing servers and office laptops, with no new hardware; open standards (WMS, WCS, CF, OPeNDAP) avoid lock-in.</div>
   <div class="card ben" style="top:352.8pt"><b>Environmental</b>Thermocline and eddy structure seen in 3D and checked against floats supports marine planning and research.</div>
-  <div class="card ben" style="top:414.7pt"><b>Scientific</b>Bias and RMSE against every float (GODAE Class 4 style) and density checks are built in; HYCOM assimilates Argo, so it is a consistency check.</div>
+  <div class="card ben" style="top:414.7pt"><b>Scientific</b>Bias and RMSE against every float (GODAE Class 4 style) and density checks are built in; both models assimilate Argo, so it is a consistency check.</div>
   <div class="foot"><span>@SIH Idea submission- Template</span><b>5</b></div>
 </section>
 
@@ -233,11 +233,12 @@
     <div class="h">DATA SOURCES</div>
     <div class="bl">
       <p>HYCOM GOFS 3.1 global ocean analysis — tds.hycom.org</p>
+      <p>Copernicus Marine GLORYS12V1 reanalysis (GLOBAL_MULTIYEAR_PHY_001_030) — doi:10.48670/moi-00021</p>
       <p>Argo and BGC-Argo Global Data Assembly Centre, via Ifremer ERDDAP — erddap.ifremer.fr</p>
       <p>ETOPO1 global relief model (NOAA NCEI) — ncei.noaa.gov</p>
       <p>IBTrACS v04 cyclone best tracks (Knapp et al., 2010) — ncei.noaa.gov</p>
       <p>Glider samples: BoBBLE 2016 Seagliders (Vinayachandran et al., 2018), via the OceanGliders GDAC</p>
-      <p>Next: INCOIS Live Access Server (las.incois.gov.in) and Copernicus Marine (marine.copernicus.eu)</p>
+      <p>Next: INCOIS Live Access Server (las.incois.gov.in)</p>
     </div>
   </div>
   <div class="refs" style="left:493.2pt;width:425pt">

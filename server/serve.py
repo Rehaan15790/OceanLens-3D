@@ -316,7 +316,7 @@ def snapshot_profiles(d):
 
 
 def load_netcdf(path):
-    """A CF NetCDF-3 file on a rectilinear lat/lon grid (optional depth and time axes)."""
+    """A CF NetCDF-3 or NetCDF-4 file on a rectilinear lat/lon grid (optional depth and time axes)."""
     if ncio is None:
         raise SystemExit('--netcdf needs data-pipeline/ncio.py')
     nc = ncio.read(str(path))
@@ -1505,7 +1505,7 @@ def main(argv=None):
     ap.add_argument('--port', type=int, default=8080)
     ap.add_argument('--app', help='built single-file app to serve at / (default dist/OceanLens3D.html, then OceanLens3D.html)')
     ap.add_argument('--data', nargs='*', help='schema-1 snapshot JSON files (default data/*.json)')
-    ap.add_argument('--netcdf', nargs='*', default=[], help='CF NetCDF-3 model files to serve as datasets')
+    ap.add_argument('--netcdf', nargs='*', default=[], help='CF NetCDF-3 or NetCDF-4 model files to serve as datasets')
     ap.add_argument('--cors', action='append', default=[], help="allowed origin for cross-origin requests ('*' for any); repeatable")
     ap.add_argument('--public-url', help='base URL clients see, when behind a reverse proxy (e.g. https://host/oceanlens)')
     ap.add_argument('--quiet', action='store_true', help='no request log')

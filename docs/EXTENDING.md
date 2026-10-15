@@ -119,12 +119,15 @@ Readers turn bytes into the dataset shape above. Two generic readers do the pars
   column, the header, the file name or the type chosen in the dialog says so.
 - `src/js/import/netcdf3.js` reads NetCDF classic (CDF-1, CDF-2, CDF-5). It applies `_FillValue`, `scale_factor` and
   `add_offset`. It reads files whose record dimension has no records (many Argo GDAC `<WMO>_prof.nc` files) and
-  refuses a file cut short. `valid_min`/`valid_max` never mask times or coordinates. NetCDF-4/HDF5 files are
-  refused with a message; they must be converted to NetCDF-3 outside the app (the pipeline cannot read them
-  either).
+  refuses a file cut short. `valid_min`/`valid_max` never mask times or coordinates.
+- `src/js/import/netcdf4.js` reads NetCDF-4 (HDF5) and returns the same object, so every mapping below works on
+  NetCDF-4 files too, and values unpack by the same rules (`NetCDF3.unpack`). Filters other than deflate, shuffle
+  and fletcher32 (szip, zstd) are refused with the filter named. The pipeline and the server read NetCDF-4 with
+  `data-pipeline/nc4.py`.
 
 Format mappings sit on top of those readers in `src/js/import/formats.js`:
-- Argo profile NetCDF: single-cycle files and the GDAC's multi-profile `<WMO>_prof.nc` files;
+- Argo profile NetCDF: single-cycle files and the GDAC's multi-profile `<WMO>_prof.nc` files, core, B and S (a B or
+  S file has no `DATA_MODE`: each parameter takes its own mode from `PARAMETER_DATA_MODE`);
 - Ifremer EGO glider NetCDF, split into dives and climbs;
 - ERDDAP tabledap `.nc` tables. A trajectory table with no profile id, such as an OceanGliders glider table, is
   split into dives and climbs per platform; a time series is not split;
@@ -156,5 +159,23 @@ It goes through:
 - `python server/serve.py --netcdf FILE`: REST, WMS, WCS and OPeNDAP straight from the file (`docs/API.md`), for
   any variable on its latitude/longitude grid. These fields are not drawn in the 3D view.
 
-Both need NetCDF-3. Convert NetCDF-4 first, for example with `nccopy -k classic` or
-`copernicusmarine subset --netcdf3-compatible` (the `copernicusmarine` toolbox needs a free account).
+Both take NetCDF-3 or NetCDF-4 and read the file whole, so give them a regional subset (a `copernicusmarine subset`
+download works as it comes; that toolbox needs a free account). For a large remote product, follow the GLORYS route
+in `build_snapshot.py` (`--model glorys`): `nc4.open_source()` takes any object with `.size` and `.read(offset, n)`,
+and `RangeSource` gives it HTTPS byte ranges through the pipeline's cached, hashed fetcher, so only the chunks over
+the map are downloaded.
+
+### A second model in the 3D view
+
+The app shows the models it carries side by side under **Model** (and the `M` key). A model built for the same case
+(the same grid, depths and times) joins with one line in `src/index.html`:
+
+```html
+<script type="application/json" id="snapshot-glorys" src="../data/amphan-2020-glorys.json" data-embed="model"></script>
+```
+
+`data-embed="model"` makes `build.py` keep only the model fields, the wet mask and the model's citation. The
+snapshot's `meta.model` (`name`, `short`, `kind`, `product`, `doi`) names it on screen; `MODEL_WORDS` in
+`src/js/data-real.js` holds the words the captions use (for example "GLORYS daily mean"). A snapshot on another
+grid or at other times is left out with a console warning. The page today has room for one such line: the element id
+`snapshot-glorys` is what `data-real.js` looks for.

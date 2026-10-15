@@ -89,7 +89,7 @@ synthetic profiles on Ifremer ERDDAP (`ArgoFloats-synthetic-BGC`, cache files `b
 real-time values never), with flags 1, 2, 5 or 8, pressure from `PRES_ADJUSTED` where present, and range checks
 (CHLA −0.1–50, DOXY −5–600). Values attach to the selected core profile with the same float and cycle and are gridded
 like temperature. The committed file holds chlorophyll on 36 profiles from 13 floats and oxygen on 24 profiles
-from 9. HYCOM has no biogeochemistry, so real mode has no chlorophyll or oxygen field, only floats. Rules and counts
+from 9. Neither model has biogeochemistry here (HYCOM has none, and the GLORYS biogeochemistry product is not used), so real mode has no chlorophyll or oxygen field, only floats. Rules and counts
 are in `meta.provenance.bgc`.
 
 ## GLORYS12V1 (Copernicus Marine)
