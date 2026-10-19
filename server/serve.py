@@ -2,7 +2,7 @@
 """OceanLens 3D data server: the built app, a REST API, OGC WMS 1.3.0, OGC WCS 2.0.1 and OPeNDAP DAP2.
 Python standard library and numpy only; NetCDF through data-pipeline/ncio.py.
 
-    python server/serve.py                                   app + data/*.json on http://127.0.0.1:8080/
+    python server/serve.py                                   app + the model snapshots in data/ on http://127.0.0.1:8080/
     python server/serve.py --netcdf model.nc --port 8000     add a CF NetCDF-3 model file as a dataset
     python server/serve.py --host 0.0.0.0 --cors '*'         listen on every interface, allow any origin
 
@@ -1478,9 +1478,23 @@ def load_datasets(snapshots=(), netcdfs=()):
     return out
 
 
+def default_snapshots():
+    """The model snapshots in data/: the schema-1 files with model fields (the extras and the drift check sit beside
+    them but are not datasets)."""
+    out = []
+    for path in sorted((REPO / 'data').glob('*.json')):
+        try:
+            d = json.loads(path.read_bytes())
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get('schema') == 1 and 'model' in d and 'times' in d.get('meta', {}):
+            out.append(path)
+    return out
+
+
 def make_server(host='127.0.0.1', port=8080, snapshots=None, netcdfs=(), app=None, cors=(), public_url=None, quiet=False):
     """A configured OceanServer, not yet serving (tests/test_server.py starts it on a thread)."""
-    snapshots = sorted((REPO / 'data').glob('*.json')) if snapshots is None else [Path(p) for p in snapshots]
+    snapshots = default_snapshots() if snapshots is None else [Path(p) for p in snapshots]
     datasets = load_datasets(snapshots, [Path(p) for p in netcdfs])
     return OceanServer((host, port), datasets, app if app is not None else default_app(), cors, public_url, quiet)
 
@@ -1504,7 +1518,7 @@ def main(argv=None):
     ap.add_argument('--host', default='127.0.0.1', help='interface to listen on (0.0.0.0 for every interface)')
     ap.add_argument('--port', type=int, default=8080)
     ap.add_argument('--app', help='built single-file app to serve at / (default dist/OceanLens3D.html, then OceanLens3D.html)')
-    ap.add_argument('--data', nargs='*', help='schema-1 snapshot JSON files (default data/*.json)')
+    ap.add_argument('--data', nargs='*', help='schema-1 snapshot JSON files (default: the model snapshots in data/)')
     ap.add_argument('--netcdf', nargs='*', default=[], help='CF NetCDF-3 or NetCDF-4 model files to serve as datasets')
     ap.add_argument('--cors', action='append', default=[], help="allowed origin for cross-origin requests ('*' for any); repeatable")
     ap.add_argument('--public-url', help='base URL clients see, when behind a reverse proxy (e.g. https://host/oceanlens)')

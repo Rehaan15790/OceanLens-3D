@@ -62,7 +62,7 @@ function fullUpdate(){
   if(state.panel==='profile'){ renderDerived(); drawProfileChart(); }
   if(state.panel==='track') renderTrack();
   if(section){ buildSection(); if(state.panel==='section') drawSectionPanel(); }
-  if(drift){ computeDrift(); buildDrift(); if(state.panel==='drift') renderDriftPanel(); }
+  if(drift || state.driftPlace){ computeDrift(); buildDrift(); if(drift && state.panel==='drift') renderDriftPanel(); }
   renderValidation();
 }
 // the exaggeration fast path: geometry that depends on the vertical scale, no recolouring
@@ -113,14 +113,15 @@ function exposeTestSurface(){
     setExaggeration,
     setRange, setPalette, setScale, setShowAllImported, resetRange: ()=>{ resetRange(); requestUpdate('full'); },
     openPanel, closePanels:closeSidePanels, openProfile, openWorstFloat, startTour, stopTour, goToTourStep, nextTourStep, setTourAutoplay,
-    showSectionPreset, clearSection, startDrift, setDriftOptions, clearDrift, setDriftPlace
+    showSectionPreset, clearSection, startDrift, startDriftFromBuoy, setDriftOptions, clearDrift, setDriftPlace
   }).map(([k, f])=>[k, now(f)]));
   ol.flush = flushUpdate;
   ol.plugins = OceanLens;
   ol.facts = facts;
   ol.fn = {seawaterDensity, sigmaT, tchpColumn, firstCrossing, contourSegments, summarize, misfit, realAt, obsInterp,
            modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow,
-           driftRun, driftClock, uvAtTime, realAtIn, decodeModel};
+           driftRun, driftClock, driftCurrents, driftStart, uvAtTime, realAtIn, decodeModel, buoysNow, insideEllipse,
+           satelliteSstStats};
   ol.render = Render.test;
 }
 

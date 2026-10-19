@@ -131,6 +131,7 @@ function pickAt(clientX, clientY){
 // a click on the view (not a drag): release a drift, or open the profile or the track under the pointer
 function handleClick(e){
   if(state.driftPlace){ placeDriftAt(e); return; }   // releasing a drift: the click is a place on the sea
+  if(clickDriftBuoy(e)) return;                         // a drifting buoy shown with a drift
   const hit = pickAt(e.clientX, e.clientY);
   if(!hit) return;
   if(hit.kind==='track') openTrack();

@@ -29,6 +29,9 @@ EXPORT_KEY = """(()=>{ const c=document.createElement('canvas'); c.width=300; c.
 SEA_POINT = """(()=>{ const v=new THREE.Vector3((%f-(LON0+LON1)/2)*SCALE_XZ, 0, -(%f-(LAT0+LAT1)/2)*SCALE_XZ).project(camera);
   const r=renderer.domElement.getBoundingClientRect(); return [r.left+(v.x*0.5+0.5)*r.width, r.top+(-v.y*0.5+0.5)*r.height]; })()"""
 
+# client coordinates of a drifting buoy's mark (drawn just above the sea, as drift.js _dv)
+BUOY_POINT = SEA_POINT.replace(', 0, -(', ', 0.07, -(')
+
 
 class Boot(AppTestCase):
     enter = False
@@ -456,7 +459,7 @@ class Controls:
         # the timeline moves the release time; at the first analysis there is nothing to drift back with
         self.js('__ol.actions.setTime(0)')
         self.assertIsNone(self.js('__ol.drift.run'))
-        self.assertIn('no currents before it', self.js("document.getElementById('driftBody').textContent"))
+        self.assertIn('There are no currents before the first', self.js("document.getElementById('driftBody').textContent"))
         # a profile opened over it goes back to the drift when closed; Esc then removes the drift
         self.js('__ol.actions.setTime(4)')
         self.js('__ol.actions.openWorstFloat()')
@@ -466,6 +469,19 @@ class Controls:
         self.b.pump(0.1)
         self.assertIsNone(self.js('__ol.drift'))
         self.assertEqual(self.js('__ol.state.panel'), 'empty')
+        self.assertNoProblems()
+
+    def test_satellite_maps_by_key(self):
+        real = self.js(DATA_MODE) == 'real'
+        for key, var in (('6', 'sstsat'), ('7', 'front')):
+            self.b.key(key)
+            self.js('__ol.flush()')
+            self.assertEqual(self.js(f'{STATE}.variable'), var)
+            note = self.js("document.getElementById('keyNote').textContent")
+            self.assertIn('INCOIS' if real else 'real Amphan case only', note)
+            self.assertIn('Belkin' if var == 'front' else 'OISST', self.js("document.getElementById('mapAbout').textContent"))
+            self.assertFalse(self.visible('#trackDetailsBtn'), 'the track details button shows on a satellite map')
+        self.b.key('1')
         self.assertNoProblems()
 
     def test_help_and_about(self):
@@ -481,6 +497,40 @@ class Controls:
 
 class RealMode(Controls, AppTestCase):
     data_mode = 'real'
+
+    def test_drift_from_a_buoy_by_click(self):
+        self.js('__ol.actions.setTime(4)')
+        self.b.key('r')                           # the camera still, so the buoy is where it is projected
+        self.b.pump(0.3)
+        self.b.key('t')
+        self.b.pump(0.2)
+        buoys = self.js('__ol.fn.buoysNow()')
+        self.assertGreater(len(buoys), 3)
+        b = min(buoys, key=lambda x: abs(x['lat'] - 14) + abs(x['lon'] - 80))   # the one nearest the middle of the view
+        self.b.click_at(*self.js(BUOY_POINT % (b['lon'], b['lat'])))
+        self.b.pump(1.2)
+        d = self.js('({buoy:__ol.drift.buoy, path:__ol.drift.buoyPath.length, meta:document.getElementById("driftMeta").textContent})')
+        self.assertEqual(d['buoy'], b['index'])
+        self.assertGreater(d['path'], 1)
+        self.assertIn(b['id'], d['meta'])
+        self.assertIn('Where the buoy really went', self.js("document.getElementById('driftBody').textContent"))
+        self.assertIn('Checked against', self.js("document.getElementById('driftFoot').textContent"))
+        # the timeline moves the release to where the buoy is at the new analysis
+        self.js('__ol.actions.setTime(5)')
+        later = [x for x in self.js('__ol.fn.buoysNow()') if x['index'] == b['index']]
+        if later:
+            self.assertEqual((self.js('__ol.drift.lat'), self.js('__ol.drift.lon')), (later[0]['lat'], later[0]['lon']))
+        self.js('__ol.actions.clearDrift()')
+        self.assertNoProblems()
+
+    def test_about_cites_the_buoys_and_the_satellite(self):
+        self.b.click('#aboutBtn')
+        self.b.pump(0.2)
+        cites = self.js("[...document.querySelectorAll('#aboutCitations [data-cite]')].map(e=>e.dataset.cite+': '+e.textContent)")
+        self.assertTrue(any(c.startswith('gdp: Elipot') for c in cites), cites)
+        self.assertTrue(any(c.startswith('oisst: Huang') and 'INCOIS' in c for c in cites), cites)
+        self.b.key('Escape')
+        self.assertNoProblems()
 
     def test_model_switch_by_click_and_key(self):
         if len(self.js('__ol.models') or []) < 2:

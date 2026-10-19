@@ -202,6 +202,13 @@ function syncControls(){
   });
   ui.modeGrp.hidden = tchp;
   ui.tchpNote.hidden = !tchp;
+  // a map variable explains itself (its registered `about`); the track details belong to the heat map
+  if(tchp){
+    const about = VAR_META[state.variable].about;
+    document.getElementById('mapAbout').textContent = (typeof about==='function' ? about() : about) || '';
+    const tb = document.getElementById('trackDetailsBtn');
+    if(tb) tb.hidden = state.variable!=='tchp';
+  }
   ui.depthGrp.hidden = tchp || state.mode!=='slice';
   ui.isoGrp.hidden = !isoMode();
   ui.depthSlider.max = DEPTHS.length-1;

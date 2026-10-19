@@ -81,8 +81,8 @@ class Drift(AppTestCase):
     model on screen and for the other model the panel compares it with; and the spread against the random walk's own
     statistics."""
     enter = False
-    # (lat, lon, analysis, direction): open sea forward and back, one that reaches the head of the Bay after 59 h,
-    # one that reaches the Mumbai coast, one that leaves the map's south-west edge
+    # (lat, lon, analysis, direction): open sea forward and back, the head of the Bay, one off Mumbai that reaches the
+    # coast (HYCOM after 64 h, GLORYS after 5 h), one that leaves the map's south-west edge (HYCOM, after 56 h)
     STARTS = [(15.0, 88.0, 4, 1), (15.0, 88.0, 4, -1), (21.0, 87.0, 4, 1), (19.0, 73.0, 4, 1), (7.0, 64.0, 4, 1)]
 
     @classmethod
@@ -95,6 +95,11 @@ class Drift(AppTestCase):
         glorys = REPO / 'data' / 'amphan-2020-glorys.json'
         if glorys.exists():
             cls.snaps['glorys'] = facts_reference.Snapshot(str(glorys))
+        # the drift uses each model's surface currents from the extras (HYCOM every 6 h, GLORYS daily)
+        cls.extras = json.loads((REPO / 'data' / 'amphan-2020-extras.json').read_text(encoding='utf-8'))
+
+    def ref_path(self, model, lat, lon, t, d):
+        return self.ref.drift_path(self.snaps[model], lat, lon, t, 72, d, self.extras, model)
 
     def check(self, got, want, end, label):
         path, ref_end = want
@@ -113,15 +118,36 @@ class Drift(AppTestCase):
                         self.js(f'__ol.actions.setTime({t})')
                         self.assertTrue(self.js(f'__ol.actions.startDrift({lat}, {lon}, {{hours:72, dir:{d}}})'))
                         run = self.js('(r=>({path:r.path, end:r.end}))(__ol.drift.run)')
-                        want = self.ref.drift_path(self.snaps[model], lat, lon, t, 72, d)
+                        want = self.ref_path(model, lat, lon, t, d)
                         self.check(run['path'], want, run['end'], model)
                         for other in self.js('__ol.drift.others.map(o=>({id:o.words.short.toLowerCase(), path:o.run.path, end:o.run.end}))'):
                             if other['id'] in self.snaps:
-                                want = self.ref.drift_path(self.snaps[other['id']], lat, lon, t, 72, d)
+                                want = self.ref_path(other['id'], lat, lon, t, d)
                                 self.check(other['path'], want, other['end'], f"{other['id']} beside {model}")
         finally:
             self.js('__ol.actions.clearDrift()')
             self.js(f"__ol.actions.setRealModel('{models[0]}')")
+
+    def test_a_drift_from_a_buoy_follows_the_validation(self):
+        # a drift released from a buoy at an analysis is one of drift_validation.py's cases: the same central drift,
+        # and the separation from the buoy the app reports is the one the validation measures
+        import drift_reference as dr
+        snap = self.snaps['hycom']
+        buoys = self.js('__ol.actions.setTime(4) || __ol.fn.buoysNow()')
+        self.assertGreater(len(buoys), 3, 'no drifting buoys at the 16 May analysis')
+        b = buoys[0]
+        self.assertTrue(self.js(f"__ol.actions.startDriftFromBuoy({b['index']}, {{hours:72, dir:1}})"))
+        got = self.js('(d=>({path:d.run.path, buoy:d.buoyPath}))(__ol.drift)')
+        track = {h: (la, lo) for h, la, lo in self.extras['drifters']['tracks'][b['index']]}
+        cur = dr.Currents.from_extras(self.extras, 'hycom')
+        la, lo, _, _ = dr.run(cur, dr.Land(snap), [b['lat']], [b['lon']], snap.times[4].timestamp() * 1000, 72)
+        for q in got['buoy']:
+            self.assertEqual((q['lat'], q['lon']), track[b['h'] + q['h']])
+        h = got['buoy'][-1]['h']
+        p = got['path'][h]
+        want = float(dr.km(la[h, 0], lo[h, 0], *track[b['h'] + h]))
+        self.assertAlmostEqual(float(dr.km(p['lat'], p['lon'], got['buoy'][-1]['lat'], got['buoy'][-1]['lon'])), want, places=2)
+        self.js('__ol.actions.clearDrift()')
 
     def test_ensemble_spread_is_the_random_walk(self):
         # no current: each axis spreads by sqrt(2 K t), so the 90 % ellipse is a circle of radius 2.146 sigma
@@ -150,9 +176,53 @@ class Drift(AppTestCase):
         self.assertAlmostEqual(km(ramp), 129.6, places=6)
 
     def test_same_start_same_drift(self):
-        a = self.js("JSON.stringify(__ol.fn.driftRun({lat:15, lon:88, t0:4, hours:48, dir:1, clock:__ol.fn.driftClock(), uv:fieldCurrentUV, seed:3}).marks)")
-        b = self.js("JSON.stringify(__ol.fn.driftRun({lat:15, lon:88, t0:4, hours:48, dir:1, clock:__ol.fn.driftClock(), uv:fieldCurrentUV, seed:3}).marks)")
+        run = ("JSON.stringify((c=>__ol.fn.driftRun({lat:15, lon:88, start:__ol.fn.driftStart(4), hours:48, dir:1, clock:c.clock, "
+               "uv:c.uv, seed:3}))(__ol.fn.driftCurrents(__ol.realModel)).marks)")
+        a, b = self.js(run), self.js(run)
         self.assertEqual(a, b)
+
+
+class Satellite(AppTestCase):
+    """The satellite SST and SST-front maps (src/js/plugins/satellite.js) and the model-satellite SST line of the
+    comparison panel against data-pipeline/facts_reference.py satellite_maps."""
+    enter = False
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        sys.path.insert(0, str(REPO / 'data-pipeline'))
+        import facts_reference
+        cls.ref = facts_reference
+        cls.snap = facts_reference.Snapshot(str(REPO / 'data' / 'amphan-2020.json'))
+        cls.extras = json.loads((REPO / 'data' / 'amphan-2020-extras.json').read_text(encoding='utf-8'))
+
+    def test_maps_match_their_recomputation(self):
+        nlon = self.snap.nlon
+        for t in (0, 4, 7):
+            ref = self.ref.satellite_maps(self.snap, self.extras, t)
+            app = {k: self.js(f"__ol.fn.field2dGrid('{k}', {t})") for k in ('sstsat', 'front')}
+            bad = []
+            for (i, j), (sst, front) in ref.items():
+                for key, want in (('sstsat', sst), ('front', front)):
+                    got = app[key][i * nlon + j]
+                    if (want is None) != (got is None) or (want is not None and abs(got - want) > 1e-5):
+                        bad.append(f'{key} t{t} ({i},{j}): app {got}, recomputed {want}')
+            self.assertFalse(bad, '\n'.join(bad[:10]))
+            self.assertGreater(sum(f is not None for _, f in ref.values()), 1000)
+
+    def test_model_minus_satellite_sst(self):
+        for model in self.js('__ol.models'):
+            self.js(f"__ol.actions.setRealModel('{model}')")
+            snap = self.snap if model == 'hycom' else self.ref.Snapshot(str(REPO / 'data' / 'amphan-2020-glorys.json'))
+            got = self.js('__ol.fn.satelliteSstStats(4)')
+            ref = self.ref.satellite_maps(self.snap, self.extras, 4)
+            d = [snap.at(0, self.snap.m['lat0'] + i * 0.5, self.snap.m['lon0'] + j * 0.5, 0, 4) - s
+                 for (i, j), (s, _) in ref.items() if s is not None]
+            with self.subTest(model=model):
+                self.assertEqual(got['n'], len(d))
+                self.assertAlmostEqual(got['bias'], sum(d) / len(d), places=4)
+                self.assertAlmostEqual(got['rmse'], math.sqrt(sum(x * x for x in d) / len(d)), places=4)
+        self.js('__ol.actions.setRealModel(__ol.models[0])')
 
 
 if __name__ == '__main__':

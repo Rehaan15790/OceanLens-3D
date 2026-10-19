@@ -236,6 +236,8 @@ registerVariable('cur', {label:'Current speed', unit:'m/s', palette:'speed',
   iso:{min:0.02, step:0.01, dp:2, def:r=>+(r[1]*0.3).toFixed(2)}});
 // 2D field derived from the temperature/salinity columns (tchpColumn); 0–200 matches operational TCHP maps
 registerVariable('tchp', {label:'Cyclone heat potential', unit:'kJ/cm²', palette:'heat', dims:2,
+  about:'Heat stored in water warmer than 26 °C, from the surface down to the 26 °C isotherm (D26), computed from the '+
+        'model’s temperature and salinity. The white contour marks 50 kJ/cm², a common threshold for cyclone intensification.',
   sample:(lat, lon, z, t)=>{ const q = modelTchp(lat, lon, t, bathyDepth(lat, lon)).q; return q===null ? NaN : q; },
   grid:t=>tchpGrid(t).map(c=>c && c.q!==null ? c.q : null), range:[0, 200]});
 // both real-data models are physics only: in real mode chlorophyll comes from BGC-Argo floats only

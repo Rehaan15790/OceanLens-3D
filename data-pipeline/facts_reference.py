@@ -97,43 +97,18 @@ class Snapshot:
         return np.array([self.at(vi, lat, lon, d, t) for d in self.depths])
 
 
-def drift_path(s, lat, lon, t0, hours, direction):
-    """The central surface drift, as drift.js driftRun's member 0 (no spread, no random walk): surface u and v linear
-    in time between the analyses, one-hour midpoint steps (forward, direction 1, or back, -1), ending at the coast
-    (ETOPO bilinear above 0 m) or at the map's edge. Returns [(hour, lat, lon)], the end ('ashore', 'edge' or None)."""
-    m, M = s.m, 111320.0
-    clock = [t.timestamp() * 1000 for t in s.times]
-    lat1, lon1 = m['lat0'] + (s.nlat - 1) * m['step'], m['lon0'] + (s.nlon - 1) * m['step']
-
-    def uv(la, lo, ms):
-        k = 0
-        while k < len(clock) - 2 and ms > clock[k + 1]:
-            k += 1
-        w = max(0.0, min(1.0, (ms - clock[k]) / (clock[k + 1] - clock[k])))
-        u0, v0 = s.at(2, la, lo, 0, k), s.at(3, la, lo, 0, k)
-        if w == 0:
-            return u0, v0
-        u1, v1 = s.at(2, la, lo, 0, k + 1), s.at(3, la, lo, 0, k + 1)
-        return u0 + (u1 - u0) * w, v0 + (v1 - v0) * w
-
-    dt, cos = 3600.0, lambda a: math.cos(math.radians(a))
-    path, la, lo, end = [(0, lat, lon)], lat, lon, None
-    for step in range(1, int(round(hours)) + 1):
-        ms = clock[t0] + direction * (step - 1) * dt * 1000
-        k = direction * dt / M
-        u, v = uv(la, lo, ms)
-        mla, mlo = la + 0.5 * v * k, lo + 0.5 * u * k / cos(la)
-        u, v = uv(mla, mlo, ms + direction * dt * 500)
-        nla, nlo = la + v * k, lo + u * k / cos(mla)
-        if not (m['lat0'] <= nla <= lat1 and m['lon0'] <= nlo <= lon1):
-            end = 'edge'
-            break
-        la, lo = nla, nlo
-        path.append((step, la, lo))
-        if s.land(la, lo):
-            end = 'ashore'
-            break
-    return path, end
+def drift_path(s, lat, lon, t0, hours, direction, extras=None, model=None):
+    """The central surface drift, as drift.js driftRun's member 0 (no spread, no random walk), from analysis t0 of
+    snapshot s: with the surface currents of `model` in `extras` (data/amphan-2020-extras.json) when given, else the
+    snapshot's own surface fields at its analyses (data-pipeline/drift_reference.py does the stepping). Returns
+    [(hour, lat, lon)] as the app's path (the step that reaches land included, the one that would leave the map not)
+    and the end ('ashore', 'edge' or None)."""
+    import drift_reference as dr
+    cur = dr.Currents.from_extras(extras, model) if extras else dr.Currents.from_snapshot(s)
+    la, lo, end, end_h = dr.run(cur, dr.Land(s), [lat], [lon], s.times[t0].timestamp() * 1000, hours, direction)
+    last = int(end_h[0]) - (1 if end[0] == 2 else 0)
+    path = [(h, float(la[h, 0]), float(lo[h, 0])) for h in range(last + 1)]
+    return path, {0: None, 1: 'ashore', 2: 'edge'}[int(end[0])]
 
 
 def rho_eos80(S, T):
@@ -431,3 +406,45 @@ if __name__ == '__main__':
         print(f'wrote {len(expected(F))} expected facts to {args.expected}')
     else:
         print(json.dumps(F, indent=1))
+
+
+def satellite_maps(snap, extras, t):
+    """The app's satellite SST and SST-front map points at analysis t (src/js/plugins/satellite.js), recomputed:
+    {(i, j): (sst, front)} for every sea map point with data. Fronts: a 3 x 3 median filter on the 0.25 deg OISST,
+    then the Sobel gradient in C per 100 km where the whole 3 x 3 neighbourhood is sea; a map point takes the mean SST
+    and the strongest front of the 0.25 deg cells within a quarter degree of it."""
+    s = extras['sat']['sst']
+    g = s['grid']
+    q = np.frombuffer(base64.b64decode(s['data']), '<i2').astype('f8').reshape(len(s['times']), g['nlat'], g['nlon'])
+    T = np.where(q[t] == extras['meta']['missing'], np.nan, s['quant'][0] + q[t] * s['quant'][1]).astype('f4').astype('f8')
+    ny, nx = T.shape
+    M = np.full_like(T, np.nan)
+    for i in range(1, ny - 1):
+        for j in range(1, nx - 1):
+            w = T[i - 1:i + 2, j - 1:j + 2]
+            if np.isfinite(w).all():
+                M[i, j] = np.median(w)
+    G = np.full_like(T, np.nan)
+    km = 111.32 * g['step']
+    for i in range(1, ny - 1):
+        for j in range(1, nx - 1):
+            w = M[i - 1:i + 2, j - 1:j + 2]
+            if not np.isfinite(w).all():
+                continue
+            gx = (w[0, 2] + 2 * w[1, 2] + w[2, 2] - w[0, 0] - 2 * w[1, 0] - w[2, 0]) / 8
+            gy = (w[2, 0] + 2 * w[2, 1] + w[2, 2] - w[0, 0] - 2 * w[0, 1] - w[0, 2]) / 8
+            dx = km * math.cos(math.radians(g['lat0'] + i * g['step']))
+            G[i, j] = math.hypot(gx / dx, gy / km) * 100
+    m = snap.m
+    out = {}
+    for i in range(m['nlat']):
+        for j in range(m['nlon']):
+            lat, lon = m['lat0'] + i * m['step'], m['lon0'] + j * m['step']
+            if snap.cell_median(i, j) > 0:
+                continue
+            ci = [k for k in range(ny) if abs(g['lat0'] + k * g['step'] - lat) < 0.25]
+            cj = [k for k in range(nx) if abs(g['lon0'] + k * g['step'] - lon) < 0.25]
+            sv = [T[a, b] for a in ci for b in cj if np.isfinite(T[a, b])]
+            fv = [G[a, b] for a in ci for b in cj if np.isfinite(G[a, b])]
+            out[(i, j)] = (float(np.mean(sv)) if sv else None, float(max(fv)) if fv else None)
+    return out

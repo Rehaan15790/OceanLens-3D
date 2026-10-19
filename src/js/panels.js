@@ -79,6 +79,7 @@ function renderValidation(){
     <p class="val-sub">${fmt.esc(src.val.sub(t, nArgo, insts.length-nArgo))}</p>
     ${table('temp', 'Temperature (°C), observed − model')}
     ${table('sal', 'Salinity (PSU), observed − model')}
+    ${satelliteLine(t)}
     <h3 class="grp-label">Largest temperature misfit</h3>
     ${ranked.map(o=>`<button type="button" class="misfit" data-k="${insts.indexOf(o.inst)}">${fmt.esc(o.inst.id)}`+
       `<span>RMSE ${o.s.rmse.toFixed(2)} °C · ${misfitWord('temp', o.s.rmse)}</span></button>`).join('')}
@@ -89,6 +90,26 @@ function renderValidation(){
   ui.valPanel.querySelectorAll('.misfit').forEach(b=>{
     b.addEventListener('click', ()=>openProfile(insts[+b.dataset.k].userData));
   });
+}
+
+// model surface temperature against satellite SST (NOAA OISST from the INCOIS LAS) over the sea map points, real data
+// only: {bias, rmse, n} of model − satellite, or null without the satellite data
+function satelliteSstStats(t){
+  if(dataMode!=='real' || !VAR_META.sstsat) return null;
+  const sat = field2dGrid('sstsat', t);
+  let s = 0, s2 = 0, n = 0;
+  gridPts.forEach((p, i)=>{
+    if(gridLand[i] || sat[i]===null) return;
+    const d = fieldTemp(p.lat, p.lon, 0, t) - sat[i];
+    s += d; s2 += d*d; n++;
+  });
+  return n ? {bias:s/n, rmse:Math.sqrt(s2/n), n} : null;
+}
+function satelliteLine(t){
+  const r = satelliteSstStats(t);
+  return r ? `<p class="val-foot">Sea surface, ${fmt.esc(MODEL().short)} − satellite SST (NOAA OISST from the INCOIS LAS): `+
+             `bias ${fmt.signed(r.bias, 2)} °C, RMSE ${r.rmse.toFixed(2)} °C over ${r.n} map points. Both models assimilate `+
+             `satellite SST, so this is a consistency check.</p>` : '';
 }
 
 /* ---- derived quantities at the selected depth: observed, with the model beside it ---- */

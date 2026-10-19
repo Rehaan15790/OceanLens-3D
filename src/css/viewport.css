@@ -92,5 +92,7 @@
 .geoLabel.tick{color:var(--text-2);}
 .geoLabel.current{font-style:italic;}
 .geoLabel.drift{font-weight:600;}
+.geoLabel.drift.buoy{color:#ffcf5c;}
+.geoLabel.under-tools{visibility:hidden;}
 .geoLabel.occluded{opacity:.35;}
 .geoLabel.secEnd{font-weight:600;background:var(--chip);border:1px solid var(--border-strong);border-radius:3px;padding:0 6px;text-shadow:none;}

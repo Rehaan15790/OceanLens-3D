@@ -22,7 +22,8 @@ OceanLens 3D is a browser-based 3D viewer for ocean model output and Argo float 
 | Cyclone forecasters | Cyclone heat potential (TCHP) mapped with the storm track, before and after landfall |
 | Oceanographers | 3D temperature, salinity, currents; depth slices, isotherm depths, sections, float profiles |
 | Data managers | A data server speaking REST, OGC WMS/WCS and OPeNDAP, plus a plugin API for new instruments |
-| Students and outreach | A guided 8-step tour that explains each view |
+| Search and rescue, fisheries | A drift tool checked against real buoys; satellite SST fronts from the INCOIS LAS |
+| Students and outreach | A guided 9-step tour that explains each view |
 
 ## Opening the app
 
@@ -39,7 +40,7 @@ Double-click `OceanLens3D.html`. That one file holds the app, three.js, the Amph
 **The splash screen** shows the title and two buttons, which are disabled while the data loads ("Loading data…"):
 
 - **Enter** opens the app.
-- **Start the guided tour** opens the app and starts the 8-step tour.
+- **Start the guided tour** opens the app and starts the 9-step tour.
 
 **Two data modes**, switched in the header:
 
@@ -139,13 +140,18 @@ The section appears as a curtain in 3D and as a distance–depth chart in the ri
 
 ### Surface drift (search and rescue)
 
-Press **Drift** (bottom of the 3D view) or `T`, then click the sea. An object is released at the analysis on screen and the model's surface currents carry it for 72 h; the camera eases in over it.
+Press **Drift** (bottom of the 3D view) or `T`, then click the sea, or one of the **amber squares**: NOAA drifting buoys at that time. An object is released at the analysis on screen and the model's surface currents carry it for 72 h (HYCOM every 6 hours, GLORYS daily means); the camera eases in over it.
 
-- **The white line** is the drift with no spread. **The dots** are 200 more drifts, released within about 1 km and given a random walk for the eddies the 0.5° grid cannot hold. **The ellipses** hold 90 % of those still afloat after each day: the search area. Amber dots reached the coast.
-- **The dashed line** is the other model's drift from the same point. The panel gives the distance between the two ends: the model uncertainty a forecaster would weigh.
-- **Back in time** asks where something found at that point came from. **24 h / 48 h / 72 h** set how long. Moving the timeline moves the release time.
-- A good demo: the **16 May** analysis, a click near **15°N, 88°E** (under Amphan's path). With HYCOM the object moves about 190 km east in 72 h; the GLORYS drift ends about 140 km from it.
-- Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart, not checked against drifting buoys. A teaching aid, not INCOIS's SARAT.
+- **The white line** is the drift with no spread. **The dots** are 200 more drifts, released within about 1 km and given a random walk for the eddies the model cannot hold. **The ellipses** hold 90 % of those still afloat after each day: the search area. Crosses reached the coast.
+- **The dashed line** is the other model's drift from the same point. **The amber line**, for a drift from a buoy, is where the buoy really went; the table says how far it was from the line and whether it was inside the ellipse.
+- **Back in time** asks where something found at that point came from. **24 h / 48 h / 72 h** set how long. Moving the timeline moves the release time (and, for a buoy, the release point).
+- **The check against real buoys** (the panel foot, `data/drift-validation.json`): 116 three-day releases from 10 drogued buoys. After 72 h GLORYS was a median 28 km from the buoy, HYCOM 47 km; a buoy assumed to stay put, 46 km. So GLORYS is the better drift model here, and HYCOM did no better than "it stays put". The random walk's K is set per model so that about 90 % of buoys fell inside the ellipse (HYCOM 3000, GLORYS 1000 m²/s).
+- A good demo: tour step 9, or the **16 May** analysis and the amber buoy near **11.2°N, 62.0°E**. After 72 h the buoy was 10 km from the GLORYS drift and 67 km from HYCOM's, inside the ellipse.
+- Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), the buoys' drogues hang at 15 m, one month of buoys. A teaching aid, not INCOIS's SARAT.
+
+### Satellite SST and SST fronts (fisheries)
+
+**Satellite SST** (`6`) is NOAA OISST from the **INCOIS Live Access Server**, on 0.25°. **SST fronts** (`7`) shows where it changes fastest (°C per 100 km), by a simplified Belkin and O'Reilly (2009) method: where warm and cool water meet, and where fish often gather. The comparison panel (nothing selected) also gives the model's surface against the satellite SST. This is the temperature half of a fishing-zone advisory: INCOIS pairs fronts with satellite chlorophyll, and the LAS has none for May 2020.
 
 ### The Amphan story (real mode)
 
@@ -259,7 +265,7 @@ Shortcuts pause while a dialog is open, so typing in Add data won't change the v
 
 ### The guided tour (`P`, or Guided tour in the header)
 
-Eight steps, each setting the variable, view and time for you, with a caption of 35 words or fewer built from live numbers:
+Nine steps, each setting the variable, view and time for you, with a caption of 35 words or fewer built from live numbers:
 
 1. **Temperature:** warm surface over a sharp thermocline.
 2. **One depth at a time:** the 100 m depth slice.
@@ -269,6 +275,7 @@ Eight steps, each setting the variable, view and time for you, with a caption of
 6. **Heat before Amphan:** heat under the future path, track panel opens.
 7. **Amphan's cold wake:** the section along the track after landfall.
 8. **Argo against the model:** the worst-fitting float during the storm.
+9. **Search and rescue:** a drift from a real NOAA buoy on 16 May, with where the buoy really went.
 
 Every caption names and quotes the model on screen: run the tour under GLORYS and the numbers are GLORYS's.
 
@@ -299,7 +306,7 @@ flowchart LR
   SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3/4 models"]
   CLI["<b>Other clients</b><br/>GIS tools via WMS<br/>netCDF-C via OPeNDAP<br/>scripts via REST"]
   FILES["<b>Your files</b><br/>CSV, NetCDF-3, NetCDF-4<br/>read in the browser,<br/>never uploaded"]
-  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>322 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
+  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>343 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
   SRC --> PIPE --> SNAP --> BUILD --> APP
   SNAP --> SRV --> CLI
   FILES --> APP
@@ -320,7 +327,7 @@ For an elevator pitch or the opening of a longer slot. Start with the app open o
 >
 > This is Cyclone Amphan, May 2020. Before it, HYCOM puts about 85 kilojoules per square centimetre of heat under its path. *(Press M.)* GLORYS says 109: two good models, a quarter apart. Every float is compared with each model at the same place and time.
 >
-> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 322 automated tests check the rest.
+> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 343 automated tests check the rest.
 
 ## A 3-minute walkthrough
 
@@ -362,7 +369,7 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 
 ## Likely judge questions
 
-Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 21 are Met, 13 Partly met and 5 Not met.
+Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 21 are Met, 15 Partly met and 3 Not met.
 
 | Question | Answer |
 | --- | --- |
@@ -377,10 +384,10 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Why are the coastlines blocky? | Fields are on 0.5° cells; features smaller than that are smoothed. |
 | Can it read NetCDF-4? | Yes, in the browser and in the pipeline, with our own readers (no HDF5 library). They were checked against independent sources: a GLORYS native file against the Copernicus Zarr store (identical values), and two Argo S-files against Ifremer ERDDAP. Only szip- or zstd-compressed files need converting. |
 | Why no chlorophyll map in real mode? | Neither model has chlorophyll (GLORYS's biogeochemistry product is not used). The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
-| Does it work on INCOIS or Copernicus data? | Copernicus, yes: GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. The INCOIS LAS has not been tried: it could not be reached when we checked. |
-| Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. It uses current only (no wind, so no leeway) and is not checked against buoys: a teaching aid, not SARAT. |
-| Fisheries? | Not implemented: there is no PFZ, SST-front or chlorophyll field product. Listed as a possible use. |
-| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 322 automated tests run in a headless browser and on GitHub Actions. |
+| Does it work on INCOIS or Copernicus data? | Both. Copernicus: GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. INCOIS: the satellite SST and SST-front maps come from NetCDF extracts the pipeline asks the INCOIS Live Access Server for. The LAS's model products for May 2020 are monthly, so they are not used as a model. |
+| Search and rescue? | Press `T` and click the sea or an amber buoy: the drift tool moves an object with each model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day. Checked against 116 releases from 10 NOAA buoys: GLORYS a median 28 km off after 72 h, HYCOM 47 km (staying put: 46 km). Current only, no wind: a teaching aid, not SARAT. |
+| Fisheries? | Satellite SST fronts (`7`) from NOAA OISST via the INCOIS LAS: the temperature half of a fishing-zone advisory. There is no chlorophyll map (the LAS has none for May 2020), so no PFZ product. |
+| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 343 automated tests run in a headless browser and on GitHub Actions. |
 | How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, and the plugin API adds sensors and ML products. Production would add scheduled ingestion, auth and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |
