@@ -74,9 +74,9 @@
 .menu-item{display:flex;justify-content:space-between;align-items:center;gap:var(--s-2);min-height:32px;padding:0 var(--s-2);
   border:0;border-radius:3px;background:transparent;color:var(--text);font-size:var(--fs-2);text-align:left;}
 .menu-item:hover,.menu-item.active,.menu-item[aria-pressed="true"]{background:var(--accent-bg);}
-#drawHint{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:4;display:none;padding:var(--s-2) var(--s-3);
+#drawHint,#driftHint{position:absolute;left:50%;bottom:64px;transform:translateX(-50%);z-index:4;display:none;padding:var(--s-2) var(--s-3);
   font-size:var(--fs-2);}
-#drawHint.show{display:block;}
+#drawHint.show,#driftHint.show{display:block;}
 #hoverTip{position:absolute;pointer-events:none;z-index:6;display:none;padding:6px var(--s-2);background:var(--chip);
   border:1px solid var(--border-strong);border-radius:var(--radius);font-size:var(--fs-1);line-height:1.45;white-space:nowrap;
   transform:translate(14px,-50%);font-variant-numeric:tabular-nums;}
@@ -91,5 +91,6 @@
 .geoLabel.land.small{font-weight:600;font-size:var(--fs-1);}
 .geoLabel.tick{color:var(--text-2);}
 .geoLabel.current{font-style:italic;}
+.geoLabel.drift{font-weight:600;}
 .geoLabel.occluded{opacity:.35;}
 .geoLabel.secEnd{font-weight:600;background:var(--chip);border:1px solid var(--border-strong);border-radius:3px;padding:0 6px;text-shadow:none;}

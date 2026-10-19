@@ -75,3 +75,8 @@
 .lg-bar{width:10px;height:10px;background:#c0503f;}
 .lg-outline{width:10px;height:10px;border:1px solid var(--text);}
 #profBack{margin-top:var(--s-2);}
+
+/* drift panel: direction and duration side by side */
+.drift-opts{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:0 0 var(--s-3);}
+.drift-opts .segmented button+button{margin-left:-1px;}
+.drift-opts .segmented button:not(:first-child):not(:last-child){border-radius:0;}

@@ -8,18 +8,21 @@ const profileState = {open:false, inst:null, current:null, floatId:null, tab:'te
 const trackState = {open:false};
 const VAR_DP = {temp:2, sal:2, dens:2, chl:2, oxy:1, cur:2};
 
-function showPanel(which){   // 'empty' | 'profile' | 'track' | 'section'
+function showPanel(which){   // 'empty' | 'profile' | 'track' | 'section' | 'drift'
   state.panel = which;
   profileState.open = which==='profile'; trackState.open = which==='track'; sectionState.open = which==='section';
+  driftState.open = which==='drift';
   ui.profile.classList.toggle('show', profileState.open);
   ui.trackPanel.classList.toggle('show', trackState.open);
   ui.sectionPanel.classList.toggle('show', sectionState.open);
+  document.getElementById('driftPanel').classList.toggle('show', driftState.open);
   ui.rightEmpty.hidden = which!=='empty';
   if(which!=='profile') showSelection(null);
 }
-// closing a profile or the track goes back to the section if one is drawn, else to the summary
+// closing a profile or the track goes back to the drift or the section if there is one, else to the summary
 function closeSidePanels(){
-  if(section){ showPanel('section'); drawSectionPanel(); }
+  if(drift){ showPanel('drift'); renderDriftPanel(); }
+  else if(section){ showPanel('section'); drawSectionPanel(); }
   else showPanel('empty');
 }
 // the built-in Argo profile on screen with the largest temperature RMSE; null when none compares
@@ -37,6 +40,7 @@ function worstArgo(){
 function openPanel(name){
   if(name==='track') return openTrack();
   if(name==='section'){ if(section){ showPanel('section'); drawSectionPanel(); } return; }
+  if(name==='drift'){ if(drift){ showPanel('drift'); renderDriftPanel(); } return; }
   closeSidePanels();
 }
 // the float that disagrees most with the model; false when there is none to show

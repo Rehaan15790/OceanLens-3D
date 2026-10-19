@@ -276,6 +276,8 @@
             <button type="button" class="preset menu-item" data-sec="n8">8°N across both basins</button>
           </div>
         </details>
+        <button type="button" id="driftBtn" class="btn" aria-pressed="false" aria-keyshortcuts="T">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12c1.5-3 3.5-.5 5-3s2.5-4 5-4.5"/><circle cx="3" cy="12" r="1.3"/><path d="M11 3.2 13 4.5l-1.3 2"/></svg>Drift</button>
         <button type="button" id="resetViewBtn" class="btn">
           <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 6.5A5 5 0 1 1 3 9"/><path d="M3 3v3.5h3.5"/></svg>Reset view</button>
         <button type="button" id="snapBtn" class="btn">
@@ -285,6 +287,7 @@
       </div>
 
       <p id="drawHint" class="chip" role="status">Drag across the sea to cut a section. <kbd>Esc</kbd> cancels.</p>
+      <p id="driftHint" class="chip" role="status">Click the sea to release a drift. <kbd>Esc</kbd> cancels.</p>
       <div id="dropZone" aria-hidden="true" hidden><p class="drop-text">Drop to add CSV or NetCDF data</p></div>
     </main>
 
@@ -350,6 +353,31 @@
         <div id="sectionFoot" class="foot"></div>
       </section>
 
+      <section id="driftPanel" aria-labelledby="driftName">
+        <div class="panel-head" id="driftHeader">
+          <div>
+            <h2 class="panel-title" id="driftName">Surface drift</h2>
+            <span class="badge" id="driftKind"></span>
+          </div>
+          <button type="button" id="closeDrift" class="icon-btn" aria-label="Remove the drift">
+            <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+        </div>
+        <p id="driftMeta" class="meta"></p>
+        <div class="drift-opts">
+          <div id="driftDir" class="segmented segmented-small" role="group" aria-label="Direction in time">
+            <button type="button" data-dir="1" aria-pressed="true">Forward</button>
+            <button type="button" data-dir="-1" aria-pressed="false">Back in time</button>
+          </div>
+          <div id="driftHours" class="segmented segmented-small" role="group" aria-label="How long">
+            <button type="button" data-h="24" aria-pressed="false">24 h</button>
+            <button type="button" data-h="48" aria-pressed="false">48 h</button>
+            <button type="button" data-h="72" aria-pressed="true">72 h</button>
+          </div>
+        </div>
+        <div id="driftBody"></div>
+        <div id="driftFoot" class="foot"></div>
+      </section>
+
       <section id="trackPanel" aria-labelledby="trackName">
         <div class="panel-head" id="trackHeader">
           <div>
@@ -396,11 +424,12 @@
       <tr><th scope="row"><kbd>Space</kbd></th><td>Play or pause the analyses</td></tr>
       <tr><th scope="row"><kbd>M</kbd></th><td>Switch the model, HYCOM or GLORYS (real data)</td></tr>
       <tr><th scope="row"><kbd>S</kbd></th><td>Draw a vertical section (drag across the sea)</td></tr>
+      <tr><th scope="row"><kbd>T</kbd></th><td>Release a surface drift (click the sea)</td></tr>
       <tr><th scope="row"><kbd>P</kbd></th><td>Start or end the guided tour</td></tr>
       <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Previous or next tour step</td></tr>
       <tr><th scope="row"><kbd>R</kbd></th><td>Reset the camera</td></tr>
       <tr><th scope="row"><kbd>?</kbd></th><td>Show these shortcuts</td></tr>
-      <tr><th scope="row"><kbd>Esc</kbd></th><td>Close a dialog, cancel drawing, close a panel, then clear the section</td></tr>
+      <tr><th scope="row"><kbd>Esc</kbd></th><td>Close a dialog, cancel drawing, close a panel, then clear the drift or the section</td></tr>
     </table>
     <h3 class="dialog-sub">Mouse and keyboard in the 3D view</h3>
     <table class="keys">
@@ -598,6 +627,7 @@
 <script src="js/isosurface.js"></script>
 <script src="js/track.js"></script>
 <script src="js/section.js"></script>
+<script src="js/drift.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/flow.js"></script>
 <script src="js/markers.js"></script>

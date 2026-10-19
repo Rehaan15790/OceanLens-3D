@@ -74,7 +74,7 @@ A single JSON object, ASCII only, with `</` escaped so it can sit inside a `<scr
   deficiency.
 - `facts_reference.py` recomputes every number the app quotes (track, path heat, basin statistics, section,
   model–Argo comparison) straight from the data file, so tests can check the app's `facts.js` against an
-  independent implementation.
+  independent implementation. `drift_path` does the same for the drift tool's central surface drift.
 
 ## Citations
 

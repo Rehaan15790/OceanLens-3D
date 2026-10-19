@@ -426,6 +426,48 @@ class Controls:
         self.b.key('l')
         self.assertFalse(wrong, 'app hotkeys fire on Ctrl chords:\n' + '\n'.join(wrong))
 
+    def test_drift_by_key_and_click(self):
+        self.js('__ol.actions.setTime(4)')
+        self.b.key('t')
+        self.assertTrue(self.visible('#driftHint'))
+        self.assertEqual(self.js("document.getElementById('driftBtn').getAttribute('aria-pressed')"), 'true')
+        # a click on land releases nothing and says why
+        self.b.click_at(*self.js(SEA_POINT % (78.0, 20.0)))
+        self.b.pump(0.2)
+        self.assertIsNone(self.js('__ol.drift'))
+        self.assertIn('land', self.js("document.getElementById('driftHint').textContent"))
+        self.b.click_at(*self.js(SEA_POINT % (88.0, 15.0)))
+        self.b.pump(1.2)                                   # the camera eases in over the drift
+        d = self.js('({lat:__ol.drift.lat, lon:__ol.drift.lon, panel:__ol.state.panel, placing:__ol.state.driftPlace,'
+                    ' h:__ol.drift.run.path.at(-1).h})')
+        self.assertLess(abs(d['lat'] - 15) + abs(d['lon'] - 88), 0.3, f'released at {d}')
+        self.assertEqual((d['panel'], d['placing'], d['h']), ('drift', False, 72))
+        self.assertFalse(self.visible('#driftHint'))
+        self.assertTrue(self.visible('#driftPanel'))
+        body = self.js("document.getElementById('driftBody').textContent")
+        self.assertIn('90 % area', body)
+        if self.js(DATA_MODE) == 'real' and len(self.js('__ol.models')) > 1:
+            self.assertIn('GLORYS drift (dashed)', body)
+        # back in time and 24 h by real clicks on the panel
+        self.press('#driftDir button[data-dir="-1"]')
+        self.press('#driftHours button[data-h="24"]')
+        self.assertEqual(self.js('[__ol.drift.dir, __ol.drift.run.path.at(-1).h]'), [-1, 24])
+        self.assertEqual(self.js("document.getElementById('driftName').textContent"), 'Drift back in time')
+        # the timeline moves the release time; at the first analysis there is nothing to drift back with
+        self.js('__ol.actions.setTime(0)')
+        self.assertIsNone(self.js('__ol.drift.run'))
+        self.assertIn('no currents before it', self.js("document.getElementById('driftBody').textContent"))
+        # a profile opened over it goes back to the drift when closed; Esc then removes the drift
+        self.js('__ol.actions.setTime(4)')
+        self.js('__ol.actions.openWorstFloat()')
+        self.b.key('Escape')
+        self.assertEqual(self.js('__ol.state.panel'), 'drift')
+        self.b.key('Escape')
+        self.b.pump(0.1)
+        self.assertIsNone(self.js('__ol.drift'))
+        self.assertEqual(self.js('__ol.state.panel'), 'empty')
+        self.assertNoProblems()
+
     def test_help_and_about(self):
         self.b.click('#helpBtn')
         self.assertTrue(self.js("document.getElementById('helpOverlay').classList.contains('show')"))
@@ -448,10 +490,13 @@ class RealMode(Controls, AppTestCase):
         pressed = "document.querySelector('#modelToggle button[data-model=glorys]').getAttribute('aria-pressed')"
         self.assertTrue(self.visible('#modelGrp'))
         self.assertIn('HYCOM analysis', self.js(ctx))
+        field = '__ol.fn.realAt(0, 15, 88, 0, 0)'
+        hycom = self.js(field)
         self.b.click('#modelToggle button[data-model="glorys"]')
         self.b.pump(0.3)
         self.assertEqual(self.js('__ol.realModel'), 'glorys')
         self.assertIn('GLORYS daily mean', self.js(ctx))
+        self.assertNotEqual(self.js(field), hycom)
         self.assertEqual(self.js(pressed), 'true')
         heat = self.js('__ol.facts().real.path.heatBefore')
         # an open profile is redrawn against the other model, not closed
@@ -461,6 +506,7 @@ class RealMode(Controls, AppTestCase):
         self.b.key('m')
         self.b.pump(0.3)
         self.assertEqual(self.js('__ol.realModel'), 'hycom')
+        self.assertEqual(self.js(field), hycom, 'switching back left the other model on the map')
         self.assertEqual(self.js('__ol.state.panel'), 'profile')
         self.assertEqual(self.js("document.getElementById('profName').textContent"), name)
         self.assertIn('HYCOM', self.js(legend))

@@ -28,6 +28,7 @@ function snapshotApp(){
   TOUR_KEYS.forEach(k=>{ s[k] = state[k]; });
   return {state:s, camera:{az:camAz, el:camEl, r:camR, target:camTarget.clone()},
           section: section ? {a:section.a.slice(), b:section.b.slice(), name:section.name} : null,
+          drift: drift ? {lat:drift.lat, lon:drift.lon, hours:drift.hours, dir:drift.dir} : null,
           panel: state.panel, profile: profileState.current};
 }
 function restoreApp(saved){
@@ -35,6 +36,8 @@ function restoreApp(saved){
   Object.assign(state, rest);
   section = saved.section;
   buildSection();
+  drift = saved.drift;
+  buildDrift();          // clears it; the update below runs a restored one
   camTween = null;
   camAz = saved.camera.az; camEl = saved.camera.el; camR = saved.camera.r; camTarget.copy(saved.camera.target);
   updateCamera();
@@ -43,6 +46,7 @@ function restoreApp(saved){
   flushUpdate();
   if(saved.panel==='profile' && saved.profile) openProfile(saved.profile);
   else if(saved.panel==='track') openTrack();
+  else if(saved.panel==='section' && section){ showPanel('section'); drawSectionPanel(); }
   else closeSidePanels();
   if(playing) setPlaying(true);
 }
@@ -55,8 +59,11 @@ function applyTourStep(){
   clearTimeout(tour.timer);
   section = null;           // each step starts without a section; a step can ask for one
   buildSection();
+  drift = null;
+  buildDrift();
   if(!step.section) homeCamera();
   setSectionDraw(false);
+  setDriftPlace(false);
   state.variable = step.variable;
   state.colorMisfit = !!step.openFloat;
   if(step.mode) state.mode = step.mode;

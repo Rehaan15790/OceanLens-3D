@@ -32,6 +32,10 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
 - **Five views:** surface, all depth levels, a depth slice, the depth of a value (for example the 26 °C isotherm,
   D26) and a marching-cubes isosurface.
 - **Vertical sections:** drag a line across the sea, or pick a preset such as Amphan's track.
+- **Surface drift for search and rescue:** click the sea (`T`) to release an object; the model's surface currents
+  carry it up to 72 h forward, or back in time to ask where something found there came from. 200 spread drifts give
+  a 90 % search ellipse for each day and the share that reaches the coast, and the other model's drift from the same
+  point shows how far the two models disagree.
 - **Two models:** HYCOM and the Copernicus Marine GLORYS12V1 reanalysis, the product the problem statement lists,
   switched with one click (or `M`). The fields, comparisons and every number in the tour follow the model.
 - **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
@@ -51,6 +55,10 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
   <tr>
     <td width="50%"><img src="docs/images/cold-wake-section.png" alt="Vertical temperature section along Amphan's track"><br><sub><b>The cold wake.</b> A section along the track after landfall, with D26 and D20 marked.</sub></td>
     <td width="50%"><img src="docs/images/argo-vs-hycom.png" alt="An Argo float's temperature profile compared with HYCOM"><br><sub><b>Argo against HYCOM.</b> The worst-fitting float during the storm: observed profile solid, model dashed, with bias and RMSE.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/surface-drift.png" alt="A surface drift released at 15°N, 88°E on 16 May 2020, with its spread drifts, 90 % ellipses and the GLORYS drift dashed"><br><sub><b>Surface drift.</b> Released at 15°N, 88°E on 16 May: HYCOM carries it about 190 km east in 72 h; the dashed GLORYS drift ends about 140 km away.</sub></td>
+    <td width="50%"><img src="docs/images/drift-back-in-time.png" alt="A drift traced back 72 hours from 13°N, 84°E on 19 May 2020"><br><sub><b>Where did it come from?</b> Traced back 72 h from 13°N, 84°E on 19 May, with the 90 % search ellipse for each day.</sub></td>
   </tr>
 </table>
 
@@ -164,8 +172,11 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
 - **The ADCP and HF radar plugins are tested on synthetic records only.**
 - **Not yet connected:** the INCOIS Live Access Server and Copernicus Marine's other products (biogeochemistry,
   forecasts); scheduled Argo, BGC-Argo and glider ingestion; authentication and rate limits, which belong in the institution's reverse proxy.
-- **Possible uses, not implemented as features:** drift prediction for search and rescue (needs particle tracking),
-  fishing-zone advisories, and climate monitoring.
+- **The drift tool moves objects with the surface current only.** The data have no wind, so there is no leeway
+  (a life raft or a person in the water also moves with the wind) and no Stokes drift; currents are 3 days apart
+  and linear in time between them; the random-walk diffusivity is an assumed value; it has not been checked against
+  drifting buoys. It is a teaching aid, not a search plan (INCOIS runs SARAT for that).
+- **Possible uses, not implemented as features:** fishing-zone advisories and climate monitoring.
 
 ## Data sources and citations
 

@@ -30,6 +30,7 @@ window.addEventListener('keydown', e=>{
   else if(MODE_KEYS[k] && !is2D(state.variable)){ stopTour(); setMode(MODE_KEYS[k]); }
   else if(k==='m' && dataMode==='real' && REAL_MODELS.length > 1) setRealModel(nextRealModel());
   else if(k==='s') setSectionDraw(!state.sectionDraw);
+  else if(k==='t') setDriftPlace(!state.driftPlace);
   else if(k==='p'){ e.preventDefault(); if(isTourRunning()) stopTour({restore:true}); else startTour(); }
   else if(k==='r') resetView();
   else if(k===' '){ e.preventDefault(); setPlaying(!state.playing); }
@@ -43,7 +44,10 @@ window.addEventListener('keydown', e=>{
     ui.helpOverlay.classList.remove('show');
     ui.aboutOverlay.classList.remove('show');
     if(state.sectionDraw){ setSectionDraw(false); sectionDrag = null; }
+    else if(state.driftPlace) setDriftPlace(false);
     else if(state.panel==='profile' || state.panel==='track') closeSidePanels();
+    else if(state.panel==='section') clearSection();
+    else if(drift) clearDrift();
     else if(section) clearSection();
   }
 });

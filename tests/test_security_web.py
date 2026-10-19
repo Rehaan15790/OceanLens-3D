@@ -199,6 +199,25 @@ class HostileText(AppTestCase):
         self.assertClean()
         self.assertNoProblems()
 
+    # attack: a snapshot's model names (meta.model.short, the words built from it) reached the drift panel and its map
+    # labels unescaped, for the model on screen and for the other model it is compared with
+    def test_markup_in_model_names_is_shown_as_text_in_the_drift_panel(self):
+        saved = self.js('JSON.stringify(REAL_MODELS.map(m => m.words))')
+        try:
+            self.js(f"""REAL_MODELS.forEach(m => Object.assign(m.words, {{short: {json.dumps(IMG)}, product: {json.dumps(SVG)},
+                products: {json.dumps(IMG)}, label: {json.dumps(SVG)}}}))""")
+            self.js('setTime(4); flushUpdate()')
+            self.assertTrue(self.js('startDrift(15, 88)'))
+            self.js('flushUpdate()')
+            self.assertIn('&lt;img', self.js("document.getElementById('driftBody').innerHTML"))
+            self.js('setDriftOptions({dir: -1}); setTime(0); flushUpdate()')     # the "no currents before it" text
+            self.assertIn('no currents before', self.js("document.getElementById('driftBody').textContent"))
+            self.assertClean()
+        finally:
+            self.js(f'(w => REAL_MODELS.forEach((m, i) => Object.assign(m.words, w[i])))({saved})')
+            self.js('clearDrift(); flushUpdate()')
+        self.assertNoProblems()
+
     # attack: CSV header cells, a cell in the id column and the file name reached the import dialog
     def test_markup_in_csv_headers_cells_and_file_name_is_shown_as_text(self):
         la, lo = self.mid
@@ -591,7 +610,7 @@ class PageFile(unittest.TestCase):
         # the only strings assigned to innerHTML are templates whose data parts pass fmt.esc, numbers or constants;
         # a new unescaped sink is caught by the hostile-id tests above, this keeps the list of files that have any short
         files = sorted(p.name for p in (REPO / 'src' / 'js').rglob('*.js') if 'innerHTML' in p.read_text(encoding='utf-8'))
-        self.assertEqual(files, ['charts.js', 'hover.js', 'import-ui.js', 'panels.js'],
+        self.assertEqual(files, ['charts.js', 'drift.js', 'hover.js', 'import-ui.js', 'panels.js'],
                          'a file with an innerHTML sink was added: escape its data with fmt.esc and add a hostile-input test')
 
 

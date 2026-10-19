@@ -51,8 +51,10 @@ const REAL_MODELS = (()=>{
   return list;
 })();
 let realModel = REAL_MODELS[0].id;
+// REAL is the model on screen; setRealModel() copies another decoded model's fields into it, so the main model keeps
+// a copy of its own (sharing REAL would let a switch overwrite it, and switching back would keep the other model)
 const REAL = decodeModel(REAL_DATA);
-REAL_MODELS[0].decoded = REAL;
+REAL_MODELS[0].decoded = Object.assign({}, REAL);
 // the model on screen: its words (MODEL.short, MODEL.product, ...)
 function activeModel(){ return REAL_MODELS.find(x=>x.id===realModel) || REAL_MODELS[0]; }
 function MODEL(){ return activeModel().words; }
@@ -66,9 +68,9 @@ REAL_MODELS.forEach(m=>{
   b.addEventListener('click', ()=>setRealModel(m.id));
   ui.modelToggle.appendChild(b);
 });
-// bilinear in latitude/longitude, linear between model levels
-function realAt(vi, lat, lon, depth, t){
-  const m = REAL.meta, f = REAL.f;
+// bilinear in latitude/longitude, linear between model levels; R is a decodeModel() result (realAt: the model on screen)
+function realAtIn(R, vi, lat, lon, depth, t){
+  const m = R.meta, f = R.f;
   const y = Math.max(0, Math.min(m.nlat-1.000001, (lat-m.lat0)/m.step));
   const x = Math.max(0, Math.min(m.nlon-1.000001, (lon-m.lon0)/m.step));
   const i = Math.floor(y), j = Math.floor(x), fy = y-i, fx = x-j;
@@ -77,11 +79,12 @@ function realAt(vi, lat, lon, depth, t){
   while(k < D.length-2 && z > D[k+1]) k++;
   const fz = (z-D[k])/(D[k+1]-D[k]);
   const at = kk=>{
-    const o = (t*m.vars.length+vi)*REAL.per + kk*REAL.layer + i*m.nlon + j;
+    const o = (t*m.vars.length+vi)*R.per + kk*R.layer + i*m.nlon + j;
     return (f[o]*(1-fx) + f[o+1]*fx)*(1-fy) + (f[o+m.nlon]*(1-fx) + f[o+m.nlon+1]*fx)*fy;
   };
   return fz===0 ? at(k) : at(k)*(1-fz) + at(k+1)*fz;
 }
+function realAt(vi, lat, lon, depth, t){ return realAtIn(REAL, vi, lat, lon, depth, t); }
 
 /* ---- real Argo profiles (REAL_DATA.argo), one set per analysis ----
    Each carries the main model at its own position and time when the snapshot has argo.model (inst.atObs; it is

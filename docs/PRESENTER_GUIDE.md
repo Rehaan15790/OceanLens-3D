@@ -137,6 +137,16 @@ Open the **Section** menu (bottom of the 3D view), or press `S` and drag across 
 
 The section appears as a curtain in 3D and as a distance–depth chart in the right panel. Hover the chart to read values. In the section chart, **solid is D26 and dashed is D20**. `Esc` closes panels, then clears the section.
 
+### Surface drift (search and rescue)
+
+Press **Drift** (bottom of the 3D view) or `T`, then click the sea. An object is released at the analysis on screen and the model's surface currents carry it for 72 h; the camera eases in over it.
+
+- **The white line** is the drift with no spread. **The dots** are 200 more drifts, released within about 1 km and given a random walk for the eddies the 0.5° grid cannot hold. **The ellipses** hold 90 % of those still afloat after each day: the search area. Amber dots reached the coast.
+- **The dashed line** is the other model's drift from the same point. The panel gives the distance between the two ends: the model uncertainty a forecaster would weigh.
+- **Back in time** asks where something found at that point came from. **24 h / 48 h / 72 h** set how long. Moving the timeline moves the release time.
+- A good demo: the **16 May** analysis, a click near **15°N, 88°E** (under Amphan's path). With HYCOM the object moves about 190 km east in 72 h; the GLORYS drift ends about 140 km from it.
+- Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart, not checked against drifting buoys. A teaching aid, not INCOIS's SARAT.
+
 ### The Amphan story (real mode)
 
 These are the numbers the app computes; the tour captions show them live.
@@ -236,11 +246,12 @@ It also loads **CF NetCDF-3 or NetCDF-4 model files** with `--netcdf`, so other 
 | `Space` | Play / pause the analyses |
 | `M` | Switch the model: HYCOM or GLORYS (real data) |
 | `S` | Draw a section (drag across the sea) |
+| `T` | Release a surface drift (click the sea) |
 | `P` | Start / end the guided tour |
 | `←` `→` | Previous / next tour step |
 | `R` | Reset the camera |
 | `?` | Show the shortcuts |
-| `Esc` | Close a dialog, cancel drawing, close a panel, then clear the section |
+| `Esc` | Close a dialog, cancel drawing, close a panel, then clear the drift or the section |
 | Drag / scroll | Orbit / zoom (arrow keys and `+` `−` also work when the view has focus) |
 | Click a float / the track | Open its profile / the track details |
 
@@ -288,7 +299,7 @@ flowchart LR
   SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3/4 models"]
   CLI["<b>Other clients</b><br/>GIS tools via WMS<br/>netCDF-C via OPeNDAP<br/>scripts via REST"]
   FILES["<b>Your files</b><br/>CSV, NetCDF-3, NetCDF-4<br/>read in the browser,<br/>never uploaded"]
-  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>315 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
+  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>322 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
   SRC --> PIPE --> SNAP --> BUILD --> APP
   SNAP --> SRV --> CLI
   FILES --> APP
@@ -309,7 +320,7 @@ For an elevator pitch or the opening of a longer slot. Start with the app open o
 >
 > This is Cyclone Amphan, May 2020. Before it, HYCOM puts about 85 kilojoules per square centimetre of heat under its path. *(Press M.)* GLORYS says 109: two good models, a quarter apart. Every float is compared with each model at the same place and time.
 >
-> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 315 automated tests check the rest.
+> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 322 automated tests check the rest.
 
 ## A 3-minute walkthrough
 
@@ -351,7 +362,7 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 
 ## Likely judge questions
 
-Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 21 are Met, 12 Partly met and 6 Not met.
+Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 21 are Met, 13 Partly met and 5 Not met.
 
 | Question | Answer |
 | --- | --- |
@@ -367,8 +378,9 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Can it read NetCDF-4? | Yes, in the browser and in the pipeline, with our own readers (no HDF5 library). They were checked against independent sources: a GLORYS native file against the Copernicus Zarr store (identical values), and two Argo S-files against Ifremer ERDDAP. Only szip- or zstd-compressed files need converting. |
 | Why no chlorophyll map in real mode? | Neither model has chlorophyll (GLORYS's biogeochemistry product is not used). The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
 | Does it work on INCOIS or Copernicus data? | Copernicus, yes: GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. The INCOIS LAS has not been tried: it could not be reached when we checked. |
-| Search and rescue or fisheries? | Not implemented. Currents are shown but there is no particle tracking; there is no PFZ product. Both are listed as possible uses. |
-| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 315 automated tests run in a headless browser and on GitHub Actions. |
+| Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. It uses current only (no wind, so no leeway) and is not checked against buoys: a teaching aid, not SARAT. |
+| Fisheries? | Not implemented: there is no PFZ, SST-front or chlorophyll field product. Listed as a possible use. |
+| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 322 automated tests run in a headless browser and on GitHub Actions. |
 | How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, and the plugin API adds sensors and ML products. Production would add scheduled ingestion, auth and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |

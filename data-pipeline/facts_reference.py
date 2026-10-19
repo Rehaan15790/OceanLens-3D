@@ -97,6 +97,45 @@ class Snapshot:
         return np.array([self.at(vi, lat, lon, d, t) for d in self.depths])
 
 
+def drift_path(s, lat, lon, t0, hours, direction):
+    """The central surface drift, as drift.js driftRun's member 0 (no spread, no random walk): surface u and v linear
+    in time between the analyses, one-hour midpoint steps (forward, direction 1, or back, -1), ending at the coast
+    (ETOPO bilinear above 0 m) or at the map's edge. Returns [(hour, lat, lon)], the end ('ashore', 'edge' or None)."""
+    m, M = s.m, 111320.0
+    clock = [t.timestamp() * 1000 for t in s.times]
+    lat1, lon1 = m['lat0'] + (s.nlat - 1) * m['step'], m['lon0'] + (s.nlon - 1) * m['step']
+
+    def uv(la, lo, ms):
+        k = 0
+        while k < len(clock) - 2 and ms > clock[k + 1]:
+            k += 1
+        w = max(0.0, min(1.0, (ms - clock[k]) / (clock[k + 1] - clock[k])))
+        u0, v0 = s.at(2, la, lo, 0, k), s.at(3, la, lo, 0, k)
+        if w == 0:
+            return u0, v0
+        u1, v1 = s.at(2, la, lo, 0, k + 1), s.at(3, la, lo, 0, k + 1)
+        return u0 + (u1 - u0) * w, v0 + (v1 - v0) * w
+
+    dt, cos = 3600.0, lambda a: math.cos(math.radians(a))
+    path, la, lo, end = [(0, lat, lon)], lat, lon, None
+    for step in range(1, int(round(hours)) + 1):
+        ms = clock[t0] + direction * (step - 1) * dt * 1000
+        k = direction * dt / M
+        u, v = uv(la, lo, ms)
+        mla, mlo = la + 0.5 * v * k, lo + 0.5 * u * k / cos(la)
+        u, v = uv(mla, mlo, ms + direction * dt * 500)
+        nla, nlo = la + v * k, lo + u * k / cos(mla)
+        if not (m['lat0'] <= nla <= lat1 and m['lon0'] <= nlo <= lon1):
+            end = 'edge'
+            break
+        la, lo = nla, nlo
+        path.append((step, la, lo))
+        if s.land(la, lo):
+            end = 'ashore'
+            break
+    return path, end
+
+
 def rho_eos80(S, T):
     """UNESCO EOS-80 density at one atmosphere (kg/m3), as ocean.js seawaterDensity."""
     rw = (999.842594 + 6.793952e-2 * T - 9.095290e-3 * T ** 2 + 1.001685e-4 * T ** 3 - 1.120083e-6 * T ** 4

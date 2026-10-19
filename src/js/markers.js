@@ -128,8 +128,9 @@ function pickAt(clientX, clientY){
   if(trackGroup.visible) trackFixes.forEach(f=>consider(f.pos, {kind:'track', index:f.index}));
   return best;
 }
-// a click on the view (not a drag): open the profile or the track under the pointer
+// a click on the view (not a drag): release a drift, or open the profile or the track under the pointer
 function handleClick(e){
+  if(state.driftPlace){ placeDriftAt(e); return; }   // releasing a drift: the click is a place on the sea
   const hit = pickAt(e.clientX, e.clientY);
   if(!hit) return;
   if(hit.kind==='track') openTrack();

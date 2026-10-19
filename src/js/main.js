@@ -62,6 +62,7 @@ function fullUpdate(){
   if(state.panel==='profile'){ renderDerived(); drawProfileChart(); }
   if(state.panel==='track') renderTrack();
   if(section){ buildSection(); if(state.panel==='section') drawSectionPanel(); }
+  if(drift){ computeDrift(); buildDrift(); if(state.panel==='drift') renderDriftPanel(); }
   renderValidation();
 }
 // the exaggeration fast path: geometry that depends on the vertical scale, no recolouring
@@ -105,19 +106,21 @@ function exposeTestSurface(){
   ol.state = state;
   Object.defineProperty(ol, 'dataMode', {get: ()=>dataMode, configurable:true});
   Object.defineProperty(ol, 'realModel', {get: ()=>realModel, configurable:true});
+  Object.defineProperty(ol, 'drift', {get: ()=>drift, configurable:true});
   ol.models = REAL_MODELS.map(m=>m.id);
   ol.actions = Object.fromEntries(Object.entries({
     setVariable, setMode, setDepth, setIso, setTime, setPlaying, setDataMode, setRealModel, setOverlay, setOpacity,
     setExaggeration,
     setRange, setPalette, setScale, setShowAllImported, resetRange: ()=>{ resetRange(); requestUpdate('full'); },
     openPanel, closePanels:closeSidePanels, openProfile, openWorstFloat, startTour, stopTour, goToTourStep, nextTourStep, setTourAutoplay,
-    showSectionPreset, clearSection
+    showSectionPreset, clearSection, startDrift, setDriftOptions, clearDrift, setDriftPlace
   }).map(([k, f])=>[k, now(f)]));
   ol.flush = flushUpdate;
   ol.plugins = OceanLens;
   ol.facts = facts;
   ol.fn = {seawaterDensity, sigmaT, tchpColumn, firstCrossing, contourSegments, summarize, misfit, realAt, obsInterp,
-           modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow};
+           modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow,
+           driftRun, driftClock, uvAtTime, realAtIn, decodeModel};
   ol.render = Render.test;
 }
 

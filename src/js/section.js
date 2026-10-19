@@ -141,6 +141,7 @@ function surfaceLatLon(e){
 }
 // drag-to-draw mode on or off (the S key, the draw button)
 function setSectionDraw(on){
+  if(on && state.driftPlace) setDriftPlace(false);
   state.sectionDraw = on;
   document.getElementById('sectionDrawBtn').classList.toggle('active', on);
   viewport.classList.toggle('drawing', on);
@@ -238,7 +239,7 @@ function clearSection(){
   buildSection();
   applyMode();
   homeCamera();
-  if(sectionState.open) showPanel('empty');
+  if(sectionState.open) closeSidePanels();
 }
 document.getElementById('sectionDrawBtn').addEventListener('click', ()=>setSectionDraw(!state.sectionDraw));
 document.querySelectorAll('#sectionPresets .preset').forEach(b=>{

@@ -67,13 +67,14 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | | `isosurface.js` | Marching cubes for the Isosurface (3D) view |
 | | `track.js` | The cyclone track line and fixes |
 | | `section.js` | Vertical sections: drawing the line, cutting the curtain |
+| | `drift.js` | The surface drift tool: the trajectory model, its 3D drawing and its panel |
 | | `flow.js` | Current arrows and streaks |
 | | `markers.js` | Float, glider and instrument markers, their depth stems, and clicking them |
 | UI | `charts.js` | Canvas charts in the panels and the colour key |
 | | `controls.js` | Wires buttons and sliders to **actions**, the only code allowed to change `state` |
 | | `timeline.js` | The time slider and playback |
 | | `tour-steps.js`, `tour.js` | The eight tour steps and the code that runs them |
-| | `panels.js` | Right-hand panels: validation summary, float profile, track details |
+| | `panels.js` | Right-hand panels: validation summary, float profile, track details (the drift panel is in `drift.js`) |
 | Import | `import/csv.js` | Parses comma, tab or semicolon text and guesses which column is which |
 | | `import/netcdf3.js` | A NetCDF-3 reader written from scratch |
 | | `import/netcdf4.js` | A NetCDF-4 (HDF5) reader written from scratch, with the same interface |
@@ -213,6 +214,18 @@ This follows GODAE Class 4 verification, the standard way forecast centres compa
 ### Quality control
 
 `inversionFlags` is the **density-inversion test** from the Argo real-time QC manual (test 14). Going down the profile, a level lighter than the one above by more than 0.03 kg/m³ is flagged, and going up, a level denser than the one below. A single dense spike gets flagged itself, not the good levels around it. Flagged levels are drawn but left out of bias and RMSE.
+
+### Surface drift
+
+`driftRun` in `drift.js` moves an object with the surface current (the model's top level):
+
+- **Time:** the current at any moment is linear in time between the two analyses around it (3 days apart).
+- **Steps:** one hour each, by the midpoint rule: the current at the start moves the object half a step, and the current there (half an hour on) moves it the whole step. A metre is 1/111 320 of a degree of latitude, and of longitude divided by cos(latitude). Back in time, the steps run the other way.
+- **Spread:** member 0 is the central drift with no spread. 200 more start within about 1 km and each step add a random walk, σ = √(2·K·dt) per axis with K = 1000 m²/s, standing for eddies smaller than the 0.5° grid. The generator is seeded from the start point and time, so the same click gives the same drift.
+- **Search area:** at every 24 h the members still afloat give a mean and a covariance; the ellipse with semi-axes 2.146 × the square roots of its eigenvalues holds 90 % of a two-dimensional normal.
+- **Ends:** a member stops when it reaches land (ETOPO1 above 0 m, amber) or leaves the map.
+
+With two models in the page, the central drift is also run with the other model (`realAtIn` reads any decoded model), from the same point and time. `facts_reference.py` (`drift_path`) recomputes the central drift with numpy, and the tests compare the two hour by hour.
 
 ### Other derived quantities
 
