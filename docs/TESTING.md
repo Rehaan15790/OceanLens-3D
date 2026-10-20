@@ -156,6 +156,9 @@ tests from reaching the network.
   needs.
 - The browser's stderr goes to a file in the throwaway profile. If the browser exits before it opens its DevTools
   port, the error message ends with the last lines of that stderr.
+- The throwaway profile is deleted by `close()`, after a failed start, and at exit for a browser still open (Ctrl+C
+  in a test run). On Windows anything still running on the profile is stopped first: Edge can hand its start-up to
+  a new process and exit, and that process would keep the profile locked.
 
 | Method | Purpose |
 |---|---|

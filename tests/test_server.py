@@ -833,6 +833,37 @@ class DevToolsClientTest(unittest.TestCase):
                     p.kill()
                 shutil.rmtree(profile, ignore_errors=True)
 
+    @unittest.skipUnless(sys.platform == 'win32', 'Edge hands its start-up over to a new process on Windows')
+    def test_handed_off_browser_does_not_keep_the_profile(self):
+        # like Edge: the launcher starts a second process on the profile and exits at once; that one holds a file open
+        # in the profile, so the profile cannot be deleted until it is stopped
+        hold = ('import os, sys, time; f = open(os.path.join(sys.argv[1], "lockfile"), "w"); f.write(str(os.getpid()));'
+                ' f.flush(); time.sleep(120)')
+        launch = 'import subprocess, sys; subprocess.Popen([sys.executable, "-c", sys.argv[1], sys.argv[2]])'
+        profiles = []
+
+        def hand_off(self_, *a, **k):
+            self_.profile = tempfile.mkdtemp(prefix='oceanlens-cdp-test-')
+            profiles.append(self_.profile)
+            self_.proc = subprocess.Popen([sys.executable, '-c', launch, hold, self_.profile],
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self_.proc.wait(10)
+            lock, end = Path(self_.profile) / 'lockfile', time.monotonic() + 10
+            while not (lock.exists() and lock.stat().st_size) and time.monotonic() < end:
+                time.sleep(0.05)
+            raise cdp.CDPError(f'browser exited with code {self_.proc.returncode}')
+        try:
+            with mock.patch.object(cdp.Browser, '_start', hand_off):
+                with self.assertRaises(cdp.CDPError):
+                    cdp.Browser(browser=sys.executable)
+            self.assertFalse(Path(profiles[0]).exists(), 'the handed-off process must be stopped and the profile removed')
+        finally:
+            for profile in profiles:
+                lock = Path(profile) / 'lockfile'
+                if lock.exists():
+                    subprocess.run(['taskkill', '/PID', lock.read_text(), '/F'], capture_output=True)
+                shutil.rmtree(profile, ignore_errors=True)
+
 
 if __name__ == '__main__':
     unittest.main()
