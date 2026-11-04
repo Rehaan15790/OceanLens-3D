@@ -51,6 +51,8 @@ function refreshMarkers(){
 // check that the action ends in requestUpdate() and that the stale piece is refreshed here.
 function fullUpdate(){
   refreshMarkers();
+  refreshDrifters();
+  applyDrifterVisibility();
   followProfile();
   updateStormNow();
   updateLayerColors();
@@ -64,6 +66,7 @@ function fullUpdate(){
   if(section){ buildSection(); if(state.panel==='section') drawSectionPanel(); }
   if(drift){ computeDrift(); buildDrift(); if(state.panel==='drift') renderDriftPanel(); }
   renderValidation();
+  renderProductCard();
 }
 // the exaggeration fast path: geometry that depends on the vertical scale, no recolouring
 function applyDepthScale(){
@@ -107,7 +110,7 @@ function exposeTestSurface(){
   Object.defineProperty(ol, 'dataMode', {get: ()=>dataMode, configurable:true});
   Object.defineProperty(ol, 'realModel', {get: ()=>realModel, configurable:true});
   Object.defineProperty(ol, 'drift', {get: ()=>drift, configurable:true});
-  ol.models = REAL_MODELS.map(m=>m.id);
+  Object.defineProperty(ol, 'models', {get: ()=>REAL_MODELS.map(m=>m.id), configurable:true});
   ol.actions = Object.fromEntries(Object.entries({
     setVariable, setMode, setDepth, setIso, setTime, setPlaying, setDataMode, setRealModel, setOverlay, setOpacity,
     setExaggeration,
@@ -120,7 +123,8 @@ function exposeTestSurface(){
   ol.facts = facts;
   ol.fn = {seawaterDensity, sigmaT, tchpColumn, firstCrossing, contourSegments, summarize, misfit, realAt, obsInterp,
            modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow,
-           driftRun, driftClock, uvAtTime, realAtIn, decodeModel};
+           driftRun, driftClock, uvAtTime, realAtIn, decodeModel, adiabaticLapse, potentialTemp, inSituTemp,
+           modelAsMeasured};
   ol.render = Render.test;
 }
 

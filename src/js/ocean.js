@@ -16,6 +16,24 @@ function pressureDbar(z, lat=15){
   const s = Math.sin(lat*Math.PI/180), c1 = (5.92 + 5.25*s*s)*1e-3;
   return ((1-c1) - Math.sqrt((1-c1)*(1-c1) - 8.84e-6*z))/4.42e-6;
 }
+// adiabatic lapse rate (°C/dbar), Bryden (1973) as in UNESCO (1983)
+function adiabaticLapse(S, T, P){
+  const ds = S - 35;
+  return (((-2.1687e-16*T + 1.8676e-14)*T - 4.6206e-13)*P
+    + ((2.7759e-12*T - 1.1351e-10)*ds + ((-5.4481e-14*T + 8.733e-12)*T - 6.7795e-10)*T + 1.8741e-8))*P
+    + (-4.2393e-8*T + 1.8932e-6)*ds + ((6.6228e-10*T - 6.836e-8)*T + 8.5258e-6)*T + 3.5803e-5;
+}
+// temperature of water at pressure P (dbar) brought adiabatically to PR: Fofonoff (1977) Runge-Kutta, UNESCO (1983);
+// check value θ(S=40, T=40 °C, P=10000, PR=0) = 36.89073 °C
+function potentialTemp(S, T, P, PR=0){
+  let h = PR - P, xk = h*adiabaticLapse(S, T, P), t = T + 0.5*xk, q = xk, p = P + 0.5*h;
+  xk = h*adiabaticLapse(S, t, p); t += 0.29289322*(xk - q); q = 0.58578644*xk + 0.121320344*q;
+  xk = h*adiabaticLapse(S, t, p); t += 1.707106781*(xk - q); q = 3.414213562*xk - 4.121320344*q;
+  p += 0.5*h; xk = h*adiabaticLapse(S, t, p);
+  return t + (xk - 2*q)/6;
+}
+// in-situ temperature at depth z of water with potential temperature θ (reference 0 dbar)
+function inSituTemp(S, theta, z, lat=15){ return potentialTemp(S, theta, 0, pressureDbar(z, lat)); }
 // sound speed, Mackenzie (1981) nine-term equation
 function soundSpeed(T,S,z){
   return 1448.96 + 4.591*T - 5.304e-2*T*T + 2.374e-4*Math.pow(T,3)
@@ -47,12 +65,23 @@ function modelAt(varKey, lat, lon, z, t){
   return null; // below the deepest model level
 }
 
+// true when the model on screen gives potential temperature (GLORYS), which floats do not measure
+function modelTempIsPotential(){ return dataMode==='real' && MODEL().temperature==='potential'; }
+// the gridded model as an instrument would measure it: a potential-temperature model is turned into in-situ
+// temperature at the depth's pressure (UNESCO 1983), and density follows from that; other variables as modelAt
+function modelAsMeasured(varKey, lat, lon, z, t){
+  if(!modelTempIsPotential() || (varKey!=='temp' && varKey!=='dens')) return modelAt(varKey, lat, lon, z, t);
+  const th = modelAt('temp', lat, lon, z, t), S = modelAt('sal', lat, lon, z, t);
+  if(th===null || S===null) return null;
+  const T = inSituTemp(S, th, z, lat);
+  return varKey==='temp' ? T : sigmaT(S, T);
+}
 // Real profiles carry the main model (HYCOM) at their own position and time while it is on screen (the pipeline's
 // argo.model, native levels interpolated to the Argo levels); synthetic ones, and real ones without it (GLORYS), read
-// the gridded model at the nearest analysis.
-function modelAtObs(inst, varKey, z){
+// the gridded model at the nearest analysis (t, by default the profile's own analysis or the time on screen)
+function modelAtObs(inst, varKey, z, t = inst.real ? inst.snap : state.time){
   const M = inst.model;
-  if(!M) return modelAt(varKey, inst.lat, inst.lon, z, inst.real ? inst.snap : state.time);
+  if(!M) return modelAsMeasured(varKey, inst.lat, inst.lon, z, t);
   if(varKey==='chl') return null;
   if(varKey==='dens'){
     const T = modelAtObs(inst,'temp',z), S = modelAtObs(inst,'sal',z);
@@ -143,7 +172,7 @@ function misfit(inst, t, varKey){
   const p = observeProfile(inst, t), arr = obsArray(p, varKey), out = [];
   p.z.forEach((z,k)=>{
     if(!Number.isFinite(arr[k]) || p.flag[k]) return;
-    const m = inst.model ? modelAtObs(inst, varKey, z) : modelAt(varKey, inst.lat, inst.lon, z, t);
+    const m = modelAtObs(inst, varKey, z, t);
     if(m!==null) out.push({z, d:arr[k]-m});
   });
   return out;

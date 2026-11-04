@@ -234,7 +234,7 @@ function drawProfileChart(){
   // the chart spans the observed profile (model levels stop at 1000 m): 1000 m for Argo, less for shallow casts
   const maxDepth = inst.kind==='argo' || !(inst.maxDepth > 0) ? 1000 : Math.min(1000, Math.ceil(inst.maxDepth/100)*100);
   const modelZ = DEPTHS.filter(z=>z<maxDepth).concat([maxDepth]);
-  const modelV = modelZ.map(z=>modelAt(tab, lat, lon, z, t));
+  const modelV = modelZ.map(z=>modelAsMeasured(tab, lat, lon, z, t));   // potential temperature shown as in-situ
   const hasModel = modelV.every(v=>v!==null);   // false for chlorophyll in real mode (no model has it)
   const vals = hasModel ? modelV.slice() : [];
   if(hasObs) obs.forEach(v=>{ if(Number.isFinite(v)) vals.push(v); });
@@ -317,7 +317,8 @@ function drawProfileChart(){
     : inst.kind==='argo' ? (real ? 'Argo' : 'Synthetic float') : 'Synthetic glider';
   document.getElementById('obsLegend').innerHTML =
     `<span><i class="lg lg-obs"></i>${fmt.esc(obsName)}</span>` +
-    (hasModel ? `<span><i class="lg lg-model"></i>${real ? MODEL().short : 'Model'}</span>` : '') +
+    (hasModel ? `<span><i class="lg lg-model"></i>${real ? MODEL().short : 'Model'}` +
+      `${modelTempIsPotential() && (tab==='temp' || tab==='dens') ? ', as in-situ' : ''}</span>` : '') +
     (p.flag.some(f=>f) ? `<span><i class="lg lg-flag"></i>QC flag</span>` : '');
 
   const s = hasObs ? summarize(misfit(inst, t, tab)) : null;
@@ -366,7 +367,7 @@ function keySpec(){
   }
   if(c.empty) notes.push(hasModel(state.variable) ? 'No surface: no water column crosses this value at this time.'
     : 'No surface: there is no model field to search.');
-  if(state.showArgo){
+  if(state.showArgo && (dataMode!=='real' || realProfiles.length)){
     if(state.colorMisfit){
       legend.push({sw:'float good', text:'Float, temperature RMSE < 0.5 °C'});
       legend.push({sw:'float fair', text:'0.5–1.0 °C'});
@@ -375,13 +376,17 @@ function keySpec(){
     } else legend.push({sw:'float', text: dataMode==='real' ? 'Argo float' : 'Synthetic float'});
   }
   if(state.showGlider && dataMode==='synth') legend.push({sw:'glider', text:'Synthetic glider waypoint'});
-  if(trackGroup.visible){
+  if(trackGroup.visible && currentTrack().length){
     legend.push({sw:'track', text:dataSource().legend.track});
     if(stormNow.visible && dataSource().legend.now) legend.push({sw:'storm', text:dataSource().legend.now});
   }
+  if(dataMode==='real' && MOORING_INSTS.length && state.showOther!==false && mooringsAt(state.time).length)
+    legend.push({sw:'mooring', text:'RAMA mooring'});
+  if(drifterLayerOn()) legend.push({sw:'drifter', text:'Drifting buoy (NOAA GDP); click one to drift from it'});
   importedLegend().forEach(r=>legend.push(r));
   const scale = c.scale || (c.editable ? state.scale : 'linear');
   if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);
+  if(VAR_META[state.variable].note) notes.unshift(VAR_META[state.variable].note);
   if(scale==='log' && !c.empty) notes.unshift('Log colour scale.');
   notes.push(`Vertical exaggeration ≈\u00a0${exaggerationRatio(state.exagg)}\u00a0:\u00a01; below 1000\u00a0m the sea floor is compressed a further\u00a012×.`);
   if(c.empty) return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale, ticks:[], ends:{min:'–', max:'–'},
@@ -392,7 +397,8 @@ function keySpec(){
       ticks:logTicks(c.min, c.max).map(v=>({v, text:logTickText(v)})),
       ends:{min:end(c.min > 0 ? c.min : c.max*1e-3), max:end(c.max)}, marks, legend, note:notes.join(' ')};
   }
-  const ticks = niceTicks(c.min, c.max), step = ticks.length > 1 ? ticks[1]-ticks[0] : 1;
+  const own = VAR_META[state.variable].ticks;       // a product's own ticks (the fishing-zone indicator counts 0, 1, 2)
+  const ticks = own && !state.customRange ? own.filter(v=>v >= c.min && v <= c.max) : niceTicks(c.min, c.max), step = ticks.length > 1 ? ticks[1]-ticks[0] : 1;
   return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale,
     ticks:ticks.map(v=>({v, text:tickText(v, step)})),
     ends:{min:endText(c.min, step), max:endText(c.max, step)}, marks, legend, note:notes.join(' ')};

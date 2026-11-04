@@ -8,7 +8,7 @@ const MODES = ['surface', 'layers', 'slice', 'iso', 'iso3d'];
 const OVERLAYS = {swArgo:'showArgo', swMisfit:'colorMisfit', swGlider:'showGlider', swTrack:'showTrack',
                   swFlow:'showFlow', swGrid:'showGrid'};
 // switches ux may add; wired only when present
-const OPTIONAL_OVERLAYS = {swOther:'showOther', swAllImported:'showAllImported'};
+const OPTIONAL_OVERLAYS = {swOther:'showOther', swAllImported:'showAllImported', swDrifters:'showDrifters'};
 const optUi = Object.fromEntries(['scaleToggle', ...Object.keys(OPTIONAL_OVERLAYS)].map(id=>[id, document.getElementById(id)]));
 const ISO_MODES = ['iso', 'iso3d'];
 
@@ -109,7 +109,7 @@ function resetRange(){
   applyViewRange();
 }
 function setVariable(v){
-  if(!VAR_META[v]) return;
+  if(!VAR_META[v] || !varInMode(v)) return;
   state.variable = v;
   if(ISO_MODES.includes(state.mode) && !ISO_META[v]) state.mode = 'surface';
   resetRange();
@@ -165,11 +165,13 @@ function setOverlay(key, on){
   if(!Object.values(OVERLAYS).includes(key) && !Object.values(OPTIONAL_OVERLAYS).includes(key)) return;
   state[key] = !!on;
   if(key==='colorMisfit' && on) state.showArgo = true;   // misfit colours need the floats on
-  requestUpdate(['colorMisfit', 'showTrack', 'showAllImported'].includes(key) ? 'full' : 'overlay');
+  requestUpdate(['colorMisfit', 'showTrack', 'showAllImported', 'showDrifters'].includes(key) ? 'full' : 'overlay');
 }
 // the overlays that change visibility only
 function applyOverlays(){
   applyMarkerVisibility();
+  refreshDrifters();
+  applyDrifterVisibility();
   updateLegend();
   applyFlowVisibility();
   graticule.visible = state.showGrid; boxLines.visible = state.showGrid;
@@ -195,13 +197,13 @@ function setShowAllImported(on){ setOverlay('showAllImported', on); }
 // state -> every control (pressed, hidden, values, aria); requestUpdate() runs it
 function syncControls(){
   const tchp = is2D(state.variable), src = dataSource();
-  ui.varPills.querySelectorAll('.pill').forEach(b=>setPressed(b, b.dataset.v===state.variable));
+  ui.varPills.querySelectorAll('.pill').forEach(b=>{ setPressed(b, b.dataset.v===state.variable); b.hidden = !varInMode(b.dataset.v); });
   ui.modePills.querySelectorAll('.pill').forEach(b=>{
     setPressed(b, b.dataset.m===state.mode);
     b.disabled = ISO_MODES.includes(b.dataset.m) && !ISO_META[state.variable];
   });
   ui.modeGrp.hidden = tchp;
-  ui.tchpNote.hidden = !tchp;
+  ui.tchpNote.hidden = state.variable!=='tchp';     // other map products explain themselves in the key
   ui.depthGrp.hidden = tchp || state.mode!=='slice';
   ui.isoGrp.hidden = !isoMode();
   ui.depthSlider.max = DEPTHS.length-1;
@@ -224,13 +226,22 @@ function syncControls(){
   const gliders = src.hasGliders || (dataMode==='real' && importedInsts.some(i=>i.kind==='glider'));
   ui.swGlider.disabled = !gliders;
   ui.rowGlider.title = gliders ? '' : 'No glider data in this data set';
+  const rd = document.getElementById('rowDrifters');
+  if(rd) rd.hidden = dataMode!=='real' || !DRIFTERS;
   updateColorbarUI();
   ui.dataToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.mode===dataMode));
-  ui.modelGrp.hidden = dataMode!=='real' || REAL_MODELS.length < 2;
+  ui.modelGrp.hidden = dataMode!=='real' || ui.modelToggle.children.length < 2;
   ui.modelToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.model===realModel));
   ui.modelNote.textContent = MODEL().note + '.';
   ui.secTrackBtn.textContent = src.section.trackPreset;
   ui.secTrackBtn.disabled = currentTrack().length===0;
+  // another case (a forecast) has no storm track, no floats and no tour: their buttons go
+  const noTrack = currentTrack().length===0, show = (id, on)=>{ const e = document.getElementById(id); if(e) e.hidden = !on; };
+  show('openTrackBtn', !noTrack); show('trackDetailsBtn', !noTrack); show('rowTrack', !noTrack);
+  show('startTourBtn', CASE.tour); ui.presentBtn.hidden = !CASE.tour;
+  const floats = dataMode!=='real' || realProfiles.length > 0;
+  show('worstFloatBtn', floats);
+  [ui.swArgo, ui.swMisfit].forEach(b=>{ const li = b.closest('li'); if(li) li.hidden = !floats; });
   syncTimeline();
 }
 

@@ -18,6 +18,7 @@ from helpers import REPO, AppTestCase
 
 EXPECTED = REPO / 'tests' / 'facts_expected.json'
 EXPECTED_GLORYS = REPO / 'tests' / 'facts_expected_glorys.json'
+EXPECTED_IGORA = REPO / 'tests' / 'facts_expected_igora.json'
 MISSING = object()
 
 
@@ -58,6 +59,15 @@ class Facts(AppTestCase):
         try:
             self.js("__ol.actions.setRealModel('glorys')")
             self.compare(json.loads(EXPECTED_GLORYS.read_text(encoding='utf-8')), self.facts_now())
+        finally:
+            self.js("__ol.actions.setRealModel(__ol.models[0])")
+
+    def test_igora_facts_match_their_recomputation(self):
+        if 'igora' not in (self.js('__ol.models || []') or []):
+            self.skipTest('this build has no IGORA model')
+        try:
+            self.js("__ol.actions.setRealModel('igora')")
+            self.compare(json.loads(EXPECTED_IGORA.read_text(encoding='utf-8')), self.facts_now())
         finally:
             self.js("__ol.actions.setRealModel(__ol.models[0])")
 

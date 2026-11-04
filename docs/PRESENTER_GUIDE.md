@@ -145,7 +145,38 @@ Press **Drift** (bottom of the 3D view) or `T`, then click the sea. An object is
 - **The dashed line** is the other model's drift from the same point. The panel gives the distance between the two ends: the model uncertainty a forecaster would weigh.
 - **Back in time** asks where something found at that point came from. **24 h / 48 h / 72 h** set how long. Moving the timeline moves the release time.
 - A good demo: the **16 May** analysis, a click near **15°N, 88°E** (under Amphan's path). With HYCOM the object moves about 190 km east in 72 h; the GLORYS drift ends about 140 km from it.
-- Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart, not checked against drifting buoys. A teaching aid, not INCOIS's SARAT.
+- **Drifting buoys** (under Overlays) draws 12 real NOAA drifting buoys from May 2020. Click one: the drift starts where the buoy was at the analysis on screen, its real path is drawn in blue, and the panel gives how far each model's line ends from the buoy, next to how far it would be had the object stayed put. A good one: **13 May**, the buoy in the western Bay near 15.4°N, 84.2°E: after 72 h GLORYS is 11 km from it, HYCOM 71 km.
+- The check over all 12 buoys (61 releases) is in the panel's last paragraph: after 72 h, GLORYS ends a median 31 km from the buoy, HYCOM 55 km, and standing still 46 km. HYCOM's snapshots 3 days apart miss the day-to-day changes; GLORYS's daily means average them.
+- Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart. A teaching aid, not INCOIS's SARAT.
+
+### Today's forecast (served)
+
+Started with `python server/serve.py` and a `data/forecast-latest.json` from `build_forecast.py`, the page has a
+**Data source** menu: choose **Ocean forecast issued …** and the page reloads with today's Copernicus Marine forecast
+in place of Amphan. The header says **Real data: forecast <date>**, and the context line marks each day as analysis,
+day of issue or +N days. Temperature, salinity, currents, heat potential, D26, sections and the drift tool work on it
+(a drift on tomorrow's currents is the search-and-rescue use). It has no floats, storm track or tour; say so.
+
+### RAMA moorings (real mode)
+
+Four moored buoys of the RAMA array (NOAA PMEL, with INCOIS among its partners) are white squares in the real scene,
+under the **CTD, moorings and other** switch: 12°N 90°E and 15°N 90°E in the Bay of Bengal, 15°N 65°E and 8°N 67°E
+in the Arabian Sea. Click one: its daily mean on the analysis day is drawn over the model column, with bias and RMSE,
+like a float. A good one: **12°N 90°E on 19 May**, after Amphan passed. Its surface cooled 2.1 °C from 13 May and the
+top 60 m mixed to one temperature; HYCOM cools it 1.2 °C and GLORYS 1.0 °C, so both models show about half the cold
+wake there. RAMA data are sent out in real time, so models may assimilate them too.
+
+### Satellite products (real mode)
+
+Four more buttons under Variable, real data only (the demo hides them). All are surface maps from satellites, on the
+same 0.5° cells, for the same 8 days.
+
+| Button | What it shows | What to say |
+| --- | --- | --- |
+| Satellite chlorophyll | Copernicus-GlobColour gap-free chlorophyll (mg/m³, log scale) | Plankton at the surface: high along the coasts and river mouths, low in the open Bay. Gap-free: clouds are filled by interpolation |
+| SST fronts | How fast OSTIA's 0.05° sea-surface temperature changes, the strongest tenth in each cell (°C per 10 km) | Fronts are where warm and cold water meet |
+| Fishing-zone indicator | 0, 1 or 2 signs: a front of at least 0.3 °C/10 km, and chlorophyll of at least 0.3 mg/m³ | The two signs behind INCOIS's potential fishing zone advisories. The panel counts the cells with both. Say it is a teaching version, not an advisory |
+| SST anomaly | The day's OSTIA SST minus the 1991–2020 mean of the same day (°C) | 13 May: the Bay about 1 °C above normal under Amphan's path; 19 May: below normal in the cold wake. The panel adds every May since 1982: +0.26 °C per decade in the Bay, +0.35 °C in the Arabian Sea, where 2020 was the 2nd warmest of 44 years |
 
 ### The Amphan story (real mode)
 
@@ -230,8 +261,8 @@ It also loads **CF NetCDF-3 or NetCDF-4 model files** with `--netcdf`, so other 
 
 **Limits to admit if asked:**
 
-- The 3D view still draws only the snapshot built into the page; model files given to the server reach other clients only through REST, WMS, WCS and OPeNDAP.
-- No authentication, TLS or rate limiting of its own; it belongs behind an institution's reverse proxy.
+- A model file given to the server is drawn in 3D only if it covers the whole map and the case's 8 analysis times (within 12 h); others reach clients through REST, WMS, WCS and OPeNDAP only.
+- API keys and a per-client rate limit are built in, but simple (shared keys); TLS and user accounts belong to an institution's reverse proxy.
 - It reads NetCDF-3 and NetCDF-4 model files, whole: for large files use the pipeline, which reads parts of them.
 
 ## Shortcuts, the guided tour and export
@@ -299,7 +330,7 @@ flowchart LR
   SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3/4 models"]
   CLI["<b>Other clients</b><br/>GIS tools via WMS<br/>netCDF-C via OPeNDAP<br/>scripts via REST"]
   FILES["<b>Your files</b><br/>CSV, NetCDF-3, NetCDF-4<br/>read in the browser,<br/>never uploaded"]
-  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>322 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
+  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>347 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
   SRC --> PIPE --> SNAP --> BUILD --> APP
   SNAP --> SRV --> CLI
   FILES --> APP
@@ -320,7 +351,7 @@ For an elevator pitch or the opening of a longer slot. Start with the app open o
 >
 > This is Cyclone Amphan, May 2020. Before it, HYCOM puts about 85 kilojoules per square centimetre of heat under its path. *(Press M.)* GLORYS says 109: two good models, a quarter apart. Every float is compared with each model at the same place and time.
 >
-> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 322 automated tests check the rest.
+> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 347 automated tests check the rest.
 
 ## A 3-minute walkthrough
 
@@ -367,7 +398,7 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Question | Answer |
 | --- | --- |
 | Is this live or forecast data? | No. It is a hindcast of Amphan (May 2020) from 8 HYCOM analyses and the GLORYS daily means of the same days. Live ingestion is on the roadmap. |
-| Why two models, and which is right? | Neither is "right": they are two estimates of the same ocean. GLORYS fits the floats better here (temperature RMSE 0.22 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
+| Why two models, and which is right? | Neither is "right": they are two estimates of the same ocean. GLORYS fits the floats better here (temperature RMSE 0.23 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
 | Is the model validated against Argo? | It is compared, not independently validated: both models assimilate Argo, so it is a consistency check. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
 | Which browsers, and how fast? | Chrome and Edge run the automated tests; Firefox was checked by hand; Safari is untested. On a desktop GPU it is ready in under half a second and far above 60 fps; with software rendering, 18–35 fps (`docs/TESTING.md`). |
 | Can INCOIS use it? What is the licence? | The code is public to read but all rights reserved, so it cannot be copied during the competition. Using or hosting it needs written permission from the team (README, Copyright and licence). |
@@ -377,11 +408,12 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Why are the coastlines blocky? | Fields are on 0.5° cells; features smaller than that are smoothed. |
 | Can it read NetCDF-4? | Yes, in the browser and in the pipeline, with our own readers (no HDF5 library). They were checked against independent sources: a GLORYS native file against the Copernicus Zarr store (identical values), and two Argo S-files against Ifremer ERDDAP. Only szip- or zstd-compressed files need converting. |
 | Why no chlorophyll map in real mode? | Neither model has chlorophyll (GLORYS's biogeochemistry product is not used). The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
-| Does it work on INCOIS or Copernicus data? | Copernicus, yes: GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. The INCOIS LAS has not been tried: it could not be reached when we checked. |
-| Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. It uses current only (no wind, so no leeway) and is not checked against buoys: a teaching aid, not SARAT. |
-| Fisheries? | Not implemented: there is no PFZ, SST-front or chlorophyll field product. Listed as a possible use. |
-| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 322 automated tests run in a headless browser and on GitHub Actions. |
-| How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, and the plugin API adds sensors and ML products. Production would add scheduled ingestion, auth and a pipeline not tied to one case. |
+| Does it work on INCOIS or Copernicus data? | Both. GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. The third, IGORA, is INCOIS's own ocean reanalysis, exported from the INCOIS LAS by the pipeline: the May 2020 monthly mean. The RAMA moorings are a NOAA–INCOIS partnership too. |
+| Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. Checked against 12 real drifting buoys: after 72 h GLORYS ends a median 31 km from the buoy, HYCOM 55 km, standing still 46 km. Current only (no wind, so no leeway): a teaching aid, not SARAT. |
+| Fisheries? | The Fishing-zone indicator: satellite SST fronts and satellite chlorophyll on each day, and the cells showing both, the two signs behind PFZ advisories. A teaching version with fixed thresholds, not INCOIS's method, and not checked against catches. |
+| Climate? | SST anomaly: the day against its 1991–2020 normal, and every May since 1982: the Bay of Bengal warms about 0.26 °C per decade, the Arabian Sea 0.35 °C. |
+| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 347 automated tests run in a headless browser and on GitHub Actions. |
+| How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, with API keys and rate limits, and streams model files on the case's grid into the 3D view; the plugin API adds sensors and ML products. Production would add scheduled ingestion, user accounts and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |
 
@@ -395,12 +427,12 @@ HYCOM: all 206 profiles, each compared with HYCOM at its own place and time (the
 | 100–300 m | +0.16 °C | 0.82 °C | 4071 | +0.07 PSU | 0.12 PSU | 3371 |
 | 300–1000 m | +0.16 °C | 0.30 °C | 5753 | +0.03 PSU | 0.06 PSU | 4776 |
 
-The same for GLORYS, each profile compared with the daily mean of its analysis date (`tests/facts_expected_glorys.json`):
+The same for GLORYS, each profile compared with the daily mean of its analysis date (`tests/facts_expected_glorys.json`). GLORYS gives potential temperature, so it is first turned into in-situ temperature at each float level's pressure (UNESCO 1983), the quantity the floats measure:
 
 | Depth | Temperature bias | Temperature RMSE | *n* | Salinity bias | Salinity RMSE | *n* |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0–100 m | −0.13 °C | 0.82 °C | 3949 | +0.05 PSU | 0.21 PSU | 3274 |
-| 100–300 m | −0.31 °C | 0.67 °C | 4071 | +0.01 PSU | 0.08 PSU | 3371 |
-| 300–1000 m | −0.01 °C | 0.22 °C | 5753 | +0.00 PSU | 0.04 PSU | 4776 |
+| 0–100 m | −0.14 °C | 0.82 °C | 3949 | +0.05 PSU | 0.21 PSU | 3274 |
+| 100–300 m | −0.34 °C | 0.68 °C | 4071 | +0.01 PSU | 0.08 PSU | 3371 |
+| 300–1000 m | −0.09 °C | 0.23 °C | 5753 | +0.00 PSU | 0.04 PSU | 4776 |
 
-The misfit is largest in the top 100 m and smallest below 300 m, in both models; GLORYS fits better at every depth. 35 of the 206 profiles have no usable salinity, so the salinity counts are lower. Because both models assimilate Argo, small numbers here show consistency, not independent skill. GLORYS gives potential temperature (about 0.1 °C cooler than in-situ at 1000 m), which is part of its small deep bias.
+The misfit is largest in the top 100 m and smallest below 300 m, in both models; GLORYS fits better at every depth. 35 of the 206 profiles have no usable salinity, so the salinity counts are lower. Because both models assimilate Argo, small numbers here show consistency, not independent skill. Compared like with like, GLORYS is about 0.09 °C warmer than the floats below 300 m; compared in potential temperature without the conversion, that bias would have looked like zero.

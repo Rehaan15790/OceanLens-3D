@@ -39,6 +39,16 @@ Examples below use `http://localhost:8080` and the dataset `amphan-2020`.
 - **Errors**: REST answers `{"error": {"code": "...", "message": "..."}}` with a 4xx/5xx status. WMS answers a
   `ServiceExceptionReport`, WCS an `ows:ExceptionReport`.
 - Responses over 1.4 kB are gzipped when the client accepts it. Only `GET`, `HEAD` and `OPTIONS` are served.
+- **API keys** (optional, `--api-key`, `--api-keys-file` or `$OCEANLENS_API_KEYS`, 16 characters or more): every
+  data route (`/api`, `/wms`, `/wcs`, `/ows`, `/opendap`, and `/?dataset=` for another dataset) then needs one, as
+  `Authorization: Bearer <key>`, `X-API-Key: <key>` or `key=<key>` in the query (for WMS and OPeNDAP clients that
+  cannot set headers). Without one: HTTP 401 `Unauthorized` with `WWW-Authenticate: Bearer`. The page and its own
+  embedded data and `/healthz` stay open; open the page as `/?key=<key>` and it sends the key on its API calls. Keys
+  in URLs are replaced by `[hidden]` in the request log.
+- **Rate limit** (optional, `--rate-limit N`): at most N requests a minute per client address, in bursts of up to N.
+  Past it: HTTP 429 `TooManyRequests` with `Retry-After` (seconds). `/healthz` is never limited. Behind a reverse
+  proxy, `--trust-forwarded` limits by the last `X-Forwarded-For` address (the one the proxy adds) instead of the
+  proxy's own.
 - **Busy**: at most 4 GetMap or GetCoverage requests run at once. A fifth gets HTTP 503 (`ServerBusy`) and should
   retry.
 - **Host check**: on a loopback address (`127.0.0.1`, `::1`, `localhost`) without `--public-url`, only requests
@@ -57,6 +67,7 @@ Examples below use `http://localhost:8080` and the dataset `amphan-2020`.
 | `GET /api/v1/datasets/{id}/column?lat=&lon=&time=` | Every variable at every level at one point (bilinear): `{depth, units, values: {temp: [...], ...}}`. |
 | `GET /api/v1/datasets/{id}/profiles?bbox=w,s,e,n&start=&end=&type=` | Observed profiles: `{count, profiles: [{id, platform, type, cycle, lat, lon, time, mode, depth, temp, sal, chl?, oxy?}]}`. The app's import accepts this shape as it is. |
 | `GET /api/v1/datasets/{id}/track` | The storm track: `{name, fields, fixes}`. |
+| `GET /api/v1/datasets/{id}/model` | A NetCDF model on the page's own grid, levels and times, for the 3D view's Model switch: a model-only schema-1 snapshot (each 0.5° cell the mean of the native points inside it, the 11 levels, gaps filled from neighbours with a wet mask, the model time nearest each analysis within 12 h; `meta.model.temperature` says `potential` or `in-situ`). Listed as `links.model` in `/api/v1/datasets` when the file can be drawn so; otherwise the entry has `model_note` with the reason and this route answers 404 `NoModel`. |
 | `GET /` and `/?dataset={id}` | The app; with `dataset`, the same page with that dataset's snapshot embedded. |
 | `GET /healthz` | `{"status": "ok", "version", "datasets", "netcdf"}` for monitoring. |
 
@@ -152,5 +163,7 @@ http://localhost:8080/opendap/amphan-2020.dods?temp[0][0][0:32][0:62],time
   pydap and Panoply have not been tried.
 - No WMS `GetLegendGraphic`, no reprojection beyond `CRS:84`/`EPSG:4326`, no WCS `rangeSubset`, scaling or
   POST/SOAP bindings, no WCS-T.
-- No authentication, rate limiting or TLS of its own: put it behind the institution's reverse proxy
-  (`docs/DEPLOY.md`, section 4).
+- Model files are read by the project's own readers; `--engine xarray` reads them through xarray instead (`pip
+  install xarray scipy h5netcdf`), with the same result.
+- No TLS or user accounts of its own: put it behind the institution's reverse proxy (`docs/DEPLOY.md`, section 4).
+  Its API keys are shared secrets, and its rate limit is one bucket per client address.

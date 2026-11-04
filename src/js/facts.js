@@ -131,6 +131,9 @@ function realFacts(){
     worst:comp.map(r=>r.worst),
     deepRmse:deep.length ? {median:percentile(deep, 50), min:Math.min(...deep), max:Math.max(...deep)} : null};
 
+  lazyProp(F, 'drifters', drifterFacts);     // the drift tool against real buoys (drifters.js)
+  lazyProp(F, 'products', productFacts);     // fishing-zone signs and climate (products.js)
+  lazyProp(F, 'moorings', mooringFacts);     // the RAMA moorings against the model (moorings.js)
   F.view = viewFacts();
   F.ranges = rangeFacts((vi, t, k, i, j)=>node(t, vi, k, i, j),
     (t, k, i, j)=>Math.hypot(node(t,2,k,i,j), node(t,3,k,i,j)),

@@ -90,7 +90,7 @@ function applyTourStep(){
 
 /* ---- actions ---- */
 function startTour(){
-  if(tour.running) return;
+  if(tour.running || !CASE.tour) return;     // the tour tells Amphan's story: another case (a forecast) has none
   setSectionDraw(false);
   tour.saved = snapshotApp();
   setPlaying(false);

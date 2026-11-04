@@ -59,7 +59,9 @@ RANGE_BLOCK = 1 << 18
 # replaces this list), redirects included, and a response may not exceed MAX_DOWNLOAD bytes (the largest raw file is
 # 7 MB, the HYCOM cache 43 MB; the GLORYS ranges add about 220 MB in pieces of 1.4 MB or less).
 DEFAULT_HOSTS = frozenset({'tds.hycom.org', 'erddap.ifremer.fr', 'upwell.pfeg.noaa.gov', 'www.ncei.noaa.gov',
-                           's3.waw3-1.cloudferro.com'})
+                           's3.waw3-1.cloudferro.com', 'erddap.aoml.noaa.gov',   # build_drifters.py
+                           'coastwatch.pfeg.noaa.gov',                            # build_moorings.py
+                           'las.incois.gov.in'})                                  # build_las.py
 MAX_DOWNLOAD = 128 * 1024 * 1024
 # the files in the original cache were downloaded on this date; later downloads record their own in manifest.json
 DEFAULT_ACCESSED = '2026-09-27'
@@ -176,8 +178,9 @@ class Fetcher:
     lands in the cache. Client errors (4xx) fail at once; timeouts, resets and 5xx are retried. A cached file
     whose sha256 differs from the one recorded in manifest.json is refused."""
 
-    def __init__(self, cache, fetch=False, cafile=None, sleep=time.sleep, allow_hosts=None):
+    def __init__(self, cache, fetch=False, cafile=None, sleep=time.sleep, allow_hosts=None, extra_cadata=None):
         self.cache, self.fetch, self.cafile, self.sleep = cache, fetch, cafile, sleep
+        self.extra_cadata = extra_cadata       # PEM of an intermediate a server leaves out of its chain (build_las.py)
         self.allow_hosts = {h.lower() for h in allow_hosts} if allow_hosts else set(DEFAULT_HOSTS)
         self.used = {}              # cache name -> sha256, for provenance
         self.downloaded = 0
@@ -254,6 +257,8 @@ class Fetcher:
             raise FetchError(f'{host} is not in --allow-host (default: the pipeline\'s own sources); not downloading {url}')
         if self._ctx is None:
             self._ctx = ssl.create_default_context(cafile=self.cafile) if self.cafile else ssl.create_default_context()
+            if self.extra_cadata:
+                self._ctx.load_verify_locations(cadata=self.extra_cadata)
             self._opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self._ctx),
                                                        _ConfinedRedirects(self.allow_hosts))
         last = None
@@ -925,12 +930,13 @@ CF_MODEL = {   # snapshot variable -> (CF standard names, common variable names)
 MAX_MODEL_TIMES = 16
 
 
-def model_from_netcdf(path, log=print):
-    """Snapshot model fields from a CF NetCDF-3 or NetCDF-4 file (model_from_dataset)."""
+def model_from_netcdf(path, log=print, engine='native'):
+    """Snapshot model fields from a CF NetCDF-3 or NetCDF-4 file (model_from_dataset), read by the project's own
+    readers or, with engine='xarray', through xarray."""
     import ncio
     with open(path, 'rb') as f:
         raw = f.read()
-    ds = ncio.read_bytes(raw)
+    ds = ncio.read_bytes(raw) if engine == 'native' else ncio.read(path, engine=engine)
     model, wet, when, info = model_from_dataset(ds, os.path.basename(path), log)
     info.update({'file': os.path.basename(path), 'sha256': sha256(raw), 'bytes': len(raw)})
     return model, wet, when, info
@@ -1212,7 +1218,7 @@ def inputs_block(F):
 
 
 def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=False, log=print, allow_hosts=None,
-          model_netcdf=None, model_source='hycom'):
+          model_netcdf=None, model_source='hycom', engine='native'):
     """The whole snapshot as a dict, and the Fetcher (for --cache-manifest). Raises CacheMiss, FetchError or
     InvariantError; main turns each into a message and an exit status."""
     F = Fetcher(cache, fetch, cafile, allow_hosts=allow_hosts)
@@ -1220,7 +1226,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
     glorys = model_source == 'glorys' and not model_netcdf
     if model_netcdf:
         require(not model_at_obs, '--model-at-obs works with HYCOM only')
-        model, wet, times, hinfo = model_from_netcdf(model_netcdf, log)
+        model, wet, times, hinfo = model_from_netcdf(model_netcdf, log, engine)
     elif glorys:
         require(not model_at_obs, '--model-at-obs works with HYCOM only (GLORYS has daily means, no 3-hourly output)')
         model, wet, times, hinfo = fetch_glorys(F, log)
@@ -1300,7 +1306,8 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
                       'native_levels_m': hinfo['native_levels_m'], 'native_step_deg': hinfo['native_step_deg'],
                       'attrs': hinfo['attrs'], 'filled_cells': filled}
         model_meta = {'name': 'GLORYS12V1', 'short': 'GLORYS', 'kind': 'reanalysis, daily means',
-                      'product': 'GLOBAL_MULTIYEAR_PHY_001_030', 'doi': GLORYS_CITATION['doi']}
+                      'product': 'GLOBAL_MULTIYEAR_PHY_001_030', 'doi': GLORYS_CITATION['doi'],
+                      'temperature': 'potential'}    # thetao; the app turns it into in-situ to compare with floats
     elif model_netcdf:
         model_note = (f'CF NetCDF model output {hinfo["file"]}; each 0.5 deg cell the mean of the native points inside '
                       'it, levels interpolated linearly to the app depths.')
@@ -1408,6 +1415,9 @@ def main(argv=None):
     ap.add_argument('--model-netcdf', metavar='FILE',
                     help='take the model fields from a CF NetCDF-3 or NetCDF-4 file instead (Argo, bathymetry and '
                          'track still come from the cache)')
+    ap.add_argument('--engine', choices=('native', 'xarray'), default='native',
+                    help='how --model-netcdf is read: the project\'s own readers (default) or the xarray backend '
+                         '(pip install xarray scipy h5netcdf)')
     args = ap.parse_args(argv)
     if args.out is None:
         args.out = os.path.join(here, '..', 'data', 'amphan-2020-glorys.json' if args.model == 'glorys' and
@@ -1415,7 +1425,8 @@ def main(argv=None):
 
     try:
         payload, F = build(args.cache, args.fetch, args.ca_bundle, args.temperature_only, args.model_at_obs,
-                           allow_hosts=args.allow_host, model_netcdf=args.model_netcdf, model_source=args.model)
+                           allow_hosts=args.allow_host, model_netcdf=args.model_netcdf, model_source=args.model,
+                           engine=args.engine)
     except CacheMiss as e:
         print(f'error: {e} is not in the cache ({args.cache}); rerun with --fetch to download it', file=sys.stderr)
         return 2

@@ -95,9 +95,11 @@ is made private again, where minutes and artifact storage are metered:
 `server/serve.py` uses only the Python standard library and numpy. It needs no database, no container and no
 internet access. It serves the single file at `/`, the API at `/api/v1`, WMS at `/wms`, WCS at `/wcs` and OPeNDAP
 at `/opendap` (`docs/API.md`). The page detects that it is served over HTTP and lists the server's datasets.
-Picking one loads its observed profiles or, for another snapshot, reloads the page with that snapshot embedded. The
-3D view draws only the snapshots in the page (HYCOM and GLORYS): a model file given with `--netcdf` is served through
-WMS, WCS, OPeNDAP and REST, not drawn in 3D. Opened from a file, the page behaves exactly as before.
+Picking one loads its observed profiles or, for another snapshot, reloads the page with that snapshot embedded. A
+model file given with `--netcdf` that covers the map and has a time within 12 h of each of the page's analyses also
+joins the Model switch: the server puts it on the page's grid and the page streams it when it is chosen
+(`/api/v1/datasets/<id>/model`). Other files are served through WMS, WCS, OPeNDAP and REST only. Opened from a file,
+the page behaves exactly as before.
 
 ```
 python build.py --out dist/OceanLens3D.html
@@ -125,8 +127,45 @@ ProtectHome=true
 WantedBy=multi-user.target
 ```
 
-**Put the institution's web server in front.** The server listens on 127.0.0.1 only. TLS, authentication, access
-logs and rate limits belong to the reverse proxy. With nginx:
+**Today's forecast, every day.** `data-pipeline/build_forecast.py --fetch` writes the latest Copernicus Marine
+forecast to `data/forecast-latest.json` (about 1 GB of byte ranges a day, kept in the cache; prune old runs). Run it
+from a timer, and start the server with `--reload 600` so it serves each new run within 10 minutes, without a
+restart:
+
+```
+# /etc/systemd/system/oceanlens-forecast.service
+[Unit]
+Description=OceanLens 3D: the latest Copernicus Marine forecast
+[Service]
+Type=oneshot
+User=oceanlens
+WorkingDirectory=/opt/oceanlens
+ExecStart=/usr/bin/python3 data-pipeline/build_forecast.py --fetch --cache /var/cache/oceanlens
+
+# /etc/systemd/system/oceanlens-forecast.timer
+[Timer]
+OnCalendar=*-*-* 04:30:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+Add `--reload 600` to the server's `ExecStart`, and `ReadWritePaths=/opt/oceanlens/data /var/cache/oceanlens` to the
+forecast service if the server unit's `ProtectSystem=strict` is copied into it. The run is published by about
+02:30 UTC; a failed day keeps the previous forecast.
+
+**Put the institution's web server in front.** The server listens on 127.0.0.1 only. TLS, user accounts and access
+logs belong to the reverse proxy. The server can also check API keys and limit each client itself:
+
+```
+python -c "import secrets; print(secrets.token_urlsafe(24))" >> /etc/oceanlens/keys.txt    # one key per partner
+python server/serve.py --api-keys-file /etc/oceanlens/keys.txt --rate-limit 120 --trust-forwarded \
+    --public-url https://host/oceanlens
+```
+
+Partners then send `Authorization: Bearer <key>` (or `key=<key>` from WMS and OPeNDAP clients); the page opens as
+`https://host/oceanlens/?key=<key>`. `--trust-forwarded` is only for a server behind the proxy: it rate-limits by the
+address the proxy adds to `X-Forwarded-For`. With nginx:
 
 ```
 location /oceanlens/ {
@@ -147,11 +186,14 @@ Notes:
   each file whole, so give it a regional subset, for example a `copernicusmarine subset` download as it comes (that
   toolbox needs a free account). For Copernicus Marine's global native files, use the pipeline's
   `--model glorys` route instead, which reads only the parts over the map (`data-pipeline/README.md`). NetCDF-4
-  compressed with szip or zstd is refused. A real INCOIS LAS export has not been tried.
+  compressed with szip or zstd is refused. INCOIS LAS NetCDF exports read as they come; `build_las.py` fetches IGORA from
+  the LAS for the app itself.
 - `data-pipeline/build_snapshot.py --model-netcdf FILE` (NetCDF-3 or NetCDF-4) makes an app snapshot for `data/`, but it needs more: one
   file holding temperature, salinity and both current components (u and v) on 1-D latitude, longitude and depth
   axes, covering the map down to 1000 m. It uses the first 16 time steps. Files with one variable each must be
   merged into one file first.
+- `--engine xarray` reads the `--netcdf` files through xarray (NetCDF-3 via scipy, NetCDF-4 via netCDF4 or h5netcdf)
+  instead of the project's own readers, for sites that standardise on xarray; the result is the same.
 - Health check: `GET /healthz` returns `{"status": "ok", ...}`.
 - The server reads its datasets at start-up. Restart it after changing files.
 - It refuses requests above 2048 × 2048 pixels (WMS) or 5 million cells (WCS). It serves only GET, HEAD and OPTIONS,
