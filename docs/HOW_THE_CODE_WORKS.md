@@ -333,10 +333,10 @@ The tests click and type in a real browser, exactly as a user would, against the
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| unit | 11 + 121 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for both models; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
-| server | 42 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
-| smoke | 52 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
-| extend | 18 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
+| unit | 17 + 131 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for both models; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
+| server | 50 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
+| smoke | 57 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
+| extend | 20 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
 | tour | 7 | All eight steps in both modes; captions of 35 words or fewer, under both models; timing races |
 | robust | 6 | No WebGL, a lost graphics context and recovery, no memory growth over 20 rebuilds |
 | security | 38 | Hostile file contents stay text, damaged files and crafted NetCDF-4 end with a message instead of hanging, the Content Security Policy is enforced and never violated |
