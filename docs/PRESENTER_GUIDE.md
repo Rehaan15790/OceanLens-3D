@@ -149,6 +149,14 @@ Press **Drift** (bottom of the 3D view) or `T`, then click the sea. An object is
 - The check over all 12 buoys (61 releases) is in the panel's last paragraph: after 72 h, GLORYS ends a median 31 km from the buoy, HYCOM 55 km, and standing still 46 km. HYCOM's snapshots 3 days apart miss the day-to-day changes; GLORYS's daily means average them.
 - Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart. A teaching aid, not INCOIS's SARAT.
 
+### Today's forecast (served)
+
+Started with `python server/serve.py` and a `data/forecast-latest.json` from `build_forecast.py`, the page has a
+**Data source** menu: choose **Ocean forecast issued …** and the page reloads with today's Copernicus Marine forecast
+in place of Amphan. The header says **Real data: forecast <date>**, and the context line marks each day as analysis,
+day of issue or +N days. Temperature, salinity, currents, heat potential, D26, sections and the drift tool work on it
+(a drift on tomorrow's currents is the search-and-rescue use). It has no floats, storm track or tour; say so.
+
 ### RAMA moorings (real mode)
 
 Four moored buoys of the RAMA array (NOAA PMEL, with INCOIS among its partners) are white squares in the real scene,

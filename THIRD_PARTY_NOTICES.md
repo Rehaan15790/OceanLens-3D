@@ -83,6 +83,13 @@ Archive for Climate Stewardship (IBTrACS), Bull. Amer. Meteor. Soc. 91, 363–37
 IBTrACS v04r01, NOAA NCEI, doi:10.25921/82ty-9e16. Positions and winds from RSMC New Delhi (IMD) and the Joint
 Typhoon Warning Center. A US government work in the public domain.
 
+### Copernicus Marine global analysis and forecast
+
+`data/forecast-latest.json` (written by `data-pipeline/build_forecast.py`, the run issued on 4 November 2026 as
+committed) is derived from it. Generated using E.U. Copernicus Marine Service Information: Global Ocean Physics
+Analysis and Forecast (GLOBAL_ANALYSISFORECAST_PHY_001_024), doi:10.48670/moi-00016. Used under the Copernicus
+Marine Service commitments and licence; read anonymously over HTTPS.
+
 ### Copernicus Marine OSTIA SST and Copernicus-GlobColour chlorophyll
 
 `data/products-2020-05.json` is derived from them. Generated using E.U. Copernicus Marine Service Information:

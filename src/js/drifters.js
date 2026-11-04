@@ -14,6 +14,8 @@ const DRIFTERS = (()=>{
   let d;
   try { d = JSON.parse(el.textContent); } catch(e){ console.warn('the drifter data does not parse; it is left out'); return null; }
   if(!d || d.schema!==1 || !Array.isArray(d.drifters)){ console.warn('the drifter data has another schema; it is left out'); return null; }
+  // buoys of another window than the case on screen (a forecast) are left out
+  if(Date.parse(META.times[0]) > Date.parse(d.meta.t1) || Date.parse(META.times[META.times.length-1]) < Date.parse(d.meta.t0)) return null;
   const t0 = Date.parse(d.meta.t0), step = d.meta.stepH*3.6e6;
   const list = d.drifters.map(b=>{
     const fixes = new Map(b.fixes.map(([k, lat, lon])=>[t0 + k*step, {lat, lon}]));
@@ -97,7 +99,8 @@ function drifterPanelHtml(d){
 }
 // the drift panel's sentence on how the drift compares with real buoys (from facts, so the tests check it)
 function drifterCheckSentence(){
-  if(dataMode!=='real' || !DRIFTERS) return 'Real-data mode checks the drift against real drifting buoys.';
+  if(!DRIFTERS) return '';
+  if(dataMode!=='real') return 'Real-data mode checks the drift against real drifting buoys.';
   const c = facts().real.drifters, r = c && c.byHours.find(x=>x.h===72);
   if(!r || !r.n) return 'No drifting buoy in the map could check it.';
   return `Checked against ${c.drifters} real drifting buoys (NOAA Global Drifter Program): from ${c.releases} releases, `+

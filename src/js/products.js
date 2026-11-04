@@ -19,8 +19,8 @@ const PRODUCTS = (()=>{
   try { d = JSON.parse(el.textContent); } catch(e){ console.warn('the satellite products do not parse; they are left out'); return null; }
   const m = d && d.meta;
   if(!m || d.schema!==1 || !['lat0', 'lon0', 'step', 'nlat', 'nlon'].every(k=>m[k]===META[k]) || m.times.join()!==META.times.join()){
-    console.warn('the satellite products are on another grid or other days; they are left out');
-    return null;
+    if(!REAL_DATA.meta.case) console.warn('the satellite products are on another grid or other days; they are left out');
+    return null;     // with another case (a forecast) they belong to other days: left out, as expected
   }
   const dec = key=>{
     const q = b64Int16(d[key]), [off, sc] = m.quant[key], f = new Float32Array(q.length);

@@ -511,6 +511,7 @@ class OceanServer(ThreadingHTTPServer):
         self.gz_cache, self.pages = {}, {}
         self.default_id = embedded_id(self.datasets, app)
         self.app_models = {}                        # dataset id -> model JSON for the 3D view, or the ApiError why not
+        self.watch = None                           # (snapshot paths or None for data/*.json, seconds): reload_snapshots
         self.heavy = threading.BoundedSemaphore(HEAVY_SLOTS)
         self.conn_slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         # on a loopback bind, only loopback Host names: a page on another site cannot reach the API through a
@@ -554,6 +555,56 @@ class OceanServer(ThreadingHTTPServer):
         except OSError:
             pass
         self.close_request(request)
+
+    def reload_snapshots(self):
+        """Load the snapshot files that changed or appeared since the last look (the default data/ folder, or the
+        files named at start), so a forecast rebuilt every day by build_forecast.py is served without a restart.
+        A file that fails to load keeps the version already served. Returns the ids reloaded."""
+        paths, _ = self.watch
+        files = [p for p in sorted((REPO / 'data').glob('*.json')) if is_snapshot(p)] if paths is None else paths
+        seen = self.__dict__.setdefault('_mtimes', {})
+        done = []
+        for p in files:
+            try:
+                mt = Path(p).stat().st_mtime_ns
+            except OSError:
+                continue
+            if seen.get(str(p)) == mt:
+                continue
+            first = str(p) not in seen
+            seen[str(p)] = mt
+            if first and safe_id(Path(p).stem) in self.datasets:
+                continue                                # loaded at start-up
+            try:
+                ds = load_snapshot(p)
+            except (OSError, ValueError, KeyError) as e:
+                sys.stderr.write(f'reload: {p} not loaded ({type(e).__name__}: {e}); keeping what is served\n')
+                continue
+            old = self.datasets.get(ds.id)
+            if old is not None and old.source != 'snapshot':
+                continue                                # never replace a NetCDF dataset with a snapshot of its name
+            self.datasets[ds.id] = ds
+            self.gz_cache = {k: v for k, v in self.gz_cache.items() if ds.id not in k}
+            self.pages, self.app_models = {}, {}
+            done.append(ds.id)
+        return done
+
+    def _watch_loop(self):
+        paths, every = self.watch
+        while True:
+            time.sleep(every)
+            try:
+                for i in self.reload_snapshots():
+                    if not self.quiet:
+                        sys.stderr.write(f'reloaded dataset {i}\n')
+            except Exception as e:                      # never let the watcher stop the server
+                sys.stderr.write(f'reload failed: {e!r}\n')
+
+    def start_watching(self, paths, every):
+        """Look for changed or new snapshot files every `every` seconds on a background thread."""
+        self.watch = (None if paths is None else [Path(p) for p in paths], float(every))
+        self.reload_snapshots()                         # record the start-up files
+        threading.Thread(target=self._watch_loop, daemon=True).start()
 
     def app_model(self, ds):
         """ds as one more model for the page's Model switch: a model-only schema-1 snapshot on the embedded snapshot's
@@ -1733,6 +1784,8 @@ def main(argv=None):
     ap.add_argument('--cors', action='append', default=[], help="allowed origin for cross-origin requests ('*' for any); repeatable")
     ap.add_argument('--public-url', help='base URL clients see, when behind a reverse proxy (e.g. https://host/oceanlens)')
     ap.add_argument('--quiet', action='store_true', help='no request log')
+    ap.add_argument('--reload', type=float, default=0, metavar='SECONDS',
+                    help='every SECONDS, load snapshot files that changed or appeared (a daily forecast); 0: never')
     ap.add_argument('--api-key', action='append', default=[], help='require this key on the data routes (repeatable; '
                     'also --api-keys-file and $OCEANLENS_API_KEYS)')
     ap.add_argument('--api-keys-file', help='a file of API keys, one per line')
@@ -1747,6 +1800,8 @@ def main(argv=None):
         sys.stdout.reconfigure(errors='backslashreplace')
     srv = make_server(a.host, a.port, a.data, a.netcdf, a.app, a.cors, a.public_url, a.quiet, keys, a.rate_limit,
                       a.trust_forwarded, a.engine)
+    if a.reload > 0:
+        srv.start_watching(a.data, a.reload)
     host = f'[{a.host}]' if ':' in a.host else a.host
     print(f'OceanLens 3D server {VERSION} on http://{host}:{srv.server_address[1]}/  '
           f'({len(srv.datasets)} datasets: {", ".join(srv.datasets)}; app {srv.app or "not built"})', flush=True)

@@ -30,6 +30,7 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | BGC-Argo chlorophyll and oxygen | Ifremer ERDDAP, `ArgoFloats-synthetic-BGC` | ERDDAP tabledap CSV |
 | Sea floor and coast | ETOPO1 on NOAA's `upwell.pfeg.noaa.gov` ERDDAP | ERDDAP griddap CSV |
 | Cyclone track | IBTrACS v04r01 from NOAA NCEI | CSV download |
+| Today's forecast (a served case) | Copernicus Marine `GLOBAL_ANALYSISFORECAST_PHY_001_024`, latest daily run, same object store (`build_forecast.py`) | Native NetCDF-4 in HTTPS byte ranges |
 | Satellite SST (fronts, anomaly, 1982–2025 series) | Copernicus Marine OSTIA reprocessed L4, `s3.waw3-1.cloudferro.com` (`build_products.py`) | Native NetCDF-4 in HTTPS byte ranges |
 | Satellite chlorophyll | Copernicus-GlobColour gap-free L4 daily, same object store | Native NetCDF-4 in HTTPS byte ranges |
 | RAMA moorings | NOAA PMEL GTMBA daily means via NOAA CoastWatch's ERDDAP (`build_moorings.py`) | ERDDAP tabledap CSV |
@@ -62,7 +63,7 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | | `data-synthetic.js` | Generates the synthetic ocean, floats and gliders from formulas |
 | | `moorings.js` | The RAMA moorings: one profile per mooring and analysis day through the mooring plugin, joined to the real source's instruments |
 | | `products.js` | Satellite products, registered through the plugin API: chlorophyll, SST fronts, the fishing-zone indicator, the SST anomaly, and the panel card with the climate series |
-| | `data-real.js` | Decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
+| | `data-real.js` | The case in the page (`CASE`: Amphan, or a forecast the server put in its place: the header, context line, track, floats and tour follow it); decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
 | | `facts.js` | Computes every number shown in captions and panels, once |
 | 3D | `render.js` | The only file that creates three.js materials: colour conversion, palette ramps, draw order, fog, test hooks |
 | | `scene.js` | Renderer, background, lights, fog and the frame loop |
@@ -316,6 +317,7 @@ One file built on Python's `ThreadingHTTPServer` (one thread per connection) plu
 | `/wcs` | Subsets by lat, lon, depth and time, returned as CF NetCDF-3 (via `ncio.py`) or CSV |
 | `/opendap/…` | DAP2: DDS and DAS descriptions, ASCII and binary `.dods` hyperslabs |
 | `/healthz` | Status for monitoring |
+| (`--reload N`) | Every N seconds, snapshot files that changed or appeared are loaded, so a daily forecast is served without a restart |
 
 **Safety built in:** optional API keys (compared in constant time, hidden in the log) and a token-bucket rate limit per client; it binds to 127.0.0.1 by default, checks the `Host` header against DNS-rebinding attacks, caps connections at 256 and heavy map or coverage requests at 4 at a time, limits image and subset sizes, and returns JSON errors instead of crashing.
 

@@ -60,6 +60,12 @@ function renderValidation(){
   validationFor = key;
   const src = dataSource(), t = state.time, bands = [[0,100],[100,300],[300,1000]];
   const insts = instrumentsNow().filter(i=>!i.imported);   // the summary is the built-in comparison (facts)
+  if(dataMode==='real' && !realProfiles.length){             // a case with no floats (a forecast)
+    ui.valPanel.innerHTML = `<h2 class="val-h">No floats in this case</h2><p class="val-sub">${fmt.esc(CASE.name)} has `+
+      `no Argo profiles to compare with. Floats you add (Add data) are compared with it, as are the drift tool and `+
+      `sections.</p>`;
+    return;
+  }
   const table = (v, title) => {
     const all = insts.flatMap(inst=>misfit(inst, t, v));
     const rows = bands.map(([z0,z1])=>{

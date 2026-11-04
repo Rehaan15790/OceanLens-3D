@@ -6,6 +6,12 @@
    Everything else reads the ocean, the instruments, the track and every mode-dependent
    string through dataSource(), so switching source is one variable (dataMode).
    ============================================================ */
+// for a forecast case: whether day t is before the run (an analysis) or how many days ahead it is
+function forecastDay(t){
+  if(!CASE.forecast || !Number.isFinite(CASE.issued)) return '';
+  const d = Math.round((Date.parse(META.times[t].slice(0, 10) + 'T00:00Z') - CASE.issued)/864e5);
+  return d < 0 ? ' (analysis)' : d === 0 ? ' (day of issue)' : ` (+${d} ${d===1 ? 'day' : 'days'})`;
+}
 const SOURCES = {
   real: {
     temp: (lat, lon, depth, t)=>realAt(0, lat, lon, depth, t),
@@ -18,9 +24,9 @@ const SOURCES = {
 
     // ---- copy table (ux edits the strings in 3.1b) ----
     ctx: {badge:'Real data',
-          text: t=>`Cyclone Amphan · ${MODEL().product} ${fmt.analysisTime(META.times[t])} · ${t+1} of ${NT}`},
+          text: t=>`${CASE.name} · ${MODEL().product} ${fmt.analysisTime(META.times[t])}${forecastDay(t)} · ${t+1} of ${NT}`},
     time: {now: t=>fmt.analysisTime(META.times[t]), tick: t=>fmt.dayMonth(META.times[t])},
-    track: {name:'Cyclone Amphan', badge:'IBTrACS v04r01', mapLabel:'Amphan (IBTrACS)',
+    track: {get name(){ return CASE.name; }, badge:'IBTrACS v04r01', mapLabel:'Amphan (IBTrACS)',   // CASE: data-real.js, loaded later
             landfallLabel: fix=>`Landfall ${fmt.fixTime(fix.t)}`,
             nowLabel: (wind, agency)=>`Amphan · ${wind} kt (${agency})`,
             empty:'No IBTrACS fixes for Amphan fall inside the map.'},
@@ -39,7 +45,8 @@ const SOURCES = {
               none:(id, t)=>`${id} has no profile within 1.5 days of ${fmt.dayMonth(META.times[t])}.`},
     vars: {get chlNote(){ return `From BGC-Argo floats only. ${MODEL().short} has no chlorophyll, so the map has no model field: click a float to see its profile.`; },
            get chlKey(){ return `${MODEL().short} has no chlorophyll; only BGC-Argo floats carry it.`; }},
-    export: {get caveat(){ return `Data: ${MODEL().data} · Argo GDAC incl. BGC-Argo · IBTrACS v04r01 · ETOPO1. Not for operational use.`; },
+    export: {get caveat(){ return CASE.tour ? `Data: ${MODEL().data} · Argo GDAC incl. BGC-Argo · IBTrACS v04r01 · ETOPO1. Not for operational use.`
+                                             : `Data: ${MODEL().data} · ETOPO1. Not for operational use.`; },
              file: (t, variable, view)=>`oceanlens3d_real_${META.times[t].slice(0, 10)}_${variable}_${view}.png`}
   },
   synth: {
