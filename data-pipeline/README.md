@@ -244,6 +244,6 @@ snapshot's floats, track and relief, and repeats the monthly mean at the 8 analy
 field once (`meta.timesStored`). Four extracts, 26 seconds.
 
 The LAS sends its certificate without the GlobalSign intermediate that links it to a trusted root (browsers fetch it
-themselves; Python does not). `certs/globalsign-rsa-ov-ssl-ca-2018.pem` is that intermediate, as GlobalSign publishes
-it; the script checks its SHA-256 fingerprint and adds it to the trusted set for these downloads only, so certificate
+themselves; Python does not). `GLOBALSIGN_INTERMEDIATE` in the script is that intermediate, as GlobalSign publishes
+it (kept as text: the repository ignores `*.pem`); the script checks its SHA-256 fingerprint and adds it to the trusted set for these downloads only, so certificate
 checking stays on. The LAS's OPeNDAP endpoint did not answer when this was written (4 November 2026).

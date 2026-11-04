@@ -1,6 +1,6 @@
 """Unit tests for build_las.py (no network): the LAS request, the GlobalSign intermediate, moving currents from the U
 cells to the T cells, and a byte-identical rebuild of data/amphan-2020-igora.json when the cache holds the extracts."""
-import base64, json, os, sys, tempfile, unittest, urllib.parse
+import base64, json, os, sys, tempfile, unittest, urllib.parse  # noqa: F401
 
 import numpy as np
 
@@ -26,20 +26,10 @@ class Request(unittest.TestCase):
 
     def test_the_intermediate_is_checked(self):
         self.assertIn('BEGIN CERTIFICATE', L.intermediate())
-        with tempfile.TemporaryDirectory() as d:
-            bad = os.path.join(d, 'x.pem')
-            with open(L.CERT) as f:
-                pem = f.read()
-            with open(bad, 'w') as f:                  # another certificate (here: the same with one byte changed)
-                lines = pem.splitlines()
-                lines[5] = ('A' if lines[5][0] != 'A' else 'B') + lines[5][1:]
-                f.write('\n'.join(lines) + '\n')
-            old, L.CERT = L.CERT, bad
-            try:
-                with self.assertRaises(Exception):
-                    L.intermediate()
-            finally:
-                L.CERT = old
+        lines = L.GLOBALSIGN_INTERMEDIATE.splitlines()
+        lines[5] = ('A' if lines[5][0] != 'A' else 'B') + lines[5][1:]   # one byte changed: another certificate
+        with self.assertRaises(Exception):
+            L.intermediate('\n'.join(lines) + '\n')
 
 
 class Grid(unittest.TestCase):
