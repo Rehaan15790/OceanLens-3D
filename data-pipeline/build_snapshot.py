@@ -1300,7 +1300,8 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
                       'native_levels_m': hinfo['native_levels_m'], 'native_step_deg': hinfo['native_step_deg'],
                       'attrs': hinfo['attrs'], 'filled_cells': filled}
         model_meta = {'name': 'GLORYS12V1', 'short': 'GLORYS', 'kind': 'reanalysis, daily means',
-                      'product': 'GLOBAL_MULTIYEAR_PHY_001_030', 'doi': GLORYS_CITATION['doi']}
+                      'product': 'GLOBAL_MULTIYEAR_PHY_001_030', 'doi': GLORYS_CITATION['doi'],
+                      'temperature': 'potential'}    # thetao; the app turns it into in-situ to compare with floats
     elif model_netcdf:
         model_note = (f'CF NetCDF model output {hinfo["file"]}; each 0.5 deg cell the mean of the native points inside '
                       'it, levels interpolated linearly to the app depths.')

@@ -204,7 +204,7 @@ The heat map runs this for every grid column at the current time (`tchpGrid`). T
 
 ### Comparing floats with the model
 
-1. **`modelAtObs`** gets the model at the float's own depths. With HYCOM on screen, real profiles carry HYCOM sampled at their own place and time (nearest 3-hourly output), stored by the pipeline; with GLORYS (daily means), and for imports, the nearest analysis is interpolated.
+1. **`modelAtObs`** gets the model at the float's own depths. With HYCOM on screen, real profiles carry HYCOM sampled at their own place and time (nearest 3-hourly output), stored by the pipeline; with GLORYS (daily means), and for imports, the nearest analysis is interpolated. GLORYS gives potential temperature and floats measure in-situ temperature, so `modelAsMeasured` first turns the model into in-situ temperature at the level's pressure: `potentialTemp` is the UNESCO (1983) Runge–Kutta integration of the Bryden (1973) adiabatic lapse rate, run from the surface down (check value θ = 36.89073 °C at S = 40, T = 40 °C, 10 000 dbar). The Python recomputation integrates the same lapse rate in 64 small steps instead.
 2. **`misfit`** pairs each good observed level with the model: difference = observed − model. Flagged levels are skipped.
 3. **`summarize`** turns the differences into **bias** (mean difference) and **RMSE** (root-mean-square difference), with the count of levels used.
 4. **Rating:** temperature RMSE under 0.5 °C is good, up to 1.0 °C fair, above that poor; salinity uses 0.15 and 0.30 PSU.

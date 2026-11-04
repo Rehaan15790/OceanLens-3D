@@ -234,7 +234,7 @@ function drawProfileChart(){
   // the chart spans the observed profile (model levels stop at 1000 m): 1000 m for Argo, less for shallow casts
   const maxDepth = inst.kind==='argo' || !(inst.maxDepth > 0) ? 1000 : Math.min(1000, Math.ceil(inst.maxDepth/100)*100);
   const modelZ = DEPTHS.filter(z=>z<maxDepth).concat([maxDepth]);
-  const modelV = modelZ.map(z=>modelAt(tab, lat, lon, z, t));
+  const modelV = modelZ.map(z=>modelAsMeasured(tab, lat, lon, z, t));   // potential temperature shown as in-situ
   const hasModel = modelV.every(v=>v!==null);   // false for chlorophyll in real mode (no model has it)
   const vals = hasModel ? modelV.slice() : [];
   if(hasObs) obs.forEach(v=>{ if(Number.isFinite(v)) vals.push(v); });
@@ -317,7 +317,8 @@ function drawProfileChart(){
     : inst.kind==='argo' ? (real ? 'Argo' : 'Synthetic float') : 'Synthetic glider';
   document.getElementById('obsLegend').innerHTML =
     `<span><i class="lg lg-obs"></i>${fmt.esc(obsName)}</span>` +
-    (hasModel ? `<span><i class="lg lg-model"></i>${real ? MODEL().short : 'Model'}</span>` : '') +
+    (hasModel ? `<span><i class="lg lg-model"></i>${real ? MODEL().short : 'Model'}` +
+      `${modelTempIsPotential() && (tab==='temp' || tab==='dens') ? ', as in-situ' : ''}</span>` : '') +
     (p.flag.some(f=>f) ? `<span><i class="lg lg-flag"></i>QC flag</span>` : '');
 
   const s = hasObs ? summarize(misfit(inst, t, tab)) : null;

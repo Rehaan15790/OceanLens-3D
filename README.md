@@ -91,7 +91,7 @@ There are two data modes, switched in the header.
   validation. Over all 206 profiles the HYCOM temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to
   1000 m (the table is in `docs/PRESENTER_GUIDE.md`).
 - **The models disagree, as models do:** under Amphan's future path on 13 May, HYCOM holds 85 kJ/cm² of cyclone heat
-  potential and GLORYS 109. Below 300 m GLORYS is closer to the floats (RMSE 0.21–0.28 °C against 0.26–0.37 °C).
+  potential and GLORYS 109. Below 300 m GLORYS is closer to the floats (RMSE 0.22–0.28 °C against 0.26–0.37 °C).
 - **Synthetic demo:** analytic fields with synthetic floats and gliders, labelled as such. It is not a real ocean
   state.
 
@@ -167,7 +167,8 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
 - **The 3D view draws only the snapshots in the page.** Model files given to the server reach other clients through
   REST, WMS, WCS and OPeNDAP, but are not drawn in 3D.
 - **GLORYS has daily means,** so floats are compared with the nearest of the 8 days; HYCOM is matched to each float's
-  own time. GLORYS gives potential temperature, about 0.1 °C cooler than in-situ at 1000 m.
+  own time. GLORYS gives potential temperature; the comparison turns it into in-situ temperature at each float
+  level's pressure (UNESCO 1983), so both sides are the same quantity.
 - **NetCDF-4 compressed with szip or zstd** is not read; convert it (for example `nccopy -k classic`) or export CSV.
 - **The ADCP and HF radar plugins are tested on synthetic records only.**
 - **Not yet connected:** the INCOIS Live Access Server and Copernicus Marine's other products (biogeochemistry,

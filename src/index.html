@@ -465,7 +465,8 @@
         days, centred on the same times. Read from the native 1/12° NetCDF-4 files, only the parts over this map, and
         averaged into the same 0.5° cells, interpolated linearly between its levels to the same 11 depths. Potential
         temperature (HYCOM and Argo give in-situ temperature, about 0.1 °C warmer at 1000 m), salinity and currents.
-        Switch between the models under Model, or with <kbd>M</kbd>.</dd>
+        Compared with a float, GLORYS is first turned into in-situ temperature at the float's pressure (UNESCO 1983),
+        so both sides are the same quantity. Switch between the models under Model, or with <kbd>M</kbd>.</dd>
       <dt>Argo</dt>
       <dd><span data-fact="argo.profiles" data-fmt="int"></span> profiles from
         <span data-fact="argo.floats" data-fmt="int"></span> floats, from the Argo GDAC via Ifremer ERDDAP. Delayed-mode

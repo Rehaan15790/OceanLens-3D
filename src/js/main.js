@@ -120,7 +120,8 @@ function exposeTestSurface(){
   ol.facts = facts;
   ol.fn = {seawaterDensity, sigmaT, tchpColumn, firstCrossing, contourSegments, summarize, misfit, realAt, obsInterp,
            modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow,
-           driftRun, driftClock, uvAtTime, realAtIn, decodeModel};
+           driftRun, driftClock, uvAtTime, realAtIn, decodeModel, adiabaticLapse, potentialTemp, inSituTemp,
+           modelAsMeasured};
   ol.render = Render.test;
 }
 
