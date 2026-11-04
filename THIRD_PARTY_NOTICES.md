@@ -82,3 +82,12 @@ Knapp, K. R., M. C. Kruk, D. H. Levinson, H. J. Diamond and C. J. Neumann (2010)
 Archive for Climate Stewardship (IBTrACS), Bull. Amer. Meteor. Soc. 91, 363–376, doi:10.1175/2009BAMS2755.1;
 IBTrACS v04r01, NOAA NCEI, doi:10.25921/82ty-9e16. Positions and winds from RSMC New Delhi (IMD) and the Joint
 Typhoon Warning Center. A US government work in the public domain.
+
+### NOAA Global Drifter Program
+
+Elipot, S., A. Sykulski, R. Lumpkin, L. Centurioni and M. Pazos (2022), Hourly location, current velocity, and
+temperature collected from Global Drifter Program drifters world-wide, version v2.01, NOAA NCEI,
+doi:10.25921/x46c-3620; Elipot, S. et al. (2016), A global surface drifter data set at hourly resolution, J. Geophys.
+Res. Oceans 121, 2937–2966, doi:10.1002/2016JC011716. Collected and made freely available by the NOAA Global
+Drifter Program (https://www.aoml.noaa.gov/phod/gdp/), accessed from erddap.aoml.noaa.gov. Creative Commons
+Attribution 4.0 (CC BY 4.0). `data/drifters-2020-05.json` keeps 6-hourly positions of 12 drifters, 4–25 May 2020.

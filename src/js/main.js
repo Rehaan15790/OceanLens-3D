@@ -51,6 +51,8 @@ function refreshMarkers(){
 // check that the action ends in requestUpdate() and that the stale piece is refreshed here.
 function fullUpdate(){
   refreshMarkers();
+  refreshDrifters();
+  applyDrifterVisibility();
   followProfile();
   updateStormNow();
   updateLayerColors();
@@ -107,7 +109,7 @@ function exposeTestSurface(){
   Object.defineProperty(ol, 'dataMode', {get: ()=>dataMode, configurable:true});
   Object.defineProperty(ol, 'realModel', {get: ()=>realModel, configurable:true});
   Object.defineProperty(ol, 'drift', {get: ()=>drift, configurable:true});
-  ol.models = REAL_MODELS.map(m=>m.id);
+  Object.defineProperty(ol, 'models', {get: ()=>REAL_MODELS.map(m=>m.id), configurable:true});
   ol.actions = Object.fromEntries(Object.entries({
     setVariable, setMode, setDepth, setIso, setTime, setPlaying, setDataMode, setRealModel, setOverlay, setOpacity,
     setExaggeration,

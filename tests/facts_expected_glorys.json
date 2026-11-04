@@ -1259,6 +1259,76 @@
   "tol": 0.005,
   "value": 0.627
  },
+ "real.drifters.byHours[0].h": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 24
+ },
+ "real.drifters.byHours[0].km": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.1,
+  "value": 12.05
+ },
+ "real.drifters.byHours[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 60
+ },
+ "real.drifters.byHours[0].stillKm": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 17.48
+ },
+ "real.drifters.byHours[1].h": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 48
+ },
+ "real.drifters.byHours[1].km": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.1,
+  "value": 21.64
+ },
+ "real.drifters.byHours[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 58
+ },
+ "real.drifters.byHours[1].stillKm": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 33.92
+ },
+ "real.drifters.byHours[2].h": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 72
+ },
+ "real.drifters.byHours[2].km": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.1,
+  "value": 30.99
+ },
+ "real.drifters.byHours[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 52
+ },
+ "real.drifters.byHours[2].stillKm": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.01,
+  "value": 46.08
+ },
+ "real.drifters.drifters": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 12
+ },
+ "real.drifters.releases": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 61
+ },
  "real.path.afterIndex": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,

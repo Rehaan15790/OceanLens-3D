@@ -81,6 +81,8 @@ function legendSwatch(g, sw, cx, cy){
     g.beginPath(); g.moveTo(cx-7, cy); g.lineTo(cx+7, cy); g.stroke(); g.setLineDash([]);
   } else if(kind==='storm'){
     g.strokeStyle = '#e8ecef'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.stroke();
+  } else if(kind==='drifter'){
+    g.beginPath(); g.arc(cx, cy, 4, 0, 7); g.fillStyle = '#7ee0ff'; g.fill(); g.strokeStyle = '#0b0f13'; g.stroke();
   } else if(kind==='contour'){
     g.fillStyle = '#e8ecef'; g.fillRect(cx-7, cy-1, 14, 2);
   }

@@ -12,7 +12,7 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | Piece | What we used | Why |
 | --- | --- | --- |
 | 3D graphics | **three.js r128** (MIT), inlined into the page | A thin layer over WebGL: scenes, cameras, meshes, textures, lights. Pinned to one version so the file never changes under us |
-| App code | **Plain JavaScript**, 41 classic script files (about 6,900 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
+| App code | **Plain JavaScript**, 42 classic script files (about 7,100 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
 | Styling | **Plain CSS**, 9 files with design tokens in `tokens.css` | Dark theme, consistent spacing and colours, no CSS framework |
 | Charts in the panels | **HTML canvas 2D**, drawn by hand in `charts.js` | Profile, section and track charts without a chart library |
 | Build, server, pipeline, tests | **Python 3** (3.11/3.12) standard library | Runs anywhere Python does |
@@ -30,6 +30,7 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | BGC-Argo chlorophyll and oxygen | Ifremer ERDDAP, `ArgoFloats-synthetic-BGC` | ERDDAP tabledap CSV |
 | Sea floor and coast | ETOPO1 on NOAA's `upwell.pfeg.noaa.gov` ERDDAP | ERDDAP griddap CSV |
 | Cyclone track | IBTrACS v04r01 from NOAA NCEI | CSV download |
+| Drifting buoys (the drift check) | NOAA Global Drifter Program hourly product on AOML's ERDDAP, `drifter_hourly_qc` (`build_drifters.py`) | ERDDAP tabledap CSV |
 
 ### File formats
 
@@ -68,6 +69,7 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | | `track.js` | The cyclone track line and fixes |
 | | `section.js` | Vertical sections: drawing the line, cutting the curtain |
 | | `drift.js` | The surface drift tool: the trajectory model, its 3D drawing and its panel |
+| | `drifters.js` | Real drifting buoys: their tracks, a drift released from one, and the check of the drift tool against them |
 | | `flow.js` | Current arrows and streaks |
 | | `markers.js` | Float, glider and instrument markers, their depth stems, and clicking them |
 | UI | `charts.js` | Canvas charts in the panels and the colour key |
@@ -227,6 +229,8 @@ This follows GODAE Class 4 verification, the standard way forecast centres compa
 
 With two models in the page, the central drift is also run with the other model (`realAtIn` reads any decoded model), from the same point and time. `facts_reference.py` (`drift_path`) recomputes the central drift with numpy, and the tests compare the two hour by hour.
 
+**The check against real buoys** (`drifters.js`). `data/drifters-2020-05.json` holds 12 NOAA Global Drifter Program buoys in the map, every 6 h. `drifterCheck` starts the central drift from each buoy's position at each analysis that has 72 h of currents after it (61 releases), and at 24, 48 and 72 h measures the great-circle distance to where the buoy really was, and to where it started (the object standing still, the simplest forecast to beat). The medians go into `facts().real.drifters`, per model; `facts_reference.py` (`drifter_check`) recomputes them and the facts test compares. After 72 h: GLORYS 31 km, HYCOM 55 km, standing still about 46 km. Clicking a buoy (the Drifting buoys overlay) releases a drift there; `drifterTruth` adds the buoy's real path and the distances to the panel.
+
 ### Other derived quantities
 
 - **Sound speed:** Mackenzie (1981), from temperature, salinity and depth.
@@ -302,13 +306,13 @@ One file built on Python's `ThreadingHTTPServer` (one thread per connection) plu
 | Route | Implementation notes |
 | --- | --- |
 | `/` | The built app; `?dataset=<id>` swaps in another snapshot |
-| `/api/v1/…` | JSON (or binary 16-bit) fields, columns, profiles, track |
+| `/api/v1/…` | JSON (or binary 16-bit) fields, columns, profiles, track; `/model` puts a NetCDF model on the page's grid and times (the pipeline's `model_from_dataset`), for the Model switch |
 | `/wms` | Samples the field at every pixel, colours it with the same palettes, and writes the PNG by hand with `zlib` |
 | `/wcs` | Subsets by lat, lon, depth and time, returned as CF NetCDF-3 (via `ncio.py`) or CSV |
 | `/opendap/…` | DAP2: DDS and DAS descriptions, ASCII and binary `.dods` hyperslabs |
 | `/healthz` | Status for monitoring |
 
-**Safety built in:** it binds to 127.0.0.1 by default, checks the `Host` header against DNS-rebinding attacks, caps connections at 256 and heavy map or coverage requests at 4 at a time, limits image and subset sizes, and returns JSON errors instead of crashing.
+**Safety built in:** optional API keys (compared in constant time, hidden in the log) and a token-bucket rate limit per client; it binds to 127.0.0.1 by default, checks the `Host` header against DNS-rebinding attacks, caps connections at 256 and heavy map or coverage requests at 4 at a time, limits image and subset sizes, and returns JSON errors instead of crashing.
 
 ## Testing
 

@@ -7,6 +7,7 @@
    area at each day. With two models in the page the other model's drift from the same point is drawn too, dashed:
    where the two part is the model uncertainty a forecaster would weigh.
    Current only: the snapshots have no wind, so there is no leeway and no Stokes drift (the panel says so).
+   drifters.js checks the drift against real drifting buoys and draws a drifter's own path when a drift starts from one.
    ============================================================ */
 const DRIFT = {
   n: 200,                // ensemble members besides the central drift
@@ -123,6 +124,7 @@ function computeDrift(){
   drift.used = Math.min(drift.hours, Math.floor(driftHoursAvailable(clock, t0, drift.dir)));
   drift.others = [];
   drift.run = null;
+  drift.real = null;
   if(drift.used < 1) return;
   const seed = hashStr(`${drift.lat.toFixed(4)},${drift.lon.toFixed(4)},${t0},${drift.dir}`);
   const base = {lat:drift.lat, lon:drift.lon, t0, hours:drift.used, dir:drift.dir, clock, seed};
@@ -134,6 +136,7 @@ function computeDrift(){
     const uv = (la, lo, d, t)=>({u:realAtIn(R, 2, la, lo, d, t), v:realAtIn(R, 3, la, lo, d, t)});
     drift.others.push({words:m.words, run:driftRun(Object.assign({uv, n:0}, base))});
   });
+  drift.real = drifterTruth(drift, clock);
 }
 
 const driftVisible = ()=>!!(drift && drift.run && driftGroup.visible);
@@ -143,6 +146,22 @@ const driftLabels = {
   other: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:()=>driftVisible() && drift.others.length > 0})
 };
 const _dv = (lat, lon, lift = 0)=>{ const [x, z] = toXZ(lat, lon); return new THREE.Vector3(x, DRIFT_Y + lift, z); };
+// a flat ribbon on the sea surface along path [{lat, lon}], half-width `half`, `lift` above DRIFT_Y, dashed every `dash`
+function surfaceRibbon(path, half, lift, dash){
+  const out = [], v = path.map(p=>_dv(p.lat, p.lon, lift));
+  let along = 0;
+  for(let i=1;i<v.length;i++){
+    const a = v[i-1], b = v[i], dx = b.x-a.x, dz = b.z-a.z, len = Math.hypot(dx, dz);
+    along += len;
+    if(len < 1e-6 || (dash && Math.floor((along - len/2)/dash) % 2)) continue;
+    const px = -dz/len*half, pz = dx/len*half, ex = dx/len*half*0.5, ez = dz/len*half*0.5;   // ends overlap a little
+    out.push(a.x-ex+px, a.y, a.z-ez+pz, a.x-ex-px, a.y, a.z-ez-pz, b.x+ex+px, b.y, b.z+ez+pz,
+             b.x+ex+px, b.y, b.z+ez+pz, a.x-ex-px, a.y, a.z-ez-pz, b.x+ex-px, b.y, b.z+ez-pz);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
+  return g;
+}
 // rebuild the drift's lines, ellipses and members for `drift`; clears them when null
 function buildDrift(){
   driftGroup.children.slice().forEach(o=>{ driftGroup.remove(o); o.geometry.dispose(); o.material.dispose(); });
@@ -176,26 +195,15 @@ function buildDrift(){
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   add(new THREE.Points(g, Render.marks({shape:'circle', sizePx:6})), Render.ORDER.particles);
   // the central drift as a white ribbon with a dark edge (a 1 px line is lost on the bright end of the palette),
-  // and the other model's dashed
-  const ribbon = (path, half, lift, dash)=>{
-    const out = [], v = path.map(p=>_dv(p.lat, p.lon, lift));
-    let along = 0;
-    for(let i=1;i<v.length;i++){
-      const a = v[i-1], b = v[i], dx = b.x-a.x, dz = b.z-a.z, len = Math.hypot(dx, dz);
-      along += len;
-      if(len < 1e-6 || (dash && Math.floor((along - len/2)/dash) % 2)) continue;
-      const px = -dz/len*half, pz = dx/len*half, ex = dx/len*half*0.5, ez = dz/len*half*0.5;   // ends overlap a little
-      out.push(a.x-ex+px, a.y, a.z-ez+pz, a.x-ex-px, a.y, a.z-ez-pz, b.x+ex+px, b.y, b.z+ez+pz,
-               b.x+ex+px, b.y, b.z+ez+pz, a.x-ex-px, a.y, a.z-ez-pz, b.x+ex-px, b.y, b.z+ez-pz);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(out, 3));
-    return g;
-  };
+  // the other model's dashed, and a real drifter's own path (drifters.js) in its colour
   [[run.path, null], ...drift.others.map(o=>[o.run.path, 0.06])].forEach(([path, dash])=>{
-    add(new THREE.Mesh(ribbon(path, 0.036, 0.008, dash), Render.flat(0x0b0f13, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
-    add(new THREE.Mesh(ribbon(path, 0.02, 0.011, dash), Render.flat(0xffffff, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
+    add(new THREE.Mesh(surfaceRibbon(path, 0.036, 0.008, dash), Render.flat(0x0b0f13, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
+    add(new THREE.Mesh(surfaceRibbon(path, 0.02, 0.011, dash), Render.flat(0xffffff, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
   });
+  if(drift.real && drift.real.path.length > 1){
+    add(new THREE.Mesh(surfaceRibbon(drift.real.path, 0.036, 0.0085), Render.flat(0x0b0f13, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
+    add(new THREE.Mesh(surfaceRibbon(drift.real.path, 0.02, 0.0115), Render.flat(DRIFTER_HEX, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
+  }
   // the release point
   const ring = add(new THREE.Mesh(new THREE.RingGeometry(0.1, 0.15, 32), Render.flat(0xffffff, {side:THREE.DoubleSide})),
                    Render.ORDER.markers);
@@ -283,7 +291,7 @@ function renderDriftPanel(){
   }).join('');
   body.innerHTML = short +
     `<p class="meta">The line ${back ? 'traces back' : 'moves'} ${fmt.int(km)} km in ${run.endH} h `+
-    `(${fmt.dp(km/run.endH/3.6, 2)} m/s on average). ${fate}</p>` + others +
+    `(${fmt.dp(km/run.endH/3.6, 2)} m/s on average). ${fate}</p>` + others + drifterPanelHtml(drift) +
     `<table class="val-table"><caption>The ${DRIFT.n} spread drifts</caption>`+
     `<tr><th>${back ? 'Before' : 'After'}</th><th>Line from ${back ? 'find' : 'release'}</th><th>90 % area</th><th>Ashore</th></tr>${rows}</table>`;
   const days = Math.round((clock[1]-clock[0])/864e5);
@@ -293,7 +301,7 @@ function renderDriftPanel(){
     `released within about ${DRIFT.r0Km} km and given a random walk (K = ${DRIFT.K} m²/s, an assumed value for eddies smaller `+
     `than the 0.5° grid); amber ones reached the coast. Each ellipse holds 90 % of those still afloat that day.</p>`+
     `<p>Only the current moves them: the data have no wind, so there is no leeway (a life raft or a person in the water also `+
-    `moves with the wind, at a few per cent of its speed) and no Stokes drift. Not checked against drifting buoys. A teaching aid, `+
+    `moves with the wind, at a few per cent of its speed) and no Stokes drift. ${drifterCheckSentence()} A teaching aid, `+
     `not a search plan: INCOIS runs SARAT for that.</p>`;
 }
 
@@ -303,7 +311,8 @@ function startDrift(lat, lon, opts = {}){
   if(!driftStartOk(lat, lon)) return false;
   if(isTourRunning()) stopTour();
   setDriftPlace(false);
-  drift = {lat, lon, hours:opts.hours ?? (drift ? drift.hours : 72), dir:opts.dir ?? (drift ? drift.dir : 1)};
+  drift = {lat, lon, hours:opts.hours ?? (drift ? drift.hours : 72), dir:opts.dir ?? (drift ? drift.dir : 1),
+           drifter:opts.drifter || null};
   computeDrift();
   faceDrift();
   showPanel('drift');

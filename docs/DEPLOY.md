@@ -95,9 +95,11 @@ is made private again, where minutes and artifact storage are metered:
 `server/serve.py` uses only the Python standard library and numpy. It needs no database, no container and no
 internet access. It serves the single file at `/`, the API at `/api/v1`, WMS at `/wms`, WCS at `/wcs` and OPeNDAP
 at `/opendap` (`docs/API.md`). The page detects that it is served over HTTP and lists the server's datasets.
-Picking one loads its observed profiles or, for another snapshot, reloads the page with that snapshot embedded. The
-3D view draws only the snapshots in the page (HYCOM and GLORYS): a model file given with `--netcdf` is served through
-WMS, WCS, OPeNDAP and REST, not drawn in 3D. Opened from a file, the page behaves exactly as before.
+Picking one loads its observed profiles or, for another snapshot, reloads the page with that snapshot embedded. A
+model file given with `--netcdf` that covers the map and has a time within 12 h of each of the page's analyses also
+joins the Model switch: the server puts it on the page's grid and the page streams it when it is chosen
+(`/api/v1/datasets/<id>/model`). Other files are served through WMS, WCS, OPeNDAP and REST only. Opened from a file,
+the page behaves exactly as before.
 
 ```
 python build.py --out dist/OceanLens3D.html
@@ -125,8 +127,18 @@ ProtectHome=true
 WantedBy=multi-user.target
 ```
 
-**Put the institution's web server in front.** The server listens on 127.0.0.1 only. TLS, authentication, access
-logs and rate limits belong to the reverse proxy. With nginx:
+**Put the institution's web server in front.** The server listens on 127.0.0.1 only. TLS, user accounts and access
+logs belong to the reverse proxy. The server can also check API keys and limit each client itself:
+
+```
+python -c "import secrets; print(secrets.token_urlsafe(24))" >> /etc/oceanlens/keys.txt    # one key per partner
+python server/serve.py --api-keys-file /etc/oceanlens/keys.txt --rate-limit 120 --trust-forwarded \
+    --public-url https://host/oceanlens
+```
+
+Partners then send `Authorization: Bearer <key>` (or `key=<key>` from WMS and OPeNDAP clients); the page opens as
+`https://host/oceanlens/?key=<key>`. `--trust-forwarded` is only for a server behind the proxy: it rate-limits by the
+address the proxy adds to `X-Forwarded-For`. With nginx:
 
 ```
 location /oceanlens/ {

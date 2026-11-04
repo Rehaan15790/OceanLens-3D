@@ -8,7 +8,7 @@ const MODES = ['surface', 'layers', 'slice', 'iso', 'iso3d'];
 const OVERLAYS = {swArgo:'showArgo', swMisfit:'colorMisfit', swGlider:'showGlider', swTrack:'showTrack',
                   swFlow:'showFlow', swGrid:'showGrid'};
 // switches ux may add; wired only when present
-const OPTIONAL_OVERLAYS = {swOther:'showOther', swAllImported:'showAllImported'};
+const OPTIONAL_OVERLAYS = {swOther:'showOther', swAllImported:'showAllImported', swDrifters:'showDrifters'};
 const optUi = Object.fromEntries(['scaleToggle', ...Object.keys(OPTIONAL_OVERLAYS)].map(id=>[id, document.getElementById(id)]));
 const ISO_MODES = ['iso', 'iso3d'];
 
@@ -165,11 +165,13 @@ function setOverlay(key, on){
   if(!Object.values(OVERLAYS).includes(key) && !Object.values(OPTIONAL_OVERLAYS).includes(key)) return;
   state[key] = !!on;
   if(key==='colorMisfit' && on) state.showArgo = true;   // misfit colours need the floats on
-  requestUpdate(['colorMisfit', 'showTrack', 'showAllImported'].includes(key) ? 'full' : 'overlay');
+  requestUpdate(['colorMisfit', 'showTrack', 'showAllImported', 'showDrifters'].includes(key) ? 'full' : 'overlay');
 }
 // the overlays that change visibility only
 function applyOverlays(){
   applyMarkerVisibility();
+  refreshDrifters();
+  applyDrifterVisibility();
   updateLegend();
   applyFlowVisibility();
   graticule.visible = state.showGrid; boxLines.visible = state.showGrid;
@@ -224,9 +226,11 @@ function syncControls(){
   const gliders = src.hasGliders || (dataMode==='real' && importedInsts.some(i=>i.kind==='glider'));
   ui.swGlider.disabled = !gliders;
   ui.rowGlider.title = gliders ? '' : 'No glider data in this data set';
+  const rd = document.getElementById('rowDrifters');
+  if(rd) rd.hidden = dataMode!=='real' || !DRIFTERS;
   updateColorbarUI();
   ui.dataToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.mode===dataMode));
-  ui.modelGrp.hidden = dataMode!=='real' || REAL_MODELS.length < 2;
+  ui.modelGrp.hidden = dataMode!=='real' || ui.modelToggle.children.length < 2;
   ui.modelToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.model===realModel));
   ui.modelNote.textContent = MODEL().note + '.';
   ui.secTrackBtn.textContent = src.section.trackPreset;

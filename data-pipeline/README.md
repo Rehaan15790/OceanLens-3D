@@ -163,3 +163,19 @@ been tried.
 - `nc4_fixtures.py` writes small NetCDF-4 files in both layouts for the tests. It shares `nc4.py`'s reading of the
   HDF5 specification, which is why the tests also read a real GLORYS file and check it against the Zarr store.
 - `blosc.py` decodes Blosc frames with LZ4 and byte shuffle (the Copernicus ARCO Zarr chunks), for that check.
+
+## Drifting buoys (`build_drifters.py`)
+
+    python data-pipeline/build_drifters.py [--fetch]          # ../data/drifters-2020-05.json
+
+writes the NOAA Global Drifter Program buoys inside the map during the Amphan window, which the app uses to check its
+surface drift tool (`src/js/drifters.js`).
+
+- **Source:** the GDP hourly product (`drifter_hourly_qc`, version 2.01: quality-controlled positions, interpolated
+  to the hour; Elipot et al. 2016), one ERDDAP query on `erddap.aoml.noaa.gov` for 4–25 May 2020 inside the map. The
+  response goes through the same cache and manifest as the snapshot (`cache/drifters/gdp_hourly_2020-05.csv`, 0.6 MB).
+- **What is kept:** the positions at 00, 06, 12 and 18 UTC inside the map, from the first analysis to the last, as
+  `[step, lat, lon]` with step counting 6 h from `meta.t0`; the buoy type and the date it lost its drogue. A drogued
+  SVP buoy follows the current at 15 m; without its drogue the wind also moves it. 12 buoys, 752 positions, 18 kB.
+- **Tests:** `test_build_drifters.py` (parsing, the 6-hourly selection, the committed file's shape, and a byte-identical
+  rebuild when the cache has the response). The comparison itself is `facts_reference.py drifter_check`.

@@ -5,10 +5,13 @@ Python standard library and numpy only; NetCDF through data-pipeline/ncio.py.
     python server/serve.py                                   app + data/*.json on http://127.0.0.1:8080/
     python server/serve.py --netcdf model.nc --port 8000     add a CF NetCDF-3 model file as a dataset
     python server/serve.py --host 0.0.0.0 --cors '*'         listen on every interface, allow any origin
+    python server/serve.py --api-keys-file keys.txt --rate-limit 120   data routes need a key; 120 requests/min per client
 
 Routes: / (the app), /api/v1/..., /wms, /wcs, /ows, /opendap/..., /healthz. docs/API.md has the details and example URLs.
+A NetCDF model that covers the map and the page's analysis times is also offered to the 3D view
+(/api/v1/datasets/<id>/model), where it joins the Model switch.
 """
-import argparse, base64, contextlib, gzip, json, math, re, socket, struct, sys, threading, time, zlib
+import argparse, base64, contextlib, gzip, hmac, json, math, os, re, socket, struct, sys, threading, time, zlib
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -23,6 +26,10 @@ try:
     import ncio
 except ImportError:          # WCS NetCDF output and --netcdf input need it; everything else works without
     ncio = None
+try:
+    import build_snapshot as pipeline     # the app's grid, regridding and packing: a NetCDF model drawn in 3D
+except ImportError:
+    pipeline = None
 
 VERSION = (REPO / 'VERSION').read_text().strip() if (REPO / 'VERSION').exists() else 'dev'
 MAX_PIXELS, MAX_SIDE, MAX_CELLS = 4_194_304, 2048, 5_000_000
@@ -383,8 +390,40 @@ def load_netcdf(path):
         info['speed'] = var_info('speed', data=fields['speed'][0])
     g = nc.get('attrs', {})
     attrs = {k: str(g[k]) for k in ('title', 'institution', 'source', 'history', 'references', 'Conventions') if k in g}
-    return Dataset(safe_id(Path(path).stem), str(g.get('title') or Path(path).stem), 'netcdf', lat, lon, depth,
-                   tsec, fields, info, attrs=attrs)
+    ds = Dataset(safe_id(Path(path).stem), str(g.get('title') or Path(path).stem), 'netcdf', lat, lon, depth,
+                 tsec, fields, info, attrs=attrs)
+    ds.app_fields, ds.app_reason = app_fields(nc, Path(path).name)
+    return ds
+
+
+APP_TIME_TOLERANCE = 12 * 3600       # s: a model time this close to an analysis time stands for it in the 3D view
+
+
+def temperature_kind(attrs, name):
+    """'potential' for potential or conservative temperature (standard_name, or names such as thetao), else 'in-situ'."""
+    sn = str(attrs.get('standard_name', '')).lower()
+    if sn in ('sea_water_potential_temperature', 'sea_water_conservative_temperature'):
+        return 'potential'
+    if sn in ('sea_water_temperature', 'sea_water_in_situ_temperature'):
+        return 'in-situ'
+    return 'potential' if name.lower() in ('thetao', 'pottmp', 'votemper', 'theta', 'pot_temp') else 'in-situ'
+
+
+def app_fields(nc, name):
+    """A NetCDF model on the app's own grid, for the 3D view: the pipeline's model_from_dataset (each 0.5 deg cell the
+    mean of the native points inside it, the 11 app levels, gaps filled from neighbours, a wet mask), its times and its
+    temperature kind; (None, the reason) when it cannot be (no temperature, salinity or currents, or the map is not
+    covered)."""
+    if pipeline is None:
+        return None, 'the data pipeline (data-pipeline/build_snapshot.py) is not available'
+    try:
+        model, wet, when, info = pipeline.model_from_dataset(nc, name, log=lambda *a: None)
+    except Exception as e:                     # an optional extra: any problem leaves the dataset as it was
+        return None, str(e) or type(e).__name__
+    tn = info['variables']['temp']
+    return {'model': model.astype(np.float32), 'wet': wet, 'when': [w.timestamp() for w in when],
+            'temperature': temperature_kind(nc['vars'][tn]['attrs'], tn), 'variables': info['variables'],
+            'native_step_deg': info['native_step_deg']}, None
 
 
 # ---- images --------------------------------------------------------------------------------------------------
@@ -411,17 +450,66 @@ def colour_index(values, lo, hi, log=False):
 
 
 # ---- the server ----------------------------------------------------------------------------------------------
+class RateLimiter:
+    """A token bucket per client address: `per_minute` requests a minute on average, bursts up to that many. take()
+    is the seconds to wait before the next request is allowed (0 when it is allowed now, and it is counted)."""
+    MAX_CLIENTS = 10000            # the table is cleared past this, so a flood of addresses cannot grow memory
+
+    def __init__(self, per_minute, clock=time.monotonic):
+        self.rate, self.burst, self.clock = per_minute / 60.0, float(per_minute), clock
+        self.buckets, self.lock = {}, threading.Lock()
+
+    def take(self, client):
+        now = self.clock()
+        with self.lock:
+            if len(self.buckets) > self.MAX_CLIENTS:
+                self.buckets.clear()
+            tokens, last = self.buckets.get(client, (self.burst, now))
+            tokens = min(self.burst, tokens + (now - last) * self.rate)
+            if tokens < 1:
+                self.buckets[client] = (tokens, now)
+                return (1 - tokens) / self.rate
+            self.buckets[client] = (tokens - 1, now)
+            return 0.0
+
+
+def redact(line):
+    """A log line with any key= or api_key= value in a URL replaced, so keys never reach the log."""
+    return re.sub(r'(?i)([?&](?:api_)?key=)[^&\s"]*', r'\1[hidden]', line)
+
+
+def read_keys(path=None, keys=()):
+    """API keys from --api-key, a file (one per line; blank lines and # comments skipped) and $OCEANLENS_API_KEYS
+    (comma separated). Keys shorter than 16 characters are refused: they are too easy to guess."""
+    out = [k.strip() for k in keys if k and k.strip()]
+    if path:
+        out += [ln.strip() for ln in Path(path).read_text(encoding='utf-8').splitlines()
+                if ln.strip() and not ln.strip().startswith('#')]
+    out += [k.strip() for k in os.environ.get('OCEANLENS_API_KEYS', '').split(',') if k.strip()]
+    short = [k for k in out if len(k) < 16]
+    if short:
+        raise SystemExit(f'{len(short)} API key(s) shorter than 16 characters; use long random keys '
+                         '(python -c "import secrets; print(secrets.token_urlsafe(24))")')
+    return tuple(dict.fromkeys(out))
+
+
 class OceanServer(ThreadingHTTPServer):
     """The HTTP server and what every request shares: datasets, the built app, CORS origins and caches."""
     daemon_threads = True
 
-    def __init__(self, addr, datasets, app=None, cors=(), public_url=None, quiet=False):
+    def __init__(self, addr, datasets, app=None, cors=(), public_url=None, quiet=False, api_keys=(), rate_limit=0,
+                 trust_forwarded=False):
         self.address_family = socket.AF_INET6 if ':' in addr[0] else socket.AF_INET     # --host ::1 or ::
         super().__init__(addr, Handler)
+        # with keys, every data route needs one (the page, /healthz and CORS preflights do not)
+        self.api_keys = tuple(k.encode('utf-8') for k in api_keys)
+        self.limiter = RateLimiter(rate_limit) if rate_limit and rate_limit > 0 else None
+        self.trust_forwarded = trust_forwarded
         self.datasets = {d.id: d for d in datasets}
         self.app, self.cors, self.public_url, self.quiet = app, tuple(cors), public_url, quiet
         self.gz_cache, self.pages = {}, {}
         self.default_id = embedded_id(self.datasets, app)
+        self.app_models = {}                        # dataset id -> model JSON for the 3D view, or the ApiError why not
         self.heavy = threading.BoundedSemaphore(HEAVY_SLOTS)
         self.conn_slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         # on a loopback bind, only loopback Host names: a page on another site cannot reach the API through a
@@ -466,6 +554,66 @@ class OceanServer(ThreadingHTTPServer):
             pass
         self.close_request(request)
 
+    def app_model(self, ds):
+        """ds as one more model for the page's Model switch: a model-only schema-1 snapshot on the embedded snapshot's
+        grid, levels and times (the model time nearest each analysis, within 12 h), as JSON bytes. ApiError 404 with
+        the reason when ds cannot be drawn so. Computed once per dataset."""
+        if ds.id not in self.app_models:
+            try:
+                self.app_models[ds.id] = self._app_model(ds)
+            except ApiError as e:
+                self.app_models[ds.id] = e
+        out = self.app_models[ds.id]
+        if isinstance(out, ApiError):
+            raise out
+        return out
+
+    def _app_model(self, ds):
+        no = lambda why: ApiError(404, 'NoModel', f'{ds.id} cannot be drawn in the 3D view: {why}')
+        F = getattr(ds, 'app_fields', None)
+        if F is None:
+            raise no(getattr(ds, 'app_reason', None) or 'only NetCDF model files are offered this way')
+        main = self.datasets.get(self.default_id)
+        if main is None or main.raw is None:
+            raise no('the served page has no embedded snapshot to match')
+        M = json.loads(main.raw)['meta']
+        P = pipeline
+        if not ([M['lat0'], M['lon0'], M['step'], M['nlat'], M['nlon']] == [P.LAT0, P.LON0, P.STEP, len(P.LATS), len(P.LONS)]
+                and M['depths'] == list(P.DEPTHS) and M['vars'] == ['temp', 'sal', 'u', 'v']):
+            raise no('the page uses another grid')
+        picks = []
+        for t in M['times']:
+            gap = np.abs(np.asarray(F['when']) - parse_iso(t))
+            i = int(np.argmin(gap))
+            if gap[i] > APP_TIME_TOLERANCE:
+                raise no(f'no model time within 12 h of the analysis {t} (it has {len(F["when"])} times from '
+                         f'{iso(min(F["when"]))} to {iso(max(F["when"]))})')
+            picks.append(i)
+        try:
+            packed = b''.join(base64.b64decode(P.pack(F['model'][i, vi], k)) for i in picks
+                              for vi, k in enumerate(M['vars']))
+        except P.InvariantError as e:
+            raise no(str(e))
+        payload = {
+            'schema': 1,
+            'meta': {'title': M.get('title', ''), 'times': M['times'], 'lat0': M['lat0'], 'lon0': M['lon0'],
+                     'step': M['step'], 'nlat': M['nlat'], 'nlon': M['nlon'], 'depths': M['depths'], 'vars': M['vars'],
+                     'quant': P.QUANT, 'missing': P.MISSING,
+                     'sources': {'model': f'{ds.title}, served by this OceanLens server: each 0.5 deg cell the mean of the '
+                                          'native points inside it, levels interpolated linearly to the app depths, the '
+                                          'model time nearest each analysis (within 12 h).'},
+                     'provenance': {'model': {'dataset': ds.id, 'variables': F['variables'],
+                                              'native_step_deg': F['native_step_deg'],
+                                              'times_used': [iso(F['when'][i]) for i in picks]}},
+                     'citations': [],
+                     'model': {'name': ds.title, 'short': ds.id[:24], 'kind': 'model output from this server',
+                               'temperature': F['temperature'], 'dataset': ds.id}},
+            'model': base64.b64encode(packed).decode('ascii'),
+            'mask': {'wet': base64.b64encode(np.packbits(F['wet'].astype(np.uint8).ravel()).tobytes()).decode('ascii'),
+                     'layout': '[level][lat][lon]', 'bitorder': 'big'},
+        }
+        return P.serialise(payload)
+
     def layer_ref(self, name):
         """'dataset.var' (or 'dataset/var') -> (Dataset, key)."""
         name = name or ''
@@ -488,7 +636,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         if not self.server.quiet:
-            sys.stderr.write('%s %s\n' % (self.log_date_time_string(), fmt % args))
+            sys.stderr.write('%s %s\n' % (self.log_date_time_string(), redact(fmt % args)))
+
+    def client(self):
+        """The client's address for rate limiting: the last X-Forwarded-For entry (the one the institution's proxy
+        added) with --trust-forwarded, else the connection's own address."""
+        if self.server.trust_forwarded:
+            fwd = (self.headers.get('X-Forwarded-For') or '').split(',')[-1].strip()
+            if fwd and len(fwd) <= 64:
+                return fwd
+        return self.client_address[0]
+
+    def key_ok(self, q):
+        """True when no keys are set, or the request carries one: Authorization: Bearer <key>, X-API-Key, or key= in
+        the query (for WMS and OPeNDAP clients that cannot set headers). Compared in constant time."""
+        keys = self.server.api_keys
+        if not keys:
+            return True
+        auth = self.headers.get('Authorization') or ''
+        given = [auth[7:].strip() if auth[:7].lower() == 'bearer ' else '', self.headers.get('X-API-Key') or '',
+                 (q.get('key') or q.get('api_key') or [''])[-1]]
+        ok = False
+        for g in given:
+            b = g.encode('utf-8', 'replace')[:256]
+            for k in keys:
+                ok |= bool(b) and hmac.compare_digest(b, k)
+        return ok
 
     def do_HEAD(self):
         self.do_GET(head=True)
@@ -499,6 +672,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self._common_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+        if self.server.api_keys:
+            self.send_header('Access-Control-Allow-Headers', 'Authorization, X-API-Key')
         self.send_header('Access-Control-Max-Age', '600')
         self.send_header('Content-Length', '0')
         self.end_headers()
@@ -556,7 +731,12 @@ class Handler(BaseHTTPRequestHandler):
         self._common_headers()
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
-        self.send_header('Cache-Control', 'no-store' if status >= 400 else 'no-cache' if 'html' in ctype else 'public, max-age=300')
+        self.send_header('Cache-Control', 'no-store' if status >= 400 else 'no-cache' if 'html' in ctype else
+                         'private, max-age=300' if self.server.api_keys else 'public, max-age=300')
+        if status == 401:
+            self.send_header('WWW-Authenticate', 'Bearer realm="OceanLens"')
+        if status == 429:
+            self.send_header('Retry-After', str(getattr(self, '_retry_after', 1)))
         if gz:
             self.send_header('Content-Encoding', 'gzip')
             self.send_header('Vary', 'Accept-Encoding')
@@ -626,11 +806,19 @@ class Handler(BaseHTTPRequestHandler):
             q = {}
         service = (q.get('service', [''])[-1]).upper()
         try:
-            if path in ('/', '/index.html'):
-                return self.serve_app(q)
             if path == '/healthz':
                 return self.send_json({'status': 'ok', 'version': VERSION, 'datasets': len(self.server.datasets),
-                                       'netcdf': ncio is not None})
+                                       'netcdf': ncio is not None, 'keys': bool(self.server.api_keys)})
+            if self.server.limiter:
+                wait = self.server.limiter.take(self.client())
+                if wait > 0:
+                    self._retry_after = math.ceil(wait)
+                    raise ApiError(429, 'TooManyRequests', f'too many requests: try again in {math.ceil(wait)} s')
+            if path in ('/', '/index.html'):
+                return self.serve_app(q)
+            if not self.key_ok(q):
+                raise ApiError(401, 'Unauthorized', 'this server needs an API key: send Authorization: Bearer <key>, '
+                                                    'X-API-Key: <key>, or key=<key> in the query')
             if path in ('/wms', '/ows') and (service == 'WMS' or path == '/wms'):
                 return self.wms(q)
             if path in ('/wcs', '/ows') and (service == 'WCS' or path == '/wcs'):
@@ -671,8 +859,10 @@ class Handler(BaseHTTPRequestHandler):
         # drop compressed copies of earlier builds, so rebuilding while the server runs does not grow memory
         self.server.gz_cache = {k: v for k, v in self.server.gz_cache.copy().items()
                                 if k[0] == 'snap' or k[1] == mtime}
-        if ds_id in (None, self.server.default_id):
+        if ds_id in (None, self.server.default_id):     # the page and its own data stay open, keys or not
             return self.send(Path(app).read_bytes(), 'text/html; charset=utf-8', cache_key=('app', mtime))
+        if not self.key_ok(q):
+            raise ApiError(401, 'Unauthorized', 'another dataset in the page needs an API key: add key=<key> to the URL')
         ds = self.server.datasets.get(ds_id)
         if ds is None or ds.raw is None:
             raise ApiError(404, 'NoSnapshot', f'no app snapshot for dataset {ds_id!r}; see /api/v1/datasets')
@@ -721,22 +911,39 @@ class Handler(BaseHTTPRequestHandler):
                 '/api/v1/datasets', '/api/v1/datasets/{id}/meta', '/api/v1/datasets/{id}/snapshot',
                 '/api/v1/datasets/{id}/field?var=&time=&depth=[&format=bin]', '/api/v1/datasets/{id}/column?lat=&lon=&time=',
                 '/api/v1/datasets/{id}/profiles?bbox=w,s,e,n&start=&end=', '/api/v1/datasets/{id}/track',
+                '/api/v1/datasets/{id}/model',
                 '/wms?SERVICE=WMS&REQUEST=GetCapabilities', '/wcs?SERVICE=WCS&REQUEST=GetCapabilities',
                 '/opendap/{id}.dds|.das|.ascii|.dods?<projection>']})
         if parts[:3] != ['api', 'v1', 'datasets'] or len(parts) > 5:
             raise ApiError(404, 'NotFound', f'no route {path}')
         if len(parts) == 3:
-            return self.send_json({'datasets': [dict(d.summary(base), default=d.id == self.server.default_id)
-                                                for d in self.server.datasets.values()]})
+            return self.send_json({'datasets': [self.listed(d, base) for d in self.server.datasets.values()]})
         ds = self.server.datasets.get(parts[3])
         if ds is None:
             raise ApiError(404, 'NoSuchDataset', f'no dataset {parts[3]!r}; see /api/v1/datasets')
         op = parts[4] if len(parts) == 5 else 'meta'
         handler = {'meta': self.api_meta, 'snapshot': self.api_snapshot, 'field': self.api_field,
-                   'column': self.api_column, 'profiles': self.api_profiles, 'track': self.api_track}.get(op)
+                   'column': self.api_column, 'profiles': self.api_profiles, 'track': self.api_track,
+                   'model': self.api_model}.get(op)
         if handler is None:
             raise ApiError(404, 'NotFound', f'no route {path}')
         return handler(ds, q)
+
+    def listed(self, ds, base):
+        """A dataset's entry in the list: its summary, whether it is the page's own, and a model link when the 3D
+        view can draw it."""
+        out = dict(ds.summary(base), default=ds.id == self.server.default_id)
+        if hasattr(ds, 'app_fields'):                # a NetCDF model
+            try:
+                self.server.app_model(ds)
+                out['links']['model'] = f'{base}/api/v1/datasets/{ds.id}/model'
+            except ApiError as e:
+                out['model_note'] = e.message
+        return out
+
+    def api_model(self, ds, q):
+        """ds on the page's grid and times, for the Model switch (OceanServer.app_model)."""
+        self.send(self.server.app_model(ds), 'application/json; charset=utf-8', cache_key=('model', ds.id))
 
     def api_meta(self, ds, q):
         """A dataset's summary plus its grid, data ranges and attributes."""
@@ -1478,11 +1685,24 @@ def load_datasets(snapshots=(), netcdfs=()):
     return out
 
 
-def make_server(host='127.0.0.1', port=8080, snapshots=None, netcdfs=(), app=None, cors=(), public_url=None, quiet=False):
-    """A configured OceanServer, not yet serving (tests/test_server.py starts it on a thread)."""
-    snapshots = sorted((REPO / 'data').glob('*.json')) if snapshots is None else [Path(p) for p in snapshots]
+def is_snapshot(path):
+    """True for a schema-1 snapshot with model fields (data/ also holds other JSON, such as the drifting buoys)."""
+    try:
+        d = json.loads(Path(path).read_bytes())
+    except (OSError, ValueError):
+        return False
+    return isinstance(d, dict) and d.get('schema') == 1 and 'model' in d and 'meta' in d
+
+
+def make_server(host='127.0.0.1', port=8080, snapshots=None, netcdfs=(), app=None, cors=(), public_url=None, quiet=False,
+                api_keys=(), rate_limit=0, trust_forwarded=False):
+    """A configured OceanServer, not yet serving (tests/test_server.py starts it on a thread). By default every
+    model snapshot in data/."""
+    snapshots = ([p for p in sorted((REPO / 'data').glob('*.json')) if is_snapshot(p)] if snapshots is None
+                 else [Path(p) for p in snapshots])
     datasets = load_datasets(snapshots, [Path(p) for p in netcdfs])
-    return OceanServer((host, port), datasets, app if app is not None else default_app(), cors, public_url, quiet)
+    return OceanServer((host, port), datasets, app if app is not None else default_app(), cors, public_url, quiet,
+                       api_keys, rate_limit, trust_forwarded)
 
 
 def exposure_warnings(host, cors):
@@ -1504,22 +1724,33 @@ def main(argv=None):
     ap.add_argument('--host', default='127.0.0.1', help='interface to listen on (0.0.0.0 for every interface)')
     ap.add_argument('--port', type=int, default=8080)
     ap.add_argument('--app', help='built single-file app to serve at / (default dist/OceanLens3D.html, then OceanLens3D.html)')
-    ap.add_argument('--data', nargs='*', help='schema-1 snapshot JSON files (default data/*.json)')
+    ap.add_argument('--data', nargs='*', help='schema-1 snapshot JSON files (default: the model snapshots in data/)')
     ap.add_argument('--netcdf', nargs='*', default=[], help='CF NetCDF-3 or NetCDF-4 model files to serve as datasets')
     ap.add_argument('--cors', action='append', default=[], help="allowed origin for cross-origin requests ('*' for any); repeatable")
     ap.add_argument('--public-url', help='base URL clients see, when behind a reverse proxy (e.g. https://host/oceanlens)')
     ap.add_argument('--quiet', action='store_true', help='no request log')
+    ap.add_argument('--api-key', action='append', default=[], help='require this key on the data routes (repeatable; '
+                    'also --api-keys-file and $OCEANLENS_API_KEYS)')
+    ap.add_argument('--api-keys-file', help='a file of API keys, one per line')
+    ap.add_argument('--rate-limit', type=int, default=0, metavar='N', help='at most N requests a minute per client (0: no limit)')
+    ap.add_argument('--trust-forwarded', action='store_true',
+                    help='behind a reverse proxy: rate-limit by the last X-Forwarded-For address it adds')
     a = ap.parse_args(argv)
+    keys = read_keys(a.api_keys_file, a.api_key)
     # the banner names the app's path: redirected on Windows, stdout is cp1252 and a character outside it would stop
     # the server at start-up (stderr already uses backslashreplace)
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(errors='backslashreplace')
-    srv = make_server(a.host, a.port, a.data, a.netcdf, a.app, a.cors, a.public_url, a.quiet)
+    srv = make_server(a.host, a.port, a.data, a.netcdf, a.app, a.cors, a.public_url, a.quiet, keys, a.rate_limit,
+                      a.trust_forwarded)
     host = f'[{a.host}]' if ':' in a.host else a.host
     print(f'OceanLens 3D server {VERSION} on http://{host}:{srv.server_address[1]}/  '
           f'({len(srv.datasets)} datasets: {", ".join(srv.datasets)}; app {srv.app or "not built"})', flush=True)
     for w in exposure_warnings(a.host, a.cors):
         print('warning: ' + w, file=sys.stderr, flush=True)
+    if keys or a.rate_limit:
+        print(f'{len(keys)} API key(s); ' if keys else 'no API keys; ', end='', flush=True)
+        print(f'at most {a.rate_limit} requests a minute per client' if a.rate_limit else 'no rate limit', flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
