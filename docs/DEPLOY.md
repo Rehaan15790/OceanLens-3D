@@ -164,6 +164,8 @@ Notes:
   file holding temperature, salinity and both current components (u and v) on 1-D latitude, longitude and depth
   axes, covering the map down to 1000 m. It uses the first 16 time steps. Files with one variable each must be
   merged into one file first.
+- `--engine xarray` reads the `--netcdf` files through xarray (NetCDF-3 via scipy, NetCDF-4 via netCDF4 or h5netcdf)
+  instead of the project's own readers, for sites that standardise on xarray; the result is the same.
 - Health check: `GET /healthz` returns `{"status": "ok", ...}`.
 - The server reads its datasets at start-up. Restart it after changing files.
 - It refuses requests above 2048 × 2048 pixels (WMS) or 5 million cells (WCS). It serves only GET, HEAD and OPTIONS,

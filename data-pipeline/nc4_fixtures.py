@@ -89,12 +89,13 @@ def _dt_numeric(dt):
     raise ValueError(f'no HDF5 type for {dt}')
 
 
+# strings are UTF-8 (character set 1), as their text is: the HDF5 library decodes an ASCII-labelled string as ASCII
 def _dt_string(size):
-    return bytes([0x13]) + _u(0x00, 3) + _u(size, 4)
+    return bytes([0x13]) + _u(0x10, 3) + _u(size, 4)
 
 
 def _dt_vlen_string():
-    return bytes([0x19]) + _u(0x01, 3) + _u(16, 4) + bytes([0x10]) + _u(0, 3) + _u(1, 4) + _u(0, 2) + _u(8, 2)
+    return bytes([0x19]) + _u(0x101, 3) + _u(16, 4) + bytes([0x10]) + _u(0x10, 3) + _u(1, 4) + _u(0, 2) + _u(8, 2)
 
 
 def _dt_vlen_refs():
@@ -541,7 +542,8 @@ class _File:
                 offs[n] = len(heap)
                 heap += _pad8(n.encode('utf-8') + b'\x00')
             heap_data = w.alloc(heap)
-            heap_hdr = w.alloc(b'HEAP' + bytes([0, 0, 0, 0]) + _u(len(heap), 8) + UNDEF8 + w.a(heap_data))
+            # no free block: the HDF5 library writes 1 here (H5HL_FREE_NULL) and refuses the undefined address
+            heap_hdr = w.alloc(b'HEAP' + bytes([0, 0, 0, 0]) + _u(len(heap), 8) + _u(1, 8) + w.a(heap_data))
             snods = []
             for i in range(0, max(1, len(names)), 8):
                 part = names[i:i + 8]

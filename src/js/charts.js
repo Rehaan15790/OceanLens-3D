@@ -380,6 +380,8 @@ function keySpec(){
     legend.push({sw:'track', text:dataSource().legend.track});
     if(stormNow.visible && dataSource().legend.now) legend.push({sw:'storm', text:dataSource().legend.now});
   }
+  if(dataMode==='real' && MOORING_INSTS.length && state.showOther!==false && mooringsAt(state.time).length)
+    legend.push({sw:'mooring', text:'RAMA mooring'});
   if(drifterLayerOn()) legend.push({sw:'drifter', text:'Drifting buoy (NOAA GDP); click one to drift from it'});
   importedLegend().forEach(r=>legend.push(r));
   const scale = c.scale || (c.editable ? state.scale : 'linear');

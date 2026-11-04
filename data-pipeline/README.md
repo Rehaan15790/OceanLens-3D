@@ -13,6 +13,7 @@ python data-pipeline/build_snapshot.py --check --temperature-only --model-at-obs
 python data-pipeline/build_snapshot.py --fetch --allow-host tds.hycom.org   # download what the cache lacks, from HYCOM only
 python data-pipeline/build_snapshot.py --temperature-only --model-at-obs    # the committed configuration
 python data-pipeline/build_snapshot.py --model glorys --temperature-only    # data/amphan-2020-glorys.json (GLORYS)
+python data-pipeline/build_snapshot.py --model-netcdf FILE --engine xarray --out OTHER.json   # read FILE through xarray
 python -m unittest discover -s data-pipeline -v          # tests (no network, no cache needed)
 ```
 
@@ -203,3 +204,15 @@ GlobColour days, about 800 MB of cache under `cache/ostia/` and `cache/globcolou
 same cache gives a byte-identical file (181 kB). `test_build_products.py` tests the gradient, the cell statistics and
 the packing, and rebuilds the committed file when the cache is there. `facts_reference.py product_facts` recomputes
 every number the app quotes from it.
+
+## RAMA moorings (`build_moorings.py`)
+
+    python data-pipeline/build_moorings.py [--fetch]         # ../data/moorings-2020-05.json
+
+writes the RAMA moorings inside the map, 4–25 May 2020: NOAA PMEL's GTMBA daily means (`pmelTaoDyT`, `pmelTaoDyS`,
+`pmelTaoDyCur`), read through NOAA CoastWatch's ERDDAP over HTTPS (PMEL's own ERDDAP redirects there over plain
+HTTP, which the fetcher refuses). Temperature and salinity at the sensor depths, currents (m/s) from the current
+meters; quality codes 1, 2 and 3 kept (highest, default, adjusted). Four moorings have data: 12°N 90°E, 15°N 90°E,
+15°N 65°E and 8°N 67°E (11 kB). The app turns each mooring's analysis days into profiles (`src/js/moorings.js`);
+`facts_reference.py mooring_facts` recomputes its comparison with the models. `test_build_moorings.py` tests the
+parsing, quality codes and units, and rebuilds the file from the cache when it is there.

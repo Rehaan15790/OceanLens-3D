@@ -54,7 +54,7 @@ Current limits, stated plainly.
 - INCOIS LAS data are not used yet. GLORYS has daily means, so floats are compared with the nearest of the 8 days (HYCOM: at each float's own time); the Copernicus biogeochemistry product is not used.
 - The pipeline is set up for the Amphan domain and window: 6–22°N, 61–92°E (the Andaman and Nicobar Islands fall outside it), 11 depths, 8 analyses. These are historical analyses only, with no forecasts and no live data feed.
 - Real-data mode has no model chlorophyll: chlorophyll comes from the floats in 3D, and from satellites at the surface.
-- The OceanGliders data centre holds no glider data for this region in May 2020, so the main real-data scene has no gliders. The bundled real glider files are from 2016 and appear with "Show all times". They are compared with the nearest 2020 analysis, so their bias and RMSE show the import path, not model skill. No real CTD, mooring, ADCP or HF radar data are bundled.
+- The OceanGliders data centre holds no glider data for this region in May 2020, so the main real-data scene has no gliders. The bundled real glider files are from 2016 and appear with "Show all times". They are compared with the nearest 2020 analysis, so their bias and RMSE show the import path, not model skill. Four real RAMA moorings are in the scene; no real CTD, ADCP or HF radar data are bundled.
 - The 3D client draws the data built into the page, and server model files only when they cover the same map and days.
 - NetCDF-4 files compressed with szip or zstd need converting; deflate (the usual case) is read.
 - Coastlines follow the 0.5° model grid, so they look blocky.

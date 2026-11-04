@@ -665,6 +665,27 @@ class RealMode(Controls, AppTestCase):
         self.assertNoProblems()
 
 
+    def test_rama_mooring_by_click(self):
+        if not self.js("typeof MOORING_INSTS !== 'undefined' && MOORING_INSTS.length > 0"):
+            self.skipTest('this build has no mooring data')
+        self.js('__ol.actions.setTime(5)')
+        self.assertTrue(self.visible('#rowOther'), 'the CTD, moorings and other switch shows for the built-in moorings')
+        self.assertIn('RAMA mooring', self.js("document.getElementById('keyLegend').textContent"))
+        pick = self.js("""(()=>{ const all = __ol.render.marks(), d = all.filter(m=>m.kind==='mooring' && m.id==='RAMA 12°N 90°E');
+            return d[0]; })()""")
+        self.assertTrue(pick, 'no 12°N 90°E mooring mark on screen')
+        self.b.click_at(pick['x'], pick['y'])
+        self.b.pump(0.3)
+        self.assertEqual(self.js('__ol.state.panel'), 'profile')
+        self.assertEqual(self.js("document.getElementById('profName').textContent"), 'RAMA 12°N 90°E')
+        self.assertIn('Mooring 12°N 90°E', self.js("document.getElementById('profKind').textContent"))
+        self.assertIn('RMSE', self.js("document.getElementById('profStats').textContent"))
+        self.assertIn('RAMA mooring (NOAA PMEL)', self.js("document.getElementById('profMeta').textContent"))
+        self.assertEqual(self.js("OceanLens.datasets().length"), 0, 'built-in moorings are not in Your data')
+        self.b.key('Escape')
+        self.assertNoProblems()
+
+
 class SyntheticMode(Controls, AppTestCase):
     data_mode = 'synth'
 

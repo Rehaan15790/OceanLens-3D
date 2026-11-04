@@ -149,6 +149,15 @@ Press **Drift** (bottom of the 3D view) or `T`, then click the sea. An object is
 - The check over all 12 buoys (61 releases) is in the panel's last paragraph: after 72 h, GLORYS ends a median 31 km from the buoy, HYCOM 55 km, and standing still 46 km. HYCOM's snapshots 3 days apart miss the day-to-day changes; GLORYS's daily means average them.
 - Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart. A teaching aid, not INCOIS's SARAT.
 
+### RAMA moorings (real mode)
+
+Four moored buoys of the RAMA array (NOAA PMEL, with INCOIS among its partners) are white squares in the real scene,
+under the **CTD, moorings and other** switch: 12°N 90°E and 15°N 90°E in the Bay of Bengal, 15°N 65°E and 8°N 67°E
+in the Arabian Sea. Click one: its daily mean on the analysis day is drawn over the model column, with bias and RMSE,
+like a float. A good one: **12°N 90°E on 19 May**, after Amphan passed. Its surface cooled 2.1 °C from 13 May and the
+top 60 m mixed to one temperature; HYCOM cools it 1.2 °C and GLORYS 1.0 °C, so both models show about half the cold
+wake there. RAMA data are sent out in real time, so models may assimilate them too.
+
 ### Satellite products (real mode)
 
 Four more buttons under Variable, real data only (the demo hides them). All are surface maps from satellites, on the

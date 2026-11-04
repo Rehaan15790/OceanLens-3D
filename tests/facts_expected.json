@@ -1329,6 +1329,151 @@
   "tol": 0,
   "value": 61
  },
+ "real.moorings[0].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 8
+ },
+ "real.moorings[0].change.depth": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1.0
+ },
+ "real.moorings[0].change.model": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -1.2466
+ },
+ "real.moorings[0].change.observed": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -2.12
+ },
+ "real.moorings[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 96
+ },
+ "real.moorings[0].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "12n90e"
+ },
+ "real.moorings[0].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.1031
+ },
+ "real.moorings[0].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.7031
+ },
+ "real.moorings[1].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 6
+ },
+ "real.moorings[1].change.depth": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 5.0
+ },
+ "real.moorings[1].change.model": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.2378
+ },
+ "real.moorings[1].change.observed": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.25
+ },
+ "real.moorings[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 49
+ },
+ "real.moorings[1].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "15n65e"
+ },
+ "real.moorings[1].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 1.1631
+ },
+ "real.moorings[1].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 1.4796
+ },
+ "real.moorings[2].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 7
+ },
+ "real.moorings[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 7
+ },
+ "real.moorings[2].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "15n90e"
+ },
+ "real.moorings[2].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.0366
+ },
+ "real.moorings[2].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.1241
+ },
+ "real.moorings[3].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 8
+ },
+ "real.moorings[3].change.depth": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1.0
+ },
+ "real.moorings[3].change.model": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -0.3981
+ },
+ "real.moorings[3].change.observed": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -0.52
+ },
+ "real.moorings[3].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 64
+ },
+ "real.moorings[3].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "8n67e"
+ },
+ "real.moorings[3].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.4835
+ },
+ "real.moorings[3].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.8276
+ },
  "real.path.afterIndex": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,

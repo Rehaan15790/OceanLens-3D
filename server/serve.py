@@ -322,11 +322,12 @@ def snapshot_profiles(d):
     return out
 
 
-def load_netcdf(path):
-    """A CF NetCDF-3 or NetCDF-4 file on a rectilinear lat/lon grid (optional depth and time axes)."""
+def load_netcdf(path, engine='native'):
+    """A CF NetCDF-3 or NetCDF-4 file on a rectilinear lat/lon grid (optional depth and time axes), read by the
+    project's own readers or, with engine='xarray', through the xarray backend."""
     if ncio is None:
         raise SystemExit('--netcdf needs data-pipeline/ncio.py')
-    nc = ncio.read(str(path))
+    nc = ncio.read(str(path), engine=engine)
     V = nc['vars']
 
     def coord(names, std, axis, units=()):
@@ -1673,11 +1674,11 @@ def embedded_id(datasets, app=None):
     return next(iter(snaps), None)
 
 
-def load_datasets(snapshots=(), netcdfs=()):
+def load_datasets(snapshots=(), netcdfs=(), engine='native'):
     """Load every snapshot and NetCDF file; two files may not give the same dataset id."""
     out, seen = [], set()
     for p in list(snapshots) + list(netcdfs):
-        ds = load_snapshot(p) if p in snapshots else load_netcdf(p)
+        ds = load_snapshot(p) if p in snapshots else load_netcdf(p, engine)
         if ds.id in seen:
             raise SystemExit(f'two datasets would share the id {ds.id!r} ({p}); rename one file')
         seen.add(ds.id)
@@ -1695,12 +1696,12 @@ def is_snapshot(path):
 
 
 def make_server(host='127.0.0.1', port=8080, snapshots=None, netcdfs=(), app=None, cors=(), public_url=None, quiet=False,
-                api_keys=(), rate_limit=0, trust_forwarded=False):
+                api_keys=(), rate_limit=0, trust_forwarded=False, engine='native'):
     """A configured OceanServer, not yet serving (tests/test_server.py starts it on a thread). By default every
     model snapshot in data/."""
     snapshots = ([p for p in sorted((REPO / 'data').glob('*.json')) if is_snapshot(p)] if snapshots is None
                  else [Path(p) for p in snapshots])
-    datasets = load_datasets(snapshots, [Path(p) for p in netcdfs])
+    datasets = load_datasets(snapshots, [Path(p) for p in netcdfs], engine)
     return OceanServer((host, port), datasets, app if app is not None else default_app(), cors, public_url, quiet,
                        api_keys, rate_limit, trust_forwarded)
 
@@ -1726,6 +1727,9 @@ def main(argv=None):
     ap.add_argument('--app', help='built single-file app to serve at / (default dist/OceanLens3D.html, then OceanLens3D.html)')
     ap.add_argument('--data', nargs='*', help='schema-1 snapshot JSON files (default: the model snapshots in data/)')
     ap.add_argument('--netcdf', nargs='*', default=[], help='CF NetCDF-3 or NetCDF-4 model files to serve as datasets')
+    ap.add_argument('--engine', choices=('native', 'xarray'), default='native',
+                    help="how --netcdf files are read: the project's own readers (default) or xarray "
+                         '(pip install xarray scipy h5netcdf)')
     ap.add_argument('--cors', action='append', default=[], help="allowed origin for cross-origin requests ('*' for any); repeatable")
     ap.add_argument('--public-url', help='base URL clients see, when behind a reverse proxy (e.g. https://host/oceanlens)')
     ap.add_argument('--quiet', action='store_true', help='no request log')
@@ -1742,7 +1746,7 @@ def main(argv=None):
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(errors='backslashreplace')
     srv = make_server(a.host, a.port, a.data, a.netcdf, a.app, a.cors, a.public_url, a.quiet, keys, a.rate_limit,
-                      a.trust_forwarded)
+                      a.trust_forwarded, a.engine)
     host = f'[{a.host}]' if ':' in a.host else a.host
     print(f'OceanLens 3D server {VERSION} on http://{host}:{srv.server_address[1]}/  '
           f'({len(srv.datasets)} datasets: {", ".join(srv.datasets)}; app {srv.app or "not built"})', flush=True)
