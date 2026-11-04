@@ -98,27 +98,45 @@ if(PRODUCTS){
 function varInMode(key, mode = dataMode){ const v = VAR_META[key]; return !!v && (!v.modes || v.modes.includes(mode)); }
 
 /* ---- the right panel's card for a satellite product: what it shows today, and the climate series ---- */
+// an element with text; parts are strings (text) or [string] (bold), so nothing from the data is ever read as HTML
+function el$(tag, cls, parts){
+  const e = document.createElement(tag);
+  if(cls) e.className = cls;
+  (parts || []).forEach(x=>{
+    if(Array.isArray(x)){ const b = document.createElement('b'); b.textContent = x.join(''); e.appendChild(b); }
+    else e.appendChild(document.createTextNode(String(x)));
+  });
+  return e;
+}
 function renderProductCard(){
   const el = document.getElementById('productCard');
   if(!el) return;
   const key = state.variable, on = !!PRODUCTS && dataMode==='real' && ['schl', 'front', 'pfz', 'ssta'].includes(key);
   el.hidden = !on;
-  if(!on){ el.innerHTML = ''; return; }
-  const F = facts().real.products, t = state.time, day = fmt.esc(timeLabel(t));
+  if(!on){ el.replaceChildren(); return; }
+  const F = facts().real.products, t = state.time, day = timeLabel(t);
   if(key==='ssta'){
     const a = F.anomaly[t], bay = F.series.bay, ar = F.series.arabian, sg = v=>fmt.signed(v, 2);
-    el.innerHTML = `<h3 class="grp-label">Climate: sea-surface temperature</h3>`+
-      `<p class="meta">${day}: the Bay of Bengal box is <b>${sg(a.bay)} °C</b> and the Arabian Sea box <b>${sg(a.arabian)} °C</b> against the 1991–2020 normal.</p>`+
-      `<canvas id="seriesChart" class="series-chart" role="img" aria-label="Mean sea-surface temperature on the 8 analysis days of May, each year from ${PRODUCTS.series.years[0]}"></canvas>`+
-      `<p class="meta">The same 8 days of May, every year since 1982. Bay of Bengal: <b>${sg(bay.trendPerDecade)} °C per decade</b>; `+
-      `2020 was ${sg(bay.caseAnomaly)} °C against its normal, ${bay.caseRank===1 ? 'the warmest' : `the ${ordinal(bay.caseRank)} warmest`} of ${bay.years} years. `+
-      `Arabian Sea: ${sg(ar.trendPerDecade)} °C per decade.</p>`;
-    drawSeriesChart(document.getElementById('seriesChart'));
+    const chart = el$('canvas', 'series-chart');
+    chart.id = 'seriesChart';
+    chart.setAttribute('role', 'img');
+    chart.setAttribute('aria-label', `Mean sea-surface temperature on the 8 analysis days of May, each year from ${Number(PRODUCTS.series.years[0])}`);
+    el.replaceChildren(
+      el$('h3', 'grp-label', ['Climate: sea-surface temperature']),
+      el$('p', 'meta', [`${day}: the Bay of Bengal box is `, [`${sg(a.bay)} °C`], ' and the Arabian Sea box ',
+        [`${sg(a.arabian)} °C`], ' against the 1991–2020 normal.']),
+      chart,
+      el$('p', 'meta', ['The same 8 days of May, every year since 1982. Bay of Bengal: ', [`${sg(bay.trendPerDecade)} °C per decade`],
+        `; 2020 was ${sg(bay.caseAnomaly)} °C against its normal, ${bay.caseRank===1 ? 'the warmest' : `the ${ordinal(bay.caseRank)} warmest`}`+
+        ` of ${bay.years} years. Arabian Sea: ${sg(ar.trendPerDecade)} °C per decade.`]));
+    drawSeriesChart(chart);
   } else {
     const f = F.fishing[t];
-    el.innerHTML = `<h3 class="grp-label">Fishing-zone signs</h3>`+
-      `<p class="meta">${day}: <b>${f.both}</b> of ${f.known} sea cells (0.5°) show both an SST front and chlorophyll-rich water.</p>`+
-      `<p class="hint">Satellite data of the day (gap-free, so clouds are filled in). Not an advisory: INCOIS issues potential fishing zone advisories from its own analysis.</p>`;
+    el.replaceChildren(
+      el$('h3', 'grp-label', ['Fishing-zone signs']),
+      el$('p', 'meta', [`${day}: `, [String(f.both)], ` of ${f.known} sea cells (0.5°) show both an SST front and chlorophyll-rich water.`]),
+      el$('p', 'hint', ['Satellite data of the day (gap-free, so clouds are filled in). Not an advisory: INCOIS issues potential '+
+        'fishing zone advisories from its own analysis.']));
   }
 }
 const ordinal = n=>n + (n%100 >= 11 && n%100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n%10] || 'th');

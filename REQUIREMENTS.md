@@ -98,6 +98,12 @@ python data-pipeline/build_snapshot.py --model glorys --temperature-only --check
 ```
 
 - The browser is `$OCEANLENS_BROWSER` (or `$CHROME`), else Edge, Chrome or Chromium in their usual places (`docs/TESTING.md`).
+- The run on 4 November 2026 (`python tools/check.py`: every suite, headless Chrome with software rendering in a
+  Linux cloud container, with the buoys, server models, keys and satellite products): 349 results, 342 passed, 2
+  failed, 5 skipped. One failure, a new `innerHTML` in `products.js`, was fixed and the `security` suite then passed
+  (39 of 39). The other is the `perf` load budget (4.2 s at 4× throttling), which the 20 October build also fails on
+  that machine (4.3 s). The skips: two HYCOM rebuilds and `RealGlorys` (no HYCOM or GLORYS cache there), IPv6
+  loopback, and the splash test. The buoy and satellite-product rebuilds ran from their cache, byte for byte.
 - The run on 20 October 2026 (`python tools/check.py`: every suite, headless Edge with software rendering, on a
   Ryzen 7 9800X3D desktop, with the drift tool): 322 tests, 321 passed, none failed, 1 skipped. The `fingerprint` run's
   84 outputs were identical to the 15 October build except the count of map labels (27 to 30: the drift tool's three,
