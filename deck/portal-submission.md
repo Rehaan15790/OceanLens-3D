@@ -51,7 +51,7 @@ Data sources. HYCOM GOFS 3.1 (HYCOM consortium), Copernicus Marine GLORYS12V1 (E
 
 Current limits, stated plainly.
 
-- INCOIS LAS data are not used yet. GLORYS has daily means, so floats are compared with the nearest of the 8 days (HYCOM: at each float's own time); the Copernicus biogeochemistry product is not used.
+- From the INCOIS LAS only IGORA's May 2020 monthly mean is used (a third model); a monthly mean cannot show Amphan's day-to-day changes. GLORYS has daily means, so floats are compared with the nearest of the 8 days (HYCOM: at each float's own time); the Copernicus biogeochemistry product is not used.
 - The pipeline is set up for the Amphan domain and window: 6–22°N, 61–92°E (the Andaman and Nicobar Islands fall outside it), 11 depths, 8 analyses. These are historical analyses only, with no forecasts and no live data feed.
 - Real-data mode has no model chlorophyll: chlorophyll comes from the floats in 3D, and from satellites at the surface.
 - The OceanGliders data centre holds no glider data for this region in May 2020, so the main real-data scene has no gliders. The bundled real glider files are from 2016 and appear with "Show all times". They are compared with the nearest 2020 analysis, so their bias and RMSE show the import path, not model skill. Four real RAMA moorings are in the scene; no real CTD, ADCP or HF radar data are bundled.
@@ -60,7 +60,7 @@ Current limits, stated plainly.
 - Coastlines follow the 0.5° model grid, so they look blocky.
 - The plugin hook for ML-derived products exists, but no ML product ships yet.
 
-Next steps. Copernicus biogeochemistry and forecast products, INCOIS LAS, wind leeway for the drift tool, a fishing-zone indicator checked against catches, and a pipeline not tied to one case.
+Next steps. Copernicus biogeochemistry products, more INCOIS LAS products (gridded Argo, GODAS), wind leeway for the drift tool, a fishing-zone indicator checked against catches, and a pipeline not tied to one case.
 
 ## Technology Bucket
 

@@ -186,7 +186,8 @@ Notes:
   each file whole, so give it a regional subset, for example a `copernicusmarine subset` download as it comes (that
   toolbox needs a free account). For Copernicus Marine's global native files, use the pipeline's
   `--model glorys` route instead, which reads only the parts over the map (`data-pipeline/README.md`). NetCDF-4
-  compressed with szip or zstd is refused. A real INCOIS LAS export has not been tried.
+  compressed with szip or zstd is refused. INCOIS LAS NetCDF exports read as they come; `build_las.py` fetches IGORA from
+  the LAS for the app itself.
 - `data-pipeline/build_snapshot.py --model-netcdf FILE` (NetCDF-3 or NetCDF-4) makes an app snapshot for `data/`, but it needs more: one
   file holding temperature, salinity and both current components (u and v) on 1-D latitude, longitude and depth
   axes, covering the map down to 1000 m. It uses the first 16 time steps. Files with one variable each must be

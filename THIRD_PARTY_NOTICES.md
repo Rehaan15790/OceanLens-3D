@@ -83,6 +83,13 @@ Archive for Climate Stewardship (IBTrACS), Bull. Amer. Meteor. Soc. 91, 363–37
 IBTrACS v04r01, NOAA NCEI, doi:10.25921/82ty-9e16. Positions and winds from RSMC New Delhi (IMD) and the Joint
 Typhoon Warning Center. A US government work in the public domain.
 
+### INCOIS IGORA ocean reanalysis (INCOIS LAS)
+
+`data/amphan-2020-igora.json` is derived from IGORA, the INCOIS Global Ocean ReAnalysis (monthly means, 1979–2023),
+Indian National Centre for Ocean Information Services (INCOIS), Ministry of Earth Sciences, Government of India,
+exported from the INCOIS Live Access Server (las.incois.gov.in) without an account. Check INCOIS's data policy before
+redistributing it outside this project.
+
 ### Copernicus Marine global analysis and forecast
 
 `data/forecast-latest.json` (written by `data-pipeline/build_forecast.py`, the run issued on 4 November 2026 as

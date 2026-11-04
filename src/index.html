@@ -471,6 +471,10 @@
         temperature (HYCOM and Argo give in-situ temperature, about 0.1 °C warmer at 1000 m), salinity and currents.
         Compared with a float, GLORYS is first turned into in-situ temperature at the float's pressure (UNESCO 1983),
         so both sides are the same quantity. Switch between the models under Model, or with <kbd>M</kbd>.</dd>
+      <dt>Model: IGORA</dt>
+      <dd>IGORA, the INCOIS Global Ocean ReAnalysis, exported from the INCOIS Live Access Server: the May 2020 monthly
+        mean of temperature, salinity and currents, averaged into the same 0.5° cells. One monthly mean stands for every
+        analysis day, so it shows the month, not Amphan's day-to-day changes.</dd>
       <dt>Argo</dt>
       <dd><span data-fact="argo.profiles" data-fmt="int"></span> profiles from
         <span data-fact="argo.floats" data-fmt="int"></span> floats, from the Argo GDAC via Ifremer ERDDAP. Delayed-mode
@@ -545,6 +549,7 @@
       <li data-cite="hycom"></li>
       <li data-cite="glorys"></li>
       <li data-cite="glo12"></li>
+      <li data-cite="igora"></li>
       <li data-cite="ibtracs"></li>
       <li data-cite="etopo1"></li>
       <li data-cite="gdp"></li>
@@ -622,6 +627,7 @@
 
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
 <script type="application/json" id="snapshot-glorys" src="../data/amphan-2020-glorys.json" data-embed="model"></script>
+<script type="application/json" id="snapshot-igora" src="../data/amphan-2020-igora.json" data-embed="model"></script>
 <script type="application/json" id="snapshot-drifters" src="../data/drifters-2020-05.json"></script>
 <script type="application/json" id="snapshot-products" src="../data/products-2020-05.json"></script>
 <script type="application/json" id="snapshot-moorings" src="../data/moorings-2020-05.json"></script>

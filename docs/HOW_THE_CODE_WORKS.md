@@ -30,6 +30,7 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | BGC-Argo chlorophyll and oxygen | Ifremer ERDDAP, `ArgoFloats-synthetic-BGC` | ERDDAP tabledap CSV |
 | Sea floor and coast | ETOPO1 on NOAA's `upwell.pfeg.noaa.gov` ERDDAP | ERDDAP griddap CSV |
 | Cyclone track | IBTrACS v04r01 from NOAA NCEI | CSV download |
+| Third model: IGORA (INCOIS) | INCOIS Live Access Server, `las.incois.gov.in`, product server `Data_Extract_netCDF` (`build_las.py`) | LAS XML request, NetCDF-3 out |
 | Today's forecast (a served case) | Copernicus Marine `GLOBAL_ANALYSISFORECAST_PHY_001_024`, latest daily run, same object store (`build_forecast.py`) | Native NetCDF-4 in HTTPS byte ranges |
 | Satellite SST (fronts, anomaly, 1982–2025 series) | Copernicus Marine OSTIA reprocessed L4, `s3.waw3-1.cloudferro.com` (`build_products.py`) | Native NetCDF-4 in HTTPS byte ranges |
 | Satellite chlorophyll | Copernicus-GlobColour gap-free L4 daily, same object store | Native NetCDF-4 in HTTPS byte ranges |
@@ -290,7 +291,7 @@ Three Python scripts do the work the browser can't: fetch and pack the data, ass
 - stamps the version from `VERSION`;
 - adds a strict **Content Security Policy** with a SHA-256 hash of every inline script and style, so the page refuses to run any code it didn't ship with.
 
-It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 6 MB budget (the page is about 5.7 MB with both models, the buoys and the satellite products). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
+It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 6 MB budget (the page is about 6.0 MB with three models, the buoys, moorings and satellite products; IGORA's one monthly field is embedded once). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
 
 ### `data-pipeline/build_snapshot.py`: making the data
 
