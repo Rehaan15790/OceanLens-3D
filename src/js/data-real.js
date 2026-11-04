@@ -5,10 +5,16 @@
 // one snapshot's model on the app's own 0.5° grid and levels, laid out [time][variable][level][lat][lon]
 function decodeModel(d){
   const m = d.meta, q = b64Int16(d.model);
-  const per = m.depths.length*m.nlat*m.nlon, f = new Float32Array(q.length);
+  const per = m.depths.length*m.nlat*m.nlon, one = new Float32Array(q.length);
   for(let n=0;n<q.length;n++){
     const [off, sc] = m.quant[m.vars[Math.floor(n/per) % m.vars.length]];
-    f[n] = off + q[n]*sc;
+    one[n] = off + q[n]*sc;
+  }
+  // build.py embeds a field repeated at every time once (meta.timesStored 1, IGORA's monthly mean): repeat it here
+  let f = one;
+  if(m.timesStored===1 && m.times.length > 1){
+    f = new Float32Array(one.length*m.times.length);
+    for(let t=0;t<m.times.length;t++) f.set(one, t*one.length);
   }
   // mask.wet: one bit per cell, [level][lat][lon], most significant bit first; 1 = the cell holds model
   // water. Cells without it carry values filled from their neighbours.
@@ -41,6 +47,9 @@ const MODEL_WORDS = {
   GLORYS:{product:'GLORYS daily mean', products:'daily means', label:'GLORYS', kind:'reanalysis',
           data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means',
           temperature:'potential'},
+  IGORA: {product:'IGORA May 2020 mean', products:'monthly mean', label:'IGORA', kind:'reanalysis',
+          data:'INCOIS IGORA reanalysis (INCOIS LAS)', temperature:'potential',
+          note:'INCOIS Global Ocean ReAnalysis from the INCOIS Live Access Server: the May 2020 monthly mean, the same at every analysis day'},
   Forecast:{product:'daily mean', products:'daily means', label:'Forecast', kind:'forecast',
           data:'Copernicus Marine global analysis and forecast', note:'Copernicus Marine global ocean analysis and forecast (1/12°), daily means',
           temperature:'potential'},
@@ -63,15 +72,16 @@ function sameGridAsMain(m){
 const REAL_MODELS = (()=>{
   const list = [{id:modelWords(REAL_DATA.meta).short.toLowerCase(), words:modelWords(REAL_DATA.meta),
                  atObs:!!(REAL_DATA.argo && REAL_DATA.argo.model), decoded:null, data:()=>REAL_DATA}];
-  const el = document.getElementById('snapshot-glorys');
-  if(el){
+  ['snapshot-glorys', 'snapshot-igora'].forEach(sid=>{
+    const el = document.getElementById(sid);
+    if(!el) return;
     let d = null;
     const data = ()=>d || (d = JSON.parse(el.textContent));
     const words = modelWords(data().meta), id = words.short.toLowerCase();
     // a main snapshot of another case (a forecast) has other times: the second model is left out, as expected there
     if(!sameGridAsMain(data().meta)){ if(!REAL_DATA.meta.case) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`); }
     else if(!list.some(x=>x.id===id)) list.push({id, words, atObs:false, decoded:null, data});
-  }
+  });
   return list;
 })();
 let realModel = REAL_MODELS[0].id;

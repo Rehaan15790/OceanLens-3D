@@ -60,7 +60,8 @@ RANGE_BLOCK = 1 << 18
 # 7 MB, the HYCOM cache 43 MB; the GLORYS ranges add about 220 MB in pieces of 1.4 MB or less).
 DEFAULT_HOSTS = frozenset({'tds.hycom.org', 'erddap.ifremer.fr', 'upwell.pfeg.noaa.gov', 'www.ncei.noaa.gov',
                            's3.waw3-1.cloudferro.com', 'erddap.aoml.noaa.gov',   # build_drifters.py
-                           'coastwatch.pfeg.noaa.gov'})                           # build_moorings.py
+                           'coastwatch.pfeg.noaa.gov',                            # build_moorings.py
+                           'las.incois.gov.in'})                                  # build_las.py
 MAX_DOWNLOAD = 128 * 1024 * 1024
 # the files in the original cache were downloaded on this date; later downloads record their own in manifest.json
 DEFAULT_ACCESSED = '2026-09-27'
@@ -177,8 +178,9 @@ class Fetcher:
     lands in the cache. Client errors (4xx) fail at once; timeouts, resets and 5xx are retried. A cached file
     whose sha256 differs from the one recorded in manifest.json is refused."""
 
-    def __init__(self, cache, fetch=False, cafile=None, sleep=time.sleep, allow_hosts=None):
+    def __init__(self, cache, fetch=False, cafile=None, sleep=time.sleep, allow_hosts=None, extra_cadata=None):
         self.cache, self.fetch, self.cafile, self.sleep = cache, fetch, cafile, sleep
+        self.extra_cadata = extra_cadata       # PEM of an intermediate a server leaves out of its chain (build_las.py)
         self.allow_hosts = {h.lower() for h in allow_hosts} if allow_hosts else set(DEFAULT_HOSTS)
         self.used = {}              # cache name -> sha256, for provenance
         self.downloaded = 0
@@ -255,6 +257,8 @@ class Fetcher:
             raise FetchError(f'{host} is not in --allow-host (default: the pipeline\'s own sources); not downloading {url}')
         if self._ctx is None:
             self._ctx = ssl.create_default_context(cafile=self.cafile) if self.cafile else ssl.create_default_context()
+            if self.extra_cadata:
+                self._ctx.load_verify_locations(cadata=self.extra_cadata)
             self._opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self._ctx),
                                                        _ConfinedRedirects(self.allow_hosts))
         last = None

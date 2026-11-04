@@ -147,8 +147,8 @@ Argo profiles are matched to the file's times. `--model-at-obs` works with HYCOM
 
 The whole file is read into memory, so a model file for `--model-netcdf` should be a subset of the map, not a
 global field (the GLORYS route above reads global files in ranges instead). The tests check that a CF file gives the
-same snapshot fields as NetCDF-3 and as NetCDF-4 (`test_nc4.ModelThroughNetcdf4`). No real INCOIS LAS export has
-been tried.
+same snapshot fields as NetCDF-3 and as NetCDF-4 (`test_nc4.ModelThroughNetcdf4`). The INCOIS LAS has its own route,
+`build_las.py` (below).
 
 ## The NetCDF readers
 
@@ -230,3 +230,20 @@ GLORYS route does), and grids them with `model_from_dataset`. The sea floor come
 storm track and no float: `meta.case` says it is a forecast, and the app (`CASE` in `data-real.js`) leaves the track,
 floats and tour out. The server offers it beside Amphan; `serve.py --reload` serves each day's new file without a
 restart (`docs/DEPLOY.md` has a daily timer). `test_build_forecast.py` tests how the run and its days are chosen.
+
+## INCOIS LAS: IGORA (`build_las.py`)
+
+    python data-pipeline/build_las.py [--fetch]              # ../data/amphan-2020-igora.json
+
+asks the INCOIS Live Access Server (`las.incois.gov.in`) for IGORA, the INCOIS Global Ocean ReAnalysis: one NetCDF
+extract per variable (temperature, salinity, u, v) over the map, May 2020 monthly mean, 0–1250 m, through the LAS
+product server's `Data_Extract_netCDF` operation (the request is a LAS XML document; the server answers with a
+redirect to its output file, which is then fetched over HTTPS). The currents sit on IGORA's U cells and are moved to
+its T cells; then `model_from_dataset` grids everything as for the other models. The snapshot copies the GLORYS
+snapshot's floats, track and relief, and repeats the monthly mean at the 8 analysis times; `build.py` embeds that one
+field once (`meta.timesStored`). Four extracts, 26 seconds.
+
+The LAS sends its certificate without the GlobalSign intermediate that links it to a trusted root (browsers fetch it
+themselves; Python does not). `certs/globalsign-rsa-ov-ssl-ca-2018.pem` is that intermediate, as GlobalSign publishes
+it; the script checks its SHA-256 fingerprint and adds it to the trusted set for these downloads only, so certificate
+checking stays on. The LAS's OPeNDAP endpoint did not answer when this was written (4 November 2026).

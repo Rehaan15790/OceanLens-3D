@@ -17,7 +17,7 @@ It is a student prototype and is not affiliated with or endorsed by INCOIS or th
 
 ## Try it
 
-1. Download [`OceanLens3D.html`](https://github.com/Rehaan15790/OceanLens-3D/raw/main/OceanLens3D.html) (about 5.7 MB).
+1. Download [`OceanLens3D.html`](https://github.com/Rehaan15790/OceanLens-3D/raw/main/OceanLens3D.html) (about 6 MB).
 2. Double-click it. No install, no server, no internet connection.
 3. Press **Start the guided tour** for an 8-step walkthrough, or `?` for the keyboard shortcuts.
 
@@ -41,8 +41,9 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
   before the run and the next 9 days) on the same map; the data server offers it as a case beside Amphan, under
   Data source, and `--reload` picks up each day's new run. Temperature, salinity, currents, heat potential, sections
   and the drift tool all work on it.
-- **Two models:** HYCOM and the Copernicus Marine GLORYS12V1 reanalysis, the product the problem statement lists,
-  switched with one click (or `M`). The fields, comparisons and every number in the tour follow the model.
+- **Three models:** HYCOM, the Copernicus Marine GLORYS12V1 reanalysis and INCOIS's own IGORA reanalysis, the two
+  sources the problem statement lists (Copernicus Marine and the INCOIS LAS), switched with one click (or `M`). IGORA
+  is the May 2020 monthly mean, exported from the INCOIS Live Access Server by the pipeline. The fields, comparisons and every number in the tour follow the model.
 - **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
   with bias, RMSE and a density-inversion QC check. Four real RAMA moorings (NOAA PMEL) in the Bay of Bengal and the
   Arabian Sea are in the scene too: at 12°N 90°E the surface cooled 2.1 °C as Amphan passed (13 to 19 May), against

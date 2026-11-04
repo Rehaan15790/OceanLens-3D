@@ -503,6 +503,12 @@ class RealMode(Controls, AppTestCase):
         self.js('__ol.actions.openWorstFloat()')
         name = self.js("document.getElementById('profName').textContent")
         self.assertIn('GLORYS', self.js(legend))
+        if 'igora' in self.js('__ol.models'):       # M cycles through every model: GLORYS, then INCOIS IGORA, then HYCOM
+            self.b.key('m')
+            self.b.pump(0.3)
+            self.assertEqual(self.js('__ol.realModel'), 'igora')
+            self.assertIn('IGORA May 2020 mean', self.js(ctx))
+            self.assertEqual(self.js("document.getElementById('profName').textContent"), name)
         self.b.key('m')
         self.b.pump(0.3)
         self.assertEqual(self.js('__ol.realModel'), 'hycom')
