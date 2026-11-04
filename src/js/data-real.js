@@ -36,7 +36,14 @@ function modelWords(meta){
   if(mm.temperature==='potential' || mm.temperature==='in-situ') w.temperature = mm.temperature;
   return w;
 }
-// the real-data models in the page, main snapshot first; the second is decoded the first time it is shown
+// another model must sit on the main snapshot's grid, levels and times to be drawn and compared on it
+function sameGridAsMain(m){
+  const M = REAL_DATA.meta;
+  return !!m && ['lat0', 'lon0', 'step', 'nlat', 'nlon'].every(k=>m[k]===M[k]) && Array.isArray(m.depths) &&
+    m.depths.join()===M.depths.join() && m.times.join()===M.times.join() && m.vars.join()===M.vars.join();
+}
+// the real-data models in the page, main snapshot first; the others are decoded the first time they are shown.
+// A data server can add more (addServerModel, called from import.js).
 const REAL_MODELS = (()=>{
   const list = [{id:modelWords(REAL_DATA.meta).short.toLowerCase(), words:modelWords(REAL_DATA.meta),
                  atObs:!!(REAL_DATA.argo && REAL_DATA.argo.model), decoded:null, data:()=>REAL_DATA}];
@@ -45,11 +52,7 @@ const REAL_MODELS = (()=>{
     let d = null;
     const data = ()=>d || (d = JSON.parse(el.textContent));
     const words = modelWords(data().meta), id = words.short.toLowerCase();
-    // the second model must sit on the main snapshot's grid, levels and times, or it is left out (and said why)
-    const m = data().meta, M = REAL_DATA.meta;
-    const same = ['lat0', 'lon0', 'step', 'nlat', 'nlon'].every(k=>m[k]===M[k]) &&
-      m.depths.join()===M.depths.join() && m.times.join()===M.times.join() && m.vars.join()===M.vars.join();
-    if(!same) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`);
+    if(!sameGridAsMain(data().meta)) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`);
     else if(!list.some(x=>x.id===id)) list.push({id, words, atObs:false, decoded:null, data});
   }
   return list;
@@ -63,15 +66,39 @@ REAL_MODELS[0].decoded = Object.assign({}, REAL);
 function activeModel(){ return REAL_MODELS.find(x=>x.id===realModel) || REAL_MODELS[0]; }
 function MODEL(){ return activeModel().words; }
 // the Model switch in the left panel: one button per model (setRealModel is in data-source.js)
-REAL_MODELS.forEach(m=>{
+function modelButton(id, label, title, onClick){
   const b = document.createElement('button');
   b.type = 'button';
-  b.dataset.model = m.id;
-  b.textContent = m.words.label;
-  b.title = m.words.note;
-  b.addEventListener('click', ()=>setRealModel(m.id));
+  b.dataset.model = id;
+  b.textContent = label;
+  b.title = title;
+  b.addEventListener('click', onClick);
   ui.modelToggle.appendChild(b);
-});
+  return b;
+}
+REAL_MODELS.forEach(m=>modelButton(m.id, m.words.label, m.words.note, ()=>setRealModel(m.id)));
+// A model a data server offers (serve.py /api/v1/datasets/<id>/model, a NetCDF file put on the page's grid and times):
+// a button now; its fields load on the first click, then it is a model like the others. id must be new.
+function addServerModel(d){
+  const id = 'srv-' + d.id, label = String(d.title || d.id).slice(0, 18);
+  if(REAL_MODELS.some(m=>m.id===id)) return null;
+  let loading = null;
+  const b = modelButton(id, label, `${d.title || d.id}, from the data server (loads when chosen)`, ()=>{
+    if(REAL_MODELS.some(m=>m.id===id)) return setRealModel(id);
+    if(loading) return;
+    b.disabled = true; b.textContent = 'Loading…';
+    loading = serverJSON(d.links.model).then(j=>{
+      if(!j || j.schema!==1 || !sameGridAsMain(j.meta)) throw new Error(`${label} is not on this page's grid and times.`);
+      const words = Object.assign(modelWords(j.meta), {label, note:`${d.title || d.id}, from the data server`,
+        product:`${label} model output`, products:'model outputs', data:d.title || d.id});
+      REAL_MODELS.push({id, words, atObs:false, decoded:null, data:()=>j, server:true});
+      setRealModel(id);
+    }).catch(err=>{
+      ui.modelNote.textContent = err.message;
+    }).finally(()=>{ b.disabled = false; b.textContent = label; loading = null; });
+  });
+  return b;
+}
 // bilinear in latitude/longitude, linear between model levels; R is a decodeModel() result (realAt: the model on screen)
 function realAtIn(R, vi, lat, lon, depth, t){
   const m = R.meta, f = R.f;

@@ -137,6 +137,52 @@ def drift_path(s, lat, lon, t0, hours, direction):
     return path, end
 
 
+def haversine_km(a, b):
+    """Great-circle distance (km) between (lat, lon) points, as geo.js haversineKm (radius 6371 km)."""
+    la1, la2 = math.radians(a[0]), math.radians(b[0])
+    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin(math.radians(b[1] - a[1]) / 2) ** 2
+    return 2 * 6371 * math.asin(math.sqrt(h))
+
+
+def drifter_check(s, path=None):
+    """The drift tool against real drifters, as drifters.js drifterCheck: from every drifter position at an analysis
+    with 72 h of currents after it (on the sea), the central drift; at 24, 48 and 72 h, the distance from the drifter's
+    real position (km), and the distance had the object stayed put (stillKm); medians, and the count of pairs.
+    None without the drifter file."""
+    path = path or os.path.join(HERE, '..', 'data', 'drifters-2020-05.json')
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding='utf-8') as f:
+        D = json.load(f)
+    t0 = datetime.strptime(D['meta']['t0'], '%Y-%m-%dT%H:%MZ').replace(tzinfo=timezone.utc)
+    step = D['meta']['stepH']
+    hours, rows, used = (24, 48, 72), {24: [], 48: [], 72: []}, set()
+    releases = 0
+    for b in D['drifters']:
+        fx = {k: (la, lo) for k, la, lo in b['fixes']}
+        for t, T in enumerate(s.times):
+            k = (T - t0).total_seconds() / 3600 / step
+            if k != int(k) or int(k) not in fx or (s.times[-1] - T).total_seconds() < 72 * 3600:
+                continue
+            p0 = fx[int(k)]
+            if s.land(*p0):
+                continue
+            line, _ = drift_path(s, p0[0], p0[1], t, 72, 1)
+            releases += 1
+            used.add(b['id'])
+            for h in hours:
+                g = fx.get(int(k) + h // step)
+                if g is None or len(line) <= h:
+                    continue
+                rows[h].append((haversine_km(line[h][1:], g), haversine_km(p0, g)))
+    out = []
+    for h in hours:
+        a = np.array(rows[h])
+        out.append({'h': h, 'n': len(a), 'km': round(float(np.median(a[:, 0])), 2),
+                    'stillKm': round(float(np.median(a[:, 1])), 2)} if len(a) else {'h': h, 'n': 0})
+    return {'drifters': len(used), 'releases': releases, 'byHours': out}
+
+
 def rho_eos80(S, T):
     """UNESCO EOS-80 density at one atmosphere (kg/m3), as ocean.js seawaterDensity."""
     rw = (999.842594 + 6.793952e-2 * T - 9.095290e-3 * T ** 2 + 1.001685e-4 * T ** 3 - 1.120083e-6 * T ** 4
@@ -406,6 +452,7 @@ def comparison_and_rest(s, F):
     F['comparison'] = {'matchedInTime': matched, 'bands': comp, 'worst': worst,
                        'deepRmse': {'median': round(float(np.median(deep)), 3), 'min': min(deep), 'max': max(deep)}
                        if deep else None}
+    F['drifters'] = drifter_check(s)
     F['view'] = {'exaggerationPerSlider': round(KM_PER_DEG * 1000 / SCALE_XZ * DEPTH_SCALE, 2),
                  'deepCompression': round(1 / DEEP_COMPRESSION, 2)}
     return F
@@ -415,7 +462,7 @@ def comparison_and_rest(s, F):
 TOL = {'lat': 0.001, 'lon': 0.001, 'heatBefore': 0.05, 'heatAfter': 0.05, 'sstP25': 0.005, 't1000Mean': 0.005,
        'd26P10': 0.2, 'd26P90': 0.2, 'salMedian': 0.005, 'v': 0.005, 'sstBefore': 0.01, 'sstAfter': 0.01,
        'cooling': 0.01, 'd26Before': 0.2, 'd26After': 0.2, 'bias': 0.005, 'rmse': 0.005, 'median': 0.005,
-       'min': 0.005, 'max': 0.005, 'leadDays': 0.01, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01}
+       'min': 0.005, 'max': 0.005, 'leadDays': 0.01, 'km': 0.1, 'stillKm': 0.01, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01}
 
 
 def expected(F):
@@ -432,8 +479,9 @@ def expected(F):
         elif x is not None and not isinstance(x, bool):
             out['real' + path] = {'value': x, 'tol': TOL.get(leaf, 0) if not isinstance(x, str) else 0,
                                   'how': 'data-pipeline/facts_reference.py'}
-    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'view'):
-        walk(F[k], '.' + k, k)
+    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'drifters', 'view'):
+        if F.get(k) is not None:
+            walk(F[k], '.' + k, k)
     return out
 
 

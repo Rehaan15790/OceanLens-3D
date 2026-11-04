@@ -601,8 +601,49 @@ class RealMode(Controls, AppTestCase):
         self.assertNoProblems()
 
 
+    def test_drift_from_a_real_buoy(self):
+        if not self.js("typeof DRIFTERS !== 'undefined' && !!DRIFTERS"):
+            self.skipTest('this build has no drifter data')
+        self.js('__ol.actions.setTime(3)')
+        self.assertTrue(self.visible('#rowDrifters'))
+        self.assertEqual(self.js("__ol.render.marks('drifter').length"), 0, 'the buoys are off at first')
+        self.press('#swDrifters')
+        self.assertTrue(self.js('__ol.state.showDrifters'))
+        self.assertIn('Drifting buoy', self.js("document.getElementById('keyLegend').textContent"))
+        # click, with the mouse, the buoy mark farthest from any other mark
+        pick = self.js("""(()=>{ const all = __ol.render.marks(), d = all.filter(m=>m.kind==='drifter');
+            const gap = m=>Math.min(...all.filter(o=>o!==m).map(o=>Math.hypot(o.x-m.x, o.y-m.y)));
+            return d.sort((a, b)=>gap(b)-gap(a))[0]; })()""")
+        self.assertTrue(pick, 'no buoy mark on screen')
+        self.b.click_at(pick['x'], pick['y'])
+        self.b.pump(1.2)
+        self.assertEqual(self.js('__ol.drift && __ol.drift.drifter'), pick['id'])
+        self.assertEqual(self.js('__ol.state.panel'), 'drift')
+        body = self.js("document.getElementById('driftBody').textContent")
+        self.assertIn(f"Distance from the real buoy {pick['id']}", body)
+        self.assertIn('Had it stayed put', body)
+        foot = self.js("document.getElementById('driftFoot').textContent")
+        n = self.js('__ol.facts().real.drifters.drifters')
+        self.assertIn(f'Checked against {n} real drifting buoys', foot)
+        self.assertNotIn('Not checked', foot)
+        # another time: the buoy is elsewhere, so the drift no longer compares with it
+        self.js('__ol.actions.setTime(5)')
+        self.assertNotIn('Distance from the real buoy', self.js("document.getElementById('driftBody').textContent"))
+        self.b.key('Escape')
+        self.press('#swDrifters')
+        self.assertFalse(self.js('__ol.state.showDrifters'))
+        self.assertNoProblems()
+
+
 class SyntheticMode(Controls, AppTestCase):
     data_mode = 'synth'
+
+    def test_no_buoys_in_the_demo(self):
+        self.assertFalse(self.visible('#rowDrifters'))
+        self.js('__ol.actions.setOverlay("showDrifters", true)')
+        self.assertEqual(self.js("__ol.render.marks('drifter').length"), 0)
+        self.js('__ol.actions.setOverlay("showDrifters", false)')
+        self.assertNoProblems()
 
 
 if __name__ == '__main__':

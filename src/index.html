@@ -168,6 +168,9 @@
             <span id="hintOther" class="sr-only">Markers for imported instruments that are not Argo floats or gliders</span></li>
           <li id="rowTrack"><span id="lblTrack">Cyclone track</span>
             <button type="button" class="switch on" id="swTrack" role="switch" aria-checked="true" aria-labelledby="lblTrack"><span class="knob"></span></button></li>
+          <li id="rowDrifters" hidden><span id="lblDrifters">Drifting buoys</span>
+            <button type="button" class="switch" id="swDrifters" role="switch" aria-checked="false" aria-labelledby="lblDrifters" aria-describedby="hintDrifters"><span class="knob"></span></button>
+            <span id="hintDrifters" class="sr-only">Real drifting buoys in May 2020; click one to release a drift from it and compare</span></li>
           <li><span id="lblFlow">Current streaks</span>
             <button type="button" class="switch on" id="swFlow" role="switch" aria-checked="true" aria-labelledby="lblFlow"><span class="knob"></span></button></li>
           <li><span id="lblGrid">Grid</span>
@@ -479,6 +482,10 @@
       <dt>Cyclone</dt>
       <dd>Six-hourly positions and winds from IBTrACS v04r01: IMD (RSMC New Delhi, 3-minute winds) and JTWC (1-minute
         winds), shown side by side.</dd>
+      <dt>Drifting buoys</dt>
+      <dd><span data-fact="drifters.drifters" data-fmt="int"></span> NOAA Global Drifter Program buoys inside the map,
+        their hourly quality-controlled positions every 6 h. The drift tool is checked against them: from each buoy's
+        position at an analysis, the model's line after 72 h, against where the buoy really was.</dd>
       <dt>Coast and sea floor</dt>
       <dd>ETOPO1, sampled every 0.1° (now superseded by ETOPO 2022).</dd>
     </dl>
@@ -530,6 +537,7 @@
       <li data-cite="glorys"></li>
       <li data-cite="ibtracs"></li>
       <li data-cite="etopo1"></li>
+      <li data-cite="gdp"></li>
       <li>Methods: UNESCO EOS-80 equation of state; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test.</li>
       <li>three.js r128, MIT licence (full text in THIRD_PARTY_NOTICES.md).</li>
     </ul>
@@ -601,6 +609,7 @@
 
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
 <script type="application/json" id="snapshot-glorys" src="../data/amphan-2020-glorys.json" data-embed="model"></script>
+<script type="application/json" id="snapshot-drifters" src="../data/drifters-2020-05.json"></script>
 <!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element.
      They are classic scripts sharing one global scope. Code that runs while a file loads may use only what the files
      above it define; functions called later (events, updates) may use any of them. main.js comes last and boots the
@@ -629,6 +638,7 @@
 <script src="js/track.js"></script>
 <script src="js/section.js"></script>
 <script src="js/drift.js"></script>
+<script src="js/drifters.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/flow.js"></script>
 <script src="js/markers.js"></script>

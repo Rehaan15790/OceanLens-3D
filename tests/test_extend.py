@@ -642,7 +642,10 @@ class ServerMode(AppTestCase):
     def setUpClass(cls):
         import serve
         from cdp import default_build
-        cls.srv = serve.make_server('127.0.0.1', 0, app=default_build(), quiet=True)
+        from test_server import WORK, make_full_model_file
+        WORK.mkdir(parents=True, exist_ok=True)
+        make_full_model_file(WORK / 'full-model.nc')
+        cls.srv = serve.make_server('127.0.0.1', 0, netcdfs=[WORK / 'full-model.nc'], app=default_build(), quiet=True)
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
         cls.url = f'http://127.0.0.1:{cls.srv.server_address[1]}/'
         super().setUpClass()
@@ -662,6 +665,55 @@ class ServerMode(AppTestCase):
         self.assertIn('amphan-2020', ids)
         away = [r['url'] for r in self.b.external_requests() if not r['url'].startswith(self.url)]
         self.assertFalse(away, f'requests left the server: {away[:3]}')
+        self.assertNoProblems()
+
+    def test_server_model_joins_the_model_switch(self):
+        from cdp import open_app
+        from test_server import model_value
+        self.assertEqual(open_app(self.b, self.url), 'ready')
+        button = "document.querySelector('#modelToggle button[data-model=\"srv-full-model\"]')"
+        self.b.wait('!!' + button, timeout=10)
+        self.assertNotIn('srv-full-model', self.js('__ol.models'), 'its fields load only when it is chosen')
+        self.js(button + '.click()')
+        self.b.wait("__ol.realModel === 'srv-full-model'", timeout=30)
+        self.assertIn('srv-full-model', self.js('__ol.models'))
+        for t, lat, lon, z in ((3, 10, 81, 20), (6, 18.5, 65, 300)):
+            got = self.js(f'__ol.fn.realAt(0, {lat}, {lon}, {z}, {t})')
+            self.assertAlmostEqual(got, model_value('temp', t, lat, lon, z), delta=0.002, msg=f'{lat}N {lon}E {z} m t={t}')
+        self.assertEqual(self.js('MODEL().temperature'), 'potential')      # compared with floats as in-situ
+        self.assertIn('Test model full', self.js("document.getElementById('ctxText').textContent"))
+        self.js('__ol.actions.setRealModel(__ol.models[0])')
+        self.assertEqual(self.js('__ol.realModel'), 'hycom')
+        self.assertNoProblems()
+
+
+
+class ServerModeWithKey(AppTestCase):
+    """A server started with an API key: the page opened as ?key=<key> sends it and finds the datasets."""
+    enter = False
+
+    @classmethod
+    def setUpClass(cls):
+        import serve
+        from cdp import default_build
+        from test_server import KEY
+        cls.key = KEY
+        cls.srv = serve.make_server('127.0.0.1', 0, app=default_build(), quiet=True, api_keys=(KEY,))
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.url = f'http://127.0.0.1:{cls.srv.server_address[1]}/'
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def test_page_sends_its_key(self):
+        from cdp import open_app
+        self.assertEqual(open_app(self.b, f'{self.url}?key={self.key}'), 'ready')
+        self.b.wait('window.OceanLens && OceanLens.server && OceanLens.server.live === true', timeout=10)
+        self.assertIn('amphan-2020', self.js('OceanLens.server.datasets.map(d=>d.id)'))
         self.assertNoProblems()
 
 

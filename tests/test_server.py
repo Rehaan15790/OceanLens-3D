@@ -70,6 +70,189 @@ def make_cf_file(path):
     return lat, lon, depth, temp
 
 
+MODEL_DAYS = np.array([3.5 + 3 * k for k in range(8)])            # days since 1 May 2020: the 8 analyses, 12:00Z
+
+
+def model_value(var, t, lat, lon, depth):
+    """The analytic fields make_full_model_file writes (linear in latitude, longitude and depth)."""
+    return {'temp': 29 - 0.02 * depth + 0.01 * (lat - 6) + 0.1 * t, 'sal': 34.5 + 0.001 * lon,
+            'u': 0.2 + 0.0 * lat, 'v': -0.1 + 0.0 * lat}[var]
+
+
+def make_full_model_file(path, days=MODEL_DAYS):
+    """A CF model file over the whole map, 0.25 deg, 9 levels to 1100 m, temperature (potential), salinity and
+    currents at the given times: one a producer could give the server for the 3D view."""
+    lat, lon = np.arange(5.5, 22.51, 0.25), np.arange(60.5, 92.51, 0.25)
+    depth = np.array([0.5, 10, 30, 60, 120, 250, 500, 800, 1100.0])
+    T, Z, Y, X = np.meshgrid(np.arange(len(days)), depth, lat, lon, indexing='ij')
+    var = lambda k: model_value(k, T, Y, X, Z).astype(np.float32)
+    dims4 = ('time', 'depth', 'lat', 'lon')
+    V = {'time': {'dims': ('time',), 'data': days, 'attrs': {'standard_name': 'time', 'units': 'days since 2020-05-01 00:00:00'}},
+         'depth': {'dims': ('depth',), 'data': depth, 'attrs': {'standard_name': 'depth', 'units': 'm', 'positive': 'down'}},
+         'lat': {'dims': ('lat',), 'data': lat, 'attrs': {'standard_name': 'latitude', 'units': 'degrees_north'}},
+         'lon': {'dims': ('lon',), 'data': lon, 'attrs': {'standard_name': 'longitude', 'units': 'degrees_east'}}}
+    for name, key, sn, units in (('thetao', 'temp', 'sea_water_potential_temperature', 'degC'),
+                                 ('so', 'sal', 'sea_water_salinity', '1e-3'),
+                                 ('uo', 'u', 'eastward_sea_water_velocity', 'm s-1'),
+                                 ('vo', 'v', 'northward_sea_water_velocity', 'm s-1')):
+        V[name] = {'dims': dims4, 'dtype': 'f4', 'data': var(key), 'attrs': {'standard_name': sn, 'units': units}}
+    ncio.write(str(path), {'time': None, 'depth': len(depth), 'lat': len(lat), 'lon': len(lon)}, V,
+               {'Conventions': 'CF-1.8', 'title': 'Test model full'})
+
+
+class ServerModelTest(unittest.TestCase):
+    """A NetCDF model that covers the map and the analysis times is offered to the 3D view (/model), on the page's
+    grid, levels and times; one that does not cover them says why."""
+
+    @classmethod
+    def setUpClass(cls):
+        WORK.mkdir(parents=True, exist_ok=True)
+        make_full_model_file(WORK / 'full-model.nc')
+        make_full_model_file(WORK / 'late-model.nc', MODEL_DAYS + 30)          # June: not the case's times
+        make_cf_file(WORK / 'cf-model.nc')
+        cls.srv = serve.make_server('127.0.0.1', 0, [SNAP], [WORK / 'full-model.nc', WORK / 'late-model.nc',
+                                                            WORK / 'cf-model.nc'], app='', quiet=True)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.meta = json.loads(SNAP.read_bytes())['meta']
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def get(self, path):
+        c = http.client.HTTPConnection('127.0.0.1', self.srv.server_address[1], timeout=60)
+        try:
+            c.request('GET', path, headers={'Accept-Encoding': 'gzip'})
+            r = c.getresponse()
+            s, h, b = r.status, r.headers, r.read()
+        finally:
+            c.close()
+        return s, h, gzip.decompress(b) if h.get('Content-Encoding') == 'gzip' else b
+
+    def json(self, path):
+        s, h, b = self.get(path)
+        self.assertEqual(s, 200, f'{path}: HTTP {s}: {b[:300]!r}')
+        return json.loads(b)
+
+    def test_listed_with_a_model_link_or_the_reason(self):
+        d = {x['id']: x for x in self.json('/api/v1/datasets')['datasets']}
+        self.assertTrue(d['full-model']['links']['model'].endswith('/api/v1/datasets/full-model/model'))
+        for other, why in (('late-model', 'no model time within 12 h'), ('cf-model', 'no sal variable')):
+            self.assertNotIn('model', d[other]['links'], other)
+            self.assertIn(why, d[other]['model_note'], other)
+        self.assertNotIn('model', d['amphan-2020']['links'])
+        s, _, b = self.get('/api/v1/datasets/late-model/model')
+        self.assertEqual(s, 404)
+        self.assertEqual(json.loads(b)['error']['code'], 'NoModel')
+
+    def test_model_on_the_page_grid_and_times(self):
+        j = self.json('/api/v1/datasets/full-model/model')
+        m, M = j['meta'], self.meta
+        for k in ('times', 'lat0', 'lon0', 'step', 'nlat', 'nlon', 'depths', 'vars'):
+            self.assertEqual(m[k], M[k], k)
+        self.assertEqual(m['model']['temperature'], 'potential')
+        self.assertEqual(m['model']['dataset'], 'full-model')
+        q = np.frombuffer(base64.b64decode(j['model']), '<i2').reshape(8, 4, len(M['depths']), M['nlat'], M['nlon'])
+        n = len(M['depths']) * M['nlat'] * M['nlon']
+        self.assertTrue(np.unpackbits(np.frombuffer(base64.b64decode(j['mask']['wet']), np.uint8))[:n].all())
+        for var, t, k, i, j_ in (('temp', 3, 1, 10, 40), ('temp', 7, 6, 32, 0), ('sal', 0, 4, 0, 62), ('v', 5, 10, 16, 31)):
+            off, sc = m['quant'][var]
+            got = off + q[t, M['vars'].index(var), k, i, j_] * sc
+            z = max(M['depths'][k], 0.5)                     # above the first level (0.5 m) it stands for the surface
+            want = model_value(var, t, M['lat0'] + i * M['step'], M['lon0'] + j_ * M['step'], z)
+            self.assertAlmostEqual(got, want, delta=0.0015, msg=f'{var} t={t} level {k} node {i},{j_}')
+
+
+KEY = 'test-key-0123456789abcdef'
+
+
+class ServerKeysTest(unittest.TestCase):
+    """--api-key: the data routes need a key (header or key=), the page, its own data and /healthz do not;
+    --rate-limit: past N requests a minute a client gets 429 with Retry-After."""
+
+    @classmethod
+    def setUpClass(cls):
+        WORK.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(SNAP, WORK / 'copy-2020.json')
+        app = next((p for p in (REPO / 'dist' / 'OceanLens3D.html', REPO / 'OceanLens3D.html') if p.exists()), '')
+        cls.srv = serve.make_server('127.0.0.1', 0, [SNAP, WORK / 'copy-2020.json'], app=str(app), quiet=True,
+                                    api_keys=(KEY,))
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def get(self, path, headers=None, srv=None):
+        srv = srv or self.srv
+        c = http.client.HTTPConnection('127.0.0.1', srv.server_address[1], timeout=60)
+        try:
+            c.request('GET', path, headers=headers or {})
+            r = c.getresponse()
+            return r.status, r.headers, r.read()
+        finally:
+            c.close()
+
+    def test_data_routes_need_a_key(self):
+        for path in ('/api/v1/datasets', '/api/v1/datasets/amphan-2020/field?var=temp', '/opendap/amphan-2020.dds',
+                     '/wms?SERVICE=WMS&REQUEST=GetCapabilities', '/wcs?SERVICE=WCS&REQUEST=GetCapabilities',
+                     '/?dataset=copy-2020'):
+            s, h, b = self.get(path)
+            self.assertEqual(s, 401, path)
+            self.assertEqual(h['WWW-Authenticate'], 'Bearer realm="OceanLens"', path)
+            self.assertEqual(h['Cache-Control'], 'no-store', path)
+        self.assertIn(b'ServiceException', self.get('/wms?SERVICE=WMS&REQUEST=GetCapabilities')[2])
+        self.assertEqual(json.loads(self.get('/api/v1/datasets')[2])['error']['code'], 'Unauthorized')
+
+    def test_a_key_in_a_header_or_the_query_opens_them(self):
+        for headers, q in (({'Authorization': 'Bearer ' + KEY}, ''), ({'X-API-Key': KEY}, ''), ({}, '?key=' + KEY)):
+            s, h, _ = self.get('/api/v1/datasets' + q, headers)
+            self.assertEqual(s, 200, (headers, q))
+            self.assertEqual(h['Cache-Control'], 'private, max-age=300')
+        self.assertEqual(self.get('/wms?SERVICE=WMS&REQUEST=GetCapabilities&key=' + KEY)[0], 200)
+        for bad in ('Bearer ' + KEY[:-1], 'Bearer', KEY):
+            self.assertEqual(self.get('/api/v1/datasets', {'Authorization': bad})[0], 401, bad)
+
+    def test_page_and_health_stay_open(self):
+        self.assertEqual(self.get('/healthz')[0], 200)
+        self.assertTrue(json.loads(self.get('/healthz')[2])['keys'])
+        if self.srv.app:
+            self.assertEqual(self.get('/')[0], 200)
+        s, h, _ = self.get('/', {'Origin': 'http://example.org'})
+        self.assertNotEqual(s, 401)
+
+    def test_keys_are_long_and_never_logged(self):
+        with self.assertRaises(SystemExit):
+            serve.read_keys(keys=('short',))
+        self.assertEqual(serve.read_keys(keys=(KEY, KEY, ' ')), (KEY,))
+        self.assertNotIn(KEY, serve.redact(f'"GET /wms?SERVICE=WMS&key={KEY} HTTP/1.1" 200 -'))
+        self.assertNotIn(KEY, serve.redact(f'"GET /api/v1/datasets?api_key={KEY}&x=1 HTTP/1.1" 401 -'))
+
+    def test_rate_limit(self):
+        srv = serve.make_server('127.0.0.1', 0, [SNAP], app='', quiet=True, rate_limit=3)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            got = [self.get('/api/v1', srv=srv)[0] for _ in range(4)]
+            self.assertEqual(got, [200, 200, 200, 429])
+            s, h, b = self.get('/api/v1', srv=srv)
+            self.assertEqual((s, json.loads(b)['error']['code']), (429, 'TooManyRequests'))
+            self.assertGreaterEqual(int(h['Retry-After']), 1)
+            self.assertEqual(self.get('/healthz', srv=srv)[0], 200)       # monitoring is never limited
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
+    def test_token_bucket_refills(self):
+        now = [0.0]
+        r = serve.RateLimiter(60, clock=lambda: now[0])                 # one a second, bursts of 60
+        self.assertEqual([r.take('a') for _ in range(60)], [0.0] * 60)
+        self.assertAlmostEqual(r.take('a'), 1.0)
+        self.assertEqual(r.take('b'), 0.0)                              # each client has its own bucket
+        now[0] += 2.5
+        self.assertEqual([r.take('a') > 0 for _ in range(3)], [False, False, True])
+
 class ServerTest(unittest.TestCase):
     longMessage = False
 

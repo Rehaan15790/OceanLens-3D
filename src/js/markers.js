@@ -126,14 +126,16 @@ function pickAt(clientX, clientY){
   };
   markerItems.forEach(it=>{ if(instrumentVisible(it.vis)) consider(it.pos, it); });
   if(trackGroup.visible) trackFixes.forEach(f=>consider(f.pos, {kind:'track', index:f.index}));
+  if(drifterGroup.visible) drifterMarks.forEach(m=>consider(m.pos, {kind:'drifter', id:m.id}));
   return best;
 }
-// a click on the view (not a drag): release a drift, or open the profile or the track under the pointer
+// a click on the view (not a drag): release a drift, or open the profile, the track or a buoy's drift under the pointer
 function handleClick(e){
   if(state.driftPlace){ placeDriftAt(e); return; }   // releasing a drift: the click is a place on the sea
   const hit = pickAt(e.clientX, e.clientY);
   if(!hit) return;
   if(hit.kind==='track') openTrack();
+  else if(hit.kind==='drifter') startDriftFromDrifter(hit.id);
   else openProfile(hit.userData.wp ? hit.userData.wp.inst.userData : hit.userData.data.inst.userData || hit.userData.data.inst);
 }
 buildMarkers();
@@ -148,5 +150,6 @@ function pickableMarks(kind){
   };
   markerItems.forEach(it=>{ if(instrumentVisible(it.vis)) add(it.pos, it.kind, it.userData.wp ? it.userData.wp.inst.id : it.userData.data.inst.id); });
   if(trackGroup.visible) trackFixes.forEach(f=>add(f.pos, 'track', f.index));
+  if(drifterGroup.visible) drifterMarks.forEach(m=>add(m.pos, 'drifter', m.id));
   return kind ? out.filter(m=>m.kind===kind) : out;
 }

@@ -380,6 +380,7 @@ function keySpec(){
     legend.push({sw:'track', text:dataSource().legend.track});
     if(stormNow.visible && dataSource().legend.now) legend.push({sw:'storm', text:dataSource().legend.now});
   }
+  if(drifterLayerOn()) legend.push({sw:'drifter', text:'Drifting buoy (NOAA GDP); click one to drift from it'});
   importedLegend().forEach(r=>legend.push(r));
   const scale = c.scale || (c.editable ? state.scale : 'linear');
   if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);

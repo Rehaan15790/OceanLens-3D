@@ -145,7 +145,9 @@ Press **Drift** (bottom of the 3D view) or `T`, then click the sea. An object is
 - **The dashed line** is the other model's drift from the same point. The panel gives the distance between the two ends: the model uncertainty a forecaster would weigh.
 - **Back in time** asks where something found at that point came from. **24 h / 48 h / 72 h** set how long. Moving the timeline moves the release time.
 - A good demo: the **16 May** analysis, a click near **15°N, 88°E** (under Amphan's path). With HYCOM the object moves about 190 km east in 72 h; the GLORYS drift ends about 140 km from it.
-- Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart, not checked against drifting buoys. A teaching aid, not INCOIS's SARAT.
+- **Drifting buoys** (under Overlays) draws 12 real NOAA drifting buoys from May 2020. Click one: the drift starts where the buoy was at the analysis on screen, its real path is drawn in blue, and the panel gives how far each model's line ends from the buoy, next to how far it would be had the object stayed put. A good one: **13 May**, the buoy in the western Bay near 15.4°N, 84.2°E: after 72 h GLORYS is 11 km from it, HYCOM 71 km.
+- The check over all 12 buoys (61 releases) is in the panel's last paragraph: after 72 h, GLORYS ends a median 31 km from the buoy, HYCOM 55 km, and standing still 46 km. HYCOM's snapshots 3 days apart miss the day-to-day changes; GLORYS's daily means average them.
+- Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart. A teaching aid, not INCOIS's SARAT.
 
 ### The Amphan story (real mode)
 
@@ -230,8 +232,8 @@ It also loads **CF NetCDF-3 or NetCDF-4 model files** with `--netcdf`, so other 
 
 **Limits to admit if asked:**
 
-- The 3D view still draws only the snapshot built into the page; model files given to the server reach other clients only through REST, WMS, WCS and OPeNDAP.
-- No authentication, TLS or rate limiting of its own; it belongs behind an institution's reverse proxy.
+- A model file given to the server is drawn in 3D only if it covers the whole map and the case's 8 analysis times (within 12 h); others reach clients through REST, WMS, WCS and OPeNDAP only.
+- API keys and a per-client rate limit are built in, but simple (shared keys); TLS and user accounts belong to an institution's reverse proxy.
 - It reads NetCDF-3 and NetCDF-4 model files, whole: for large files use the pipeline, which reads parts of them.
 
 ## Shortcuts, the guided tour and export
@@ -378,10 +380,10 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Can it read NetCDF-4? | Yes, in the browser and in the pipeline, with our own readers (no HDF5 library). They were checked against independent sources: a GLORYS native file against the Copernicus Zarr store (identical values), and two Argo S-files against Ifremer ERDDAP. Only szip- or zstd-compressed files need converting. |
 | Why no chlorophyll map in real mode? | Neither model has chlorophyll (GLORYS's biogeochemistry product is not used). The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
 | Does it work on INCOIS or Copernicus data? | Copernicus, yes: GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. The INCOIS LAS has not been tried: it could not be reached when we checked. |
-| Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. It uses current only (no wind, so no leeway) and is not checked against buoys: a teaching aid, not SARAT. |
+| Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. Checked against 12 real drifting buoys: after 72 h GLORYS ends a median 31 km from the buoy, HYCOM 55 km, standing still 46 km. Current only (no wind, so no leeway): a teaching aid, not SARAT. |
 | Fisheries? | Not implemented: there is no PFZ, SST-front or chlorophyll field product. Listed as a possible use. |
 | How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 322 automated tests run in a headless browser and on GitHub Actions. |
-| How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, and the plugin API adds sensors and ML products. Production would add scheduled ingestion, auth and a pipeline not tied to one case. |
+| How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, with API keys and rate limits, and streams model files on the case's grid into the 3D view; the plugin API adds sensors and ML products. Production would add scheduled ingestion, user accounts and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |
 

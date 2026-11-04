@@ -19,6 +19,11 @@ function hoverText(e){
     const wind = [f.nd!=null ? `${f.nd} kt (IMD)` : '', f.usa!=null ? `${f.usa} kt (JTWC)` : ''].filter(Boolean).join(' · ');
     return `${fmtDeg(f.lat, f.lon)}<br>${t}${wind ? ' · '+wind : ''}`;
   }
+  if(pick && pick.kind==='drifter'){
+    const b = DRIFTERS.byId.get(pick.id), ms = Date.parse(META.times[state.time]), f = drifterAt(b, ms);
+    return `${fmtDeg(f.lat, f.lon)}<br>Drifting buoy ${fmt.esc(b.id)}, ${drifterDrogued(b, ms) ? 'drogued' : 'drogue lost'}`+
+      ` (click to drift from here)`;
+  }
   if(pick){
     const inst = pick.userData.wp ? pick.userData.wp.inst : pick.userData.data.inst;
     // an imported profile far from the analyses (another year, with "show all") gets its year
