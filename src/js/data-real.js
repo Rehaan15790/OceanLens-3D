@@ -20,6 +20,19 @@ function decodeModel(d){
   }
   return {meta:m, f, per, layer:m.nlat*m.nlon, wet};
 }
+// the case the main snapshot holds: Cyclone Amphan (a snapshot without meta.case), or another the pipeline wrote, such as
+// a forecast (build_forecast.py): its name, its label on the Real data button, and whether the Amphan tour applies
+const CASE = (()=>{
+  const c = REAL_DATA.meta.case;
+  if(!c) return {kind:'cyclone', name:'Cyclone Amphan', button:'Amphan 2020', storm:'Amphan', tour:true};
+  const forecast = c.kind==='forecast', issued = forecast && c.issued ? Date.parse(c.issued + 'T00:00Z') : NaN;
+  return {kind:String(c.kind || 'case'), name:String(c.name || REAL_DATA.meta.title || 'Real data'),
+          button:forecast && Number.isFinite(issued) ? `forecast ${fmt.dayMonth(new Date(issued).toISOString())}` : String(c.name || 'case'),
+          storm:null, tour:false, forecast, issued};
+})();
+// the Real data button names the case
+document.querySelectorAll('#dataToggle button[data-mode="real"]').forEach(b=>{ b.textContent = `Real data: ${CASE.button}`; });
+
 // the words the app uses for a model; meta.model names it, and a snapshot without meta.model is HYCOM.
 // temperature: 'in-situ' or 'potential' (meta.model.temperature when the snapshot says)
 const MODEL_WORDS = {
@@ -27,6 +40,9 @@ const MODEL_WORDS = {
           data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)', temperature:'in-situ'},
   GLORYS:{product:'GLORYS daily mean', products:'daily means', label:'GLORYS', kind:'reanalysis',
           data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means',
+          temperature:'potential'},
+  Forecast:{product:'daily mean', products:'daily means', label:'Forecast', kind:'forecast',
+          data:'Copernicus Marine global analysis and forecast', note:'Copernicus Marine global ocean analysis and forecast (1/12°), daily means',
           temperature:'potential'},
 };
 function modelWords(meta){
@@ -52,7 +68,8 @@ const REAL_MODELS = (()=>{
     let d = null;
     const data = ()=>d || (d = JSON.parse(el.textContent));
     const words = modelWords(data().meta), id = words.short.toLowerCase();
-    if(!sameGridAsMain(data().meta)) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`);
+    // a main snapshot of another case (a forecast) has other times: the second model is left out, as expected there
+    if(!sameGridAsMain(data().meta)){ if(!REAL_DATA.meta.case) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`); }
     else if(!list.some(x=>x.id===id)) list.push({id, words, atObs:false, decoded:null, data});
   }
   return list;
@@ -159,7 +176,7 @@ function modelGapHours(inst){
 // the last fix at sea and the first over land (IBTrACS is six-hourly; landfall fell in between).
 // usa = JTWC 1-minute wind (kt), nd = IMD 3-minute wind (kt), grade = IMD grade (D … SuCS).
 const REAL_TRACK = (()=>{
-  const all = REAL_DATA.track.fixes.map(([t, lat, lon, usa, nd, grade])=>({t, lat, lon, usa, nd, grade}));
+  const all = (REAL_DATA.track && REAL_DATA.track.fixes || []).map(([t, lat, lon, usa, nd, grade])=>({t, lat, lon, usa, nd, grade}));
   const T = [], mix = (x, y, u)=> x==null || y==null ? (x ?? y) : Math.round(lerp(x, y, u));
   for(const f of all){
     if(f.lat>=LAT0 && f.lat<=LAT1 && f.lon>=LON0 && f.lon<=LON1 && !isLand(f.lat, f.lon)){ T.push(f); continue; }

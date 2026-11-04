@@ -367,7 +367,7 @@ function keySpec(){
   }
   if(c.empty) notes.push(hasModel(state.variable) ? 'No surface: no water column crosses this value at this time.'
     : 'No surface: there is no model field to search.');
-  if(state.showArgo){
+  if(state.showArgo && (dataMode!=='real' || realProfiles.length)){
     if(state.colorMisfit){
       legend.push({sw:'float good', text:'Float, temperature RMSE < 0.5 °C'});
       legend.push({sw:'float fair', text:'0.5–1.0 °C'});
@@ -376,7 +376,7 @@ function keySpec(){
     } else legend.push({sw:'float', text: dataMode==='real' ? 'Argo float' : 'Synthetic float'});
   }
   if(state.showGlider && dataMode==='synth') legend.push({sw:'glider', text:'Synthetic glider waypoint'});
-  if(trackGroup.visible){
+  if(trackGroup.visible && currentTrack().length){
     legend.push({sw:'track', text:dataSource().legend.track});
     if(stormNow.visible && dataSource().legend.now) legend.push({sw:'storm', text:dataSource().legend.now});
   }

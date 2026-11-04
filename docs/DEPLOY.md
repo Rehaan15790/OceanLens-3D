@@ -127,6 +127,33 @@ ProtectHome=true
 WantedBy=multi-user.target
 ```
 
+**Today's forecast, every day.** `data-pipeline/build_forecast.py --fetch` writes the latest Copernicus Marine
+forecast to `data/forecast-latest.json` (about 1 GB of byte ranges a day, kept in the cache; prune old runs). Run it
+from a timer, and start the server with `--reload 600` so it serves each new run within 10 minutes, without a
+restart:
+
+```
+# /etc/systemd/system/oceanlens-forecast.service
+[Unit]
+Description=OceanLens 3D: the latest Copernicus Marine forecast
+[Service]
+Type=oneshot
+User=oceanlens
+WorkingDirectory=/opt/oceanlens
+ExecStart=/usr/bin/python3 data-pipeline/build_forecast.py --fetch --cache /var/cache/oceanlens
+
+# /etc/systemd/system/oceanlens-forecast.timer
+[Timer]
+OnCalendar=*-*-* 04:30:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+Add `--reload 600` to the server's `ExecStart`, and `ReadWritePaths=/opt/oceanlens/data /var/cache/oceanlens` to the
+forecast service if the server unit's `ProtectSystem=strict` is copied into it. The run is published by about
+02:30 UTC; a failed day keeps the previous forecast.
+
 **Put the institution's web server in front.** The server listens on 127.0.0.1 only. TLS, user accounts and access
 logs belong to the reverse proxy. The server can also check API keys and limit each client itself:
 

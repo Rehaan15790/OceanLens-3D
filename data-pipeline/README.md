@@ -216,3 +216,17 @@ meters; quality codes 1, 2 and 3 kept (highest, default, adjusted). Four mooring
 15°N 65°E and 8°N 67°E (11 kB). The app turns each mooring's analysis days into profiles (`src/js/moorings.js`);
 `facts_reference.py mooring_facts` recomputes its comparison with the models. `test_build_moorings.py` tests the
 parsing, quality codes and units, and rebuilds the file from the cache when it is there.
+
+## Today's forecast (`build_forecast.py`)
+
+    python data-pipeline/build_forecast.py --fetch           # ../data/forecast-latest.json, the latest run
+    python data-pipeline/build_forecast.py --run 20261104    # a given run, from the cache
+
+writes a case of its own: the latest run of Copernicus Marine's global analysis and forecast
+(`GLOBAL_ANALYSISFORECAST_PHY_001_024`, 1/12°, daily means), the day before the run and the next 9 days, on the app
+grid. The script lists the object store for the newest run with temperature, salinity and currents for every day,
+reads each day's native NetCDF-4 files in HTTPS byte ranges (only the map and the levels the app depths use, as the
+GLORYS route does), and grids them with `model_from_dataset`. The sea floor comes from the main snapshot. There is no
+storm track and no float: `meta.case` says it is a forecast, and the app (`CASE` in `data-real.js`) leaves the track,
+floats and tour out. The server offers it beside Amphan; `serve.py --reload` serves each day's new file without a
+restart (`docs/DEPLOY.md` has a daily timer). `test_build_forecast.py` tests how the run and its days are chosen.

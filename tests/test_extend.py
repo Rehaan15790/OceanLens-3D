@@ -717,5 +717,72 @@ class ServerModeWithKey(AppTestCase):
         self.assertNoProblems()
 
 
+
+def forecast_like(path):
+    """A case shaped like build_forecast.py's output, from the main snapshot: 8 daily times from 3 Nov 2026, issued
+    4 Nov, no storm track, no floats, the model named Forecast."""
+    import build_snapshot as Bp
+    d = json.loads((REPO / 'data' / 'amphan-2020.json').read_bytes())
+    m = d['meta']
+    m['title'] = 'Ocean forecast issued 4 Nov 2026'
+    m['times'] = [f'2026-11-{3 + k:02d}T00:00Z' for k in range(len(m['times']))]
+    m['case'] = {'kind': 'forecast', 'name': 'Ocean forecast', 'run': '20261104', 'issued': '2026-11-04'}
+    m['model'] = {'name': 'Copernicus Marine global analysis and forecast', 'short': 'Forecast', 'temperature': 'potential'}
+    d['argo'] = {'levels': d['argo']['levels'], 'profiles': [], 'T': '', 'S': ''}
+    d.pop('track')
+    Path(path).write_bytes(Bp.serialise(d))
+
+
+class ServerForecastCase(AppTestCase):
+    """Another case served in place of Amphan (a forecast): no track, floats or tour, and the May 2020 add-ons left
+    out, with no error."""
+    enter = False
+
+    @classmethod
+    def setUpClass(cls):
+        import serve
+        from cdp import default_build
+        from test_server import WORK
+        WORK.mkdir(parents=True, exist_ok=True)
+        forecast_like(WORK / 'forecast-test.json')
+        cls.srv = serve.make_server('127.0.0.1', 0, [REPO / 'data' / 'amphan-2020.json', WORK / 'forecast-test.json'],
+                                    app=default_build(), quiet=True)
+        threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
+        cls.url = f'http://127.0.0.1:{cls.srv.server_address[1]}/?dataset=forecast-test'
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def test_forecast_case(self):
+        from cdp import open_app
+        self.assertEqual(open_app(self.b, self.url), 'ready')
+        self.b.wait('window.OceanLens && OceanLens.server && OceanLens.server.live === true', timeout=10)
+        self.js('__ol.flush()')
+        txt = lambda sel: self.js(f"document.querySelector({json.dumps(sel)}).textContent")
+        shown = lambda sel: self.js(f"(()=>{{ const e = document.querySelector({json.dumps(sel)}); return !!e && !e.hidden && e.getClientRects().length > 0; }})()")
+        self.assertEqual(txt('#dataToggle button[data-mode="real"]'), 'Real data: forecast 4 Nov')
+        self.js('__ol.actions.setTime(3)')
+        ctx = txt('#ctxText')
+        self.assertIn('Ocean forecast · daily mean', ctx)
+        self.assertIn('No floats in this case', self.js("document.getElementById('valPanel').textContent"))
+        self.assertNotIn('Argo float', self.js("document.getElementById('keyLegend').textContent"))
+        self.assertIn('(+2 days)', ctx)
+        for sel in ('#presentBtn', '#rowTrack', '#rowDrifters', '#modelGrp'):
+            self.assertFalse(shown(sel), f'{sel} belongs to the Amphan case')
+        self.assertEqual(self.js('__ol.models'), ['forecast'])
+        self.assertEqual(self.js("document.querySelectorAll('#varPills .pill[data-v=pfz]').length"), 0)
+        self.assertEqual(self.js('instrumentsNow().length'), 0)
+        self.js('__ol.actions.startTour()')
+        self.assertFalse(self.js('isTourRunning()'))
+        # the forecast's currents carry a drift
+        self.assertTrue(self.js('__ol.actions.startDrift(15, 88)'))
+        self.assertEqual(self.js('__ol.drift.run.path.at(-1).h'), 72)
+        self.assertNoProblems()
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -235,6 +235,13 @@ function syncControls(){
   ui.modelNote.textContent = MODEL().note + '.';
   ui.secTrackBtn.textContent = src.section.trackPreset;
   ui.secTrackBtn.disabled = currentTrack().length===0;
+  // another case (a forecast) has no storm track, no floats and no tour: their buttons go
+  const noTrack = currentTrack().length===0, show = (id, on)=>{ const e = document.getElementById(id); if(e) e.hidden = !on; };
+  show('openTrackBtn', !noTrack); show('trackDetailsBtn', !noTrack); show('rowTrack', !noTrack);
+  show('startTourBtn', CASE.tour); ui.presentBtn.hidden = !CASE.tour;
+  const floats = dataMode!=='real' || realProfiles.length > 0;
+  show('worstFloatBtn', floats);
+  [ui.swArgo, ui.swMisfit].forEach(b=>{ const li = b.closest('li'); if(li) li.hidden = !floats; });
   syncTimeline();
 }
 

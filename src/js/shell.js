@@ -118,6 +118,7 @@ const shell = (()=>{
     document.querySelectorAll('[data-cite]').forEach(el=>{
       const c = list.find(x=>x.id===el.dataset.cite);
       el.textContent = c ? c.text : '';
+      el.hidden = !c;                              // a source this case does not use (the forecast's, in Amphan's page)
     });
   }
   fillCitations();

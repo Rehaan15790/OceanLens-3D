@@ -37,6 +37,10 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
   a 90 % search ellipse for each day and the share that reaches the coast, and the other model's drift from the same
   point shows how far the two models disagree. Turn on **Drifting buoys** to release a drift where one of 12 real NOAA
   drifting buoys was, and see where the buoy really went.
+- **Today's ocean forecast (served):** `build_forecast.py` puts the latest Copernicus Marine global forecast (the day
+  before the run and the next 9 days) on the same map; the data server offers it as a case beside Amphan, under
+  Data source, and `--reload` picks up each day's new run. Temperature, salinity, currents, heat potential, sections
+  and the drift tool all work on it.
 - **Two models:** HYCOM and the Copernicus Marine GLORYS12V1 reanalysis, the product the problem statement lists,
   switched with one click (or `M`). The fields, comparisons and every number in the tour follow the model.
 - **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
@@ -174,8 +178,9 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
 
 ## Limitations and next steps
 
-- **One built-in case, no live data.** The real data is a hindcast of one past cyclone. There are no forecasts, and
-  the pipeline is tied to the Amphan domain, its 11 depths and 4 model variables.
+- **One built-in case.** The single file holds a hindcast of one past cyclone. A server can also show the latest
+  Copernicus forecast, but the forecast case has no floats, storm track, waves, storm surge or sea level yet, and
+  every case is tied to the same map, 11 depths and 4 model variables.
 - **The 3D view is tied to the case's grid and times.** A model file given to the server is drawn in 3D only when it
   covers the whole map and has a time within 12 h of each of the 8 analyses; it is then put on the 0.5° grid and 11
   levels. Other files reach clients through REST, WMS, WCS and OPeNDAP only.

@@ -3,7 +3,7 @@ WCS 2.0.1 (CF NetCDF-3 round trip through data-pipeline/ncio.py, CSV) and a CF N
 
 No browser. Expected values come from the snapshot and src/js/palettes.js decoded here, independently of the server.
 """
-import base64, gzip, hashlib, http.client, json, re, shutil, socket, struct, subprocess, sys, tempfile, threading, time, unittest, zlib
+import base64, gzip, hashlib, http.client, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, threading, time, unittest, zlib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest import mock
@@ -162,6 +162,36 @@ class ServerModelTest(unittest.TestCase):
             z = max(M['depths'][k], 0.5)                     # above the first level (0.5 m) it stands for the surface
             want = model_value(var, t, M['lat0'] + i * M['step'], M['lon0'] + j_ * M['step'], z)
             self.assertAlmostEqual(got, want, delta=0.0015, msg=f'{var} t={t} level {k} node {i},{j_}')
+
+
+class ServerReloadTest(unittest.TestCase):
+    """--reload: a snapshot rewritten or added while the server runs (a daily forecast) is served without a restart."""
+
+    def test_changed_and_new_snapshots_are_loaded(self):
+        WORK.mkdir(parents=True, exist_ok=True)
+        a, b = WORK / 'reload-a.json', WORK / 'reload-b.json'
+        b.unlink(missing_ok=True)
+        d = json.loads(SNAP.read_bytes())
+        d['meta']['title'] = 'first'
+        a.write_text(json.dumps(d))
+        srv = serve.make_server('127.0.0.1', 0, [a], app='', quiet=True)
+        try:
+            srv.watch = ([a, b], 3600)
+            self.assertEqual(srv.reload_snapshots(), [], 'the start-up files are not loaded twice')
+            self.assertEqual(srv.datasets['reload-a'].title, 'first')
+            d['meta']['title'] = 'second'
+            a.write_text(json.dumps(d))
+            os.utime(a, ns=(time.time_ns(), time.time_ns() + 10**9))
+            b.write_text(json.dumps(d))
+            self.assertEqual(sorted(srv.reload_snapshots()), ['reload-a', 'reload-b'])
+            self.assertEqual(srv.datasets['reload-a'].title, 'second')
+            self.assertIn('reload-b', srv.datasets)
+            a.write_text('{"broken')                       # a half-written file keeps what is served
+            os.utime(a, ns=(time.time_ns(), time.time_ns() + 2 * 10**9))
+            self.assertEqual(srv.reload_snapshots(), [])
+            self.assertEqual(srv.datasets['reload-a'].title, 'second')
+        finally:
+            srv.server_close()
 
 
 KEY = 'test-key-0123456789abcdef'
