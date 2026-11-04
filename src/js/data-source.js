@@ -97,6 +97,7 @@ function setDataMode(mode){
   if(mode===dataMode || !SOURCES[mode]) return;
   if(isTourRunning()) stopTour({restore:false});
   dataMode = mode;
+  if(!varInMode(state.variable)) state.variable = 'temp';   // satellite products are real data only
   applyModeDefaults();
   resetRange();
   if(ISO_META[state.variable]) state.isoVal = ISO_META[state.variable].def;

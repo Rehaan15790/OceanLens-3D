@@ -12,7 +12,7 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | Piece | What we used | Why |
 | --- | --- | --- |
 | 3D graphics | **three.js r128** (MIT), inlined into the page | A thin layer over WebGL: scenes, cameras, meshes, textures, lights. Pinned to one version so the file never changes under us |
-| App code | **Plain JavaScript**, 42 classic script files (about 7,100 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
+| App code | **Plain JavaScript**, 43 classic script files (about 7,300 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
 | Styling | **Plain CSS**, 9 files with design tokens in `tokens.css` | Dark theme, consistent spacing and colours, no CSS framework |
 | Charts in the panels | **HTML canvas 2D**, drawn by hand in `charts.js` | Profile, section and track charts without a chart library |
 | Build, server, pipeline, tests | **Python 3** (3.11/3.12) standard library | Runs anywhere Python does |
@@ -30,6 +30,8 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | BGC-Argo chlorophyll and oxygen | Ifremer ERDDAP, `ArgoFloats-synthetic-BGC` | ERDDAP tabledap CSV |
 | Sea floor and coast | ETOPO1 on NOAA's `upwell.pfeg.noaa.gov` ERDDAP | ERDDAP griddap CSV |
 | Cyclone track | IBTrACS v04r01 from NOAA NCEI | CSV download |
+| Satellite SST (fronts, anomaly, 1982–2025 series) | Copernicus Marine OSTIA reprocessed L4, `s3.waw3-1.cloudferro.com` (`build_products.py`) | Native NetCDF-4 in HTTPS byte ranges |
+| Satellite chlorophyll | Copernicus-GlobColour gap-free L4 daily, same object store | Native NetCDF-4 in HTTPS byte ranges |
 | Drifting buoys (the drift check) | NOAA Global Drifter Program hourly product on AOML's ERDDAP, `drifter_hourly_qc` (`build_drifters.py`) | ERDDAP tabledap CSV |
 
 ### File formats
@@ -57,6 +59,7 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | Data | `data-source.js` | One interface over the two data modes, so the rest of the app doesn't care which is active |
 | | `ocean.js` | The science: equation of state, model values at observation points, misfit statistics, heat potential |
 | | `data-synthetic.js` | Generates the synthetic ocean, floats and gliders from formulas |
+| | `products.js` | Satellite products, registered through the plugin API: chlorophyll, SST fronts, the fishing-zone indicator, the SST anomaly, and the panel card with the climate series |
 | | `data-real.js` | Decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
 | | `facts.js` | Computes every number shown in captions and panels, once |
 | 3D | `render.js` | The only file that creates three.js materials: colour conversion, palette ramps, draw order, fog, test hooks |
@@ -284,7 +287,7 @@ Three Python scripts do the work the browser can't: fetch and pack the data, ass
 - stamps the version from `VERSION`;
 - adds a strict **Content Security Policy** with a SHA-256 hash of every inline script and style, so the page refuses to run any code it didn't ship with.
 
-It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 6 MB budget (the page is about 5.45 MB with both models). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
+It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 6 MB budget (the page is about 5.7 MB with both models, the buoys and the satellite products). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
 
 ### `data-pipeline/build_snapshot.py`: making the data
 

@@ -17,7 +17,7 @@ It is a student prototype and is not affiliated with or endorsed by INCOIS or th
 
 ## Try it
 
-1. Download [`OceanLens3D.html`](https://github.com/Rehaan15790/OceanLens-3D/raw/main/OceanLens3D.html) (about 5.5 MB).
+1. Download [`OceanLens3D.html`](https://github.com/Rehaan15790/OceanLens-3D/raw/main/OceanLens3D.html) (about 5.7 MB).
 2. Double-click it. No install, no server, no internet connection.
 3. Press **Start the guided tour** for an 8-step walkthrough, or `?` for the keyboard shortcuts.
 
@@ -42,6 +42,12 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
 - **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
   with bias, RMSE and a density-inversion QC check.
 - **Cyclone analysis:** heat potential under Amphan's path before and after the storm, with IMD and JTWC winds.
+- **Fishing-zone indicator:** satellite SST fronts (OSTIA, 0.05°) and satellite chlorophyll (Copernicus-GlobColour,
+  gap-free) on each day, and the cells that show both, the two signs behind potential fishing zone advisories. A
+  teaching version of the idea, not an advisory.
+- **Climate monitoring:** the satellite SST anomaly against the 1991–2020 normal of the same day, and every year's
+  May mean since 1982 with its trend: about +0.26 °C per decade in the Bay of Bengal and +0.35 °C in the Arabian
+  Sea. The Bay was about 1 °C above normal before Amphan and below normal in its wake.
 - **Bring your own data:** drop Argo (core, B and S files), glider, ERDDAP, CF NetCDF-3 or NetCDF-4, or CSV files on
   the view. They are read in the browser, by the project's own NetCDF readers, and never uploaded.
 - **Built for sharing:** a colour-bar editor, a timeline with playback, PNG export and a guided tour.
@@ -184,7 +190,10 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
   buoys (61 releases): after 72 h the GLORYS line ends a median 31 km from the buoy and the HYCOM line 55 km, against
   about 46 km had the object stayed put. HYCOM's instantaneous analyses 3 days apart do no better than standing still
   here; GLORYS's daily means do. It is a teaching aid, not a search plan (INCOIS runs SARAT for that).
-- **Possible uses, not implemented as features:** fishing-zone advisories and climate monitoring.
+- **The fishing-zone indicator is simplified:** two thresholds on 0.5° cells (an SST front of at least 0.3 °C per
+  10 km, chlorophyll of at least 0.3 mg/m³), from gap-free satellite fields in which clouds are interpolated. It has
+  not been checked against catches or against INCOIS's own advisories.
+- **Climate monitoring covers sea-surface temperature only,** for the 8 analysis days of May each year, in two boxes.
 
 ## Data sources and citations
 

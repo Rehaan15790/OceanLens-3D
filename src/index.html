@@ -305,6 +305,7 @@
           <button type="button" id="worstFloatBtn" data-needs-shell hidden class="btn btn-block">Compare the worst-fitting float</button>
         </div>
         <p class="hint">Click a float on the map to compare it with the model. Drag to orbit, scroll to zoom.</p>
+        <div id="productCard" class="product-card" hidden></div>
         <div id="valPanel"></div>
       </section>
 
@@ -486,6 +487,11 @@
       <dd><span data-fact="drifters.drifters" data-fmt="int"></span> NOAA Global Drifter Program buoys inside the map,
         their hourly quality-controlled positions every 6 h. The drift tool is checked against them: from each buoy's
         position at an analysis, the model's line after 72 h, against where the buoy really was.</dd>
+      <dt>Satellite products</dt>
+      <dd>Sea-surface temperature from OSTIA (Copernicus Marine, 0.05° daily) and chlorophyll from
+        Copernicus-GlobColour (gap-free, 4 km daily), averaged into the same 0.5° cells: the SST fronts, the
+        fishing-zone indicator and the SST anomaly against the 1991–2020 normal of the same days, with every year's
+        mean since 1982.</dd>
       <dt>Coast and sea floor</dt>
       <dd>ETOPO1, sampled every 0.1° (now superseded by ETOPO 2022).</dd>
     </dl>
@@ -538,6 +544,8 @@
       <li data-cite="ibtracs"></li>
       <li data-cite="etopo1"></li>
       <li data-cite="gdp"></li>
+      <li data-cite="ostia"></li>
+      <li data-cite="globcolour"></li>
       <li>Methods: UNESCO EOS-80 equation of state; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test.</li>
       <li>three.js r128, MIT licence (full text in THIRD_PARTY_NOTICES.md).</li>
     </ul>
@@ -610,6 +618,7 @@
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
 <script type="application/json" id="snapshot-glorys" src="../data/amphan-2020-glorys.json" data-embed="model"></script>
 <script type="application/json" id="snapshot-drifters" src="../data/drifters-2020-05.json"></script>
+<script type="application/json" id="snapshot-products" src="../data/products-2020-05.json"></script>
 <!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element.
      They are classic scripts sharing one global scope. Code that runs while a file loads may use only what the files
      above it define; functions called later (events, updates) may use any of them. main.js comes last and boots the
@@ -627,6 +636,7 @@
 <script src="js/ocean.js"></script>
 <script src="js/data-synthetic.js"></script>
 <script src="js/data-real.js"></script>
+<script src="js/products.js"></script>
 <script src="js/facts.js"></script>
 <script src="js/render.js"></script>
 <script src="js/scene.js"></script>

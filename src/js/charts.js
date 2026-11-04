@@ -384,6 +384,7 @@ function keySpec(){
   importedLegend().forEach(r=>legend.push(r));
   const scale = c.scale || (c.editable ? state.scale : 'linear');
   if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);
+  if(VAR_META[state.variable].note) notes.unshift(VAR_META[state.variable].note);
   if(scale==='log' && !c.empty) notes.unshift('Log colour scale.');
   notes.push(`Vertical exaggeration ≈\u00a0${exaggerationRatio(state.exagg)}\u00a0:\u00a01; below 1000\u00a0m the sea floor is compressed a further\u00a012×.`);
   if(c.empty) return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale, ticks:[], ends:{min:'–', max:'–'},
@@ -394,7 +395,8 @@ function keySpec(){
       ticks:logTicks(c.min, c.max).map(v=>({v, text:logTickText(v)})),
       ends:{min:end(c.min > 0 ? c.min : c.max*1e-3), max:end(c.max)}, marks, legend, note:notes.join(' ')};
   }
-  const ticks = niceTicks(c.min, c.max), step = ticks.length > 1 ? ticks[1]-ticks[0] : 1;
+  const own = VAR_META[state.variable].ticks;       // a product's own ticks (the fishing-zone indicator counts 0, 1, 2)
+  const ticks = own && !state.customRange ? own.filter(v=>v >= c.min && v <= c.max) : niceTicks(c.min, c.max), step = ticks.length > 1 ? ticks[1]-ticks[0] : 1;
   return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale,
     ticks:ticks.map(v=>({v, text:tickText(v, step)})),
     ends:{min:endText(c.min, step), max:endText(c.max, step)}, marks, legend, note:notes.join(' ')};

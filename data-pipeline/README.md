@@ -179,3 +179,27 @@ surface drift tool (`src/js/drifters.js`).
   SVP buoy follows the current at 15 m; without its drogue the wind also moves it. 12 buoys, 752 positions, 18 kB.
 - **Tests:** `test_build_drifters.py` (parsing, the 6-hourly selection, the committed file's shape, and a byte-identical
   rebuild when the cache has the response). The comparison itself is `facts_reference.py drifter_check`.
+
+## Satellite products (`build_products.py`)
+
+    python data-pipeline/build_products.py [--fetch]         # ../data/products-2020-05.json
+
+writes the satellite fields behind the fishing-zone indicator and the climate view (`src/js/products.js`), on the
+app grid and the 8 analysis days:
+
+- **SST** from OSTIA (Copernicus Marine `SST_GLO_SST_L4_REP_OBSERVATIONS_010_011`, reprocessed L4, 0.05° daily):
+  each 0.5° cell the mean of the pixels inside it.
+- **Front strength:** the gradient of the 0.05° field by central differences (°C per km), and in each cell the 90th
+  percentile of the pixel gradients (where at least a quarter are defined), so a narrow front inside a cell shows.
+- **Climatology:** the mean of the same calendar day over 1991–2020 (30 days per analysis day).
+- **Series:** every year 1982–2025, the mean over the 8 days in a Bay of Bengal box (8–21°N, 80.5–92°E) and an
+  Arabian Sea box (8–22°N, 61–77°E).
+- **Chlorophyll-a** from Copernicus-GlobColour (`OCEANCOLOUR_GLO_BGC_L4_MY_009_104`, gap-free multi-sensor 4 km
+  daily): each cell the geometric mean of its pixels (where at least a quarter are defined).
+
+The native NetCDF-4 files (16 MB a day for OSTIA, 94 MB for GlobColour, global) are read in HTTPS byte ranges by
+`nc4.py`, only the parts over the map, through the same cache and manifest as the snapshot: 352 OSTIA days and 8
+GlobColour days, about 800 MB of cache under `cache/ostia/` and `cache/globcolour/`, 3 minutes on a fast link. The
+same cache gives a byte-identical file (181 kB). `test_build_products.py` tests the gradient, the cell statistics and
+the packing, and rebuilds the committed file when the cache is there. `facts_reference.py product_facts` recomputes
+every number the app quotes from it.

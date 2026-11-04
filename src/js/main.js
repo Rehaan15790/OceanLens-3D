@@ -66,6 +66,7 @@ function fullUpdate(){
   if(section){ buildSection(); if(state.panel==='section') drawSectionPanel(); }
   if(drift){ computeDrift(); buildDrift(); if(state.panel==='drift') renderDriftPanel(); }
   renderValidation();
+  renderProductCard();
 }
 // the exaggeration fast path: geometry that depends on the vertical scale, no recolouring
 function applyDepthScale(){
