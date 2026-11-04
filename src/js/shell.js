@@ -113,7 +113,8 @@ const shell = (()=>{
 
   // citations come with the data (meta.citations, written by the pipeline), from every model's snapshot and the buoys
   function fillCitations(){
-    const list = REAL_MODELS.flatMap(m=>m.data().meta.citations || []).concat(DRIFTERS ? [DRIFTERS.meta.citation] : []);
+    const list = REAL_MODELS.flatMap(m=>m.data().meta.citations || []).concat(DRIFTERS ? [DRIFTERS.meta.citation] : [],
+      PRODUCTS ? PRODUCTS.meta.citations : []);
     document.querySelectorAll('[data-cite]').forEach(el=>{
       const c = list.find(x=>x.id===el.dataset.cite);
       el.textContent = c ? c.text : '';

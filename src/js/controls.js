@@ -109,7 +109,7 @@ function resetRange(){
   applyViewRange();
 }
 function setVariable(v){
-  if(!VAR_META[v]) return;
+  if(!VAR_META[v] || !varInMode(v)) return;
   state.variable = v;
   if(ISO_MODES.includes(state.mode) && !ISO_META[v]) state.mode = 'surface';
   resetRange();
@@ -197,13 +197,13 @@ function setShowAllImported(on){ setOverlay('showAllImported', on); }
 // state -> every control (pressed, hidden, values, aria); requestUpdate() runs it
 function syncControls(){
   const tchp = is2D(state.variable), src = dataSource();
-  ui.varPills.querySelectorAll('.pill').forEach(b=>setPressed(b, b.dataset.v===state.variable));
+  ui.varPills.querySelectorAll('.pill').forEach(b=>{ setPressed(b, b.dataset.v===state.variable); b.hidden = !varInMode(b.dataset.v); });
   ui.modePills.querySelectorAll('.pill').forEach(b=>{
     setPressed(b, b.dataset.m===state.mode);
     b.disabled = ISO_MODES.includes(b.dataset.m) && !ISO_META[state.variable];
   });
   ui.modeGrp.hidden = tchp;
-  ui.tchpNote.hidden = !tchp;
+  ui.tchpNote.hidden = state.variable!=='tchp';     // other map products explain themselves in the key
   ui.depthGrp.hidden = tchp || state.mode!=='slice';
   ui.isoGrp.hidden = !isoMode();
   ui.depthSlider.max = DEPTHS.length-1;

@@ -635,6 +635,36 @@ class RealMode(Controls, AppTestCase):
         self.assertNoProblems()
 
 
+    def test_satellite_products_by_click(self):
+        if not self.js("typeof PRODUCTS !== 'undefined' && !!PRODUCTS"):
+            self.skipTest('this build has no satellite products')
+        self.js('__ol.actions.setTime(4)')
+        for v in ('schl', 'front', 'pfz', 'ssta'):
+            self.assertTrue(self.visible(f'#varPills .pill[data-v="{v}"]'), v)
+        self.pill('v', 'pfz')
+        self.assertEqual(self.js('__ol.state.variable'), 'pfz')
+        self.assertEqual(self.js("document.getElementById('keyTitle').textContent"), 'Fishing-zone indicator (signs)')
+        ticks = self.js("Array.from(document.querySelectorAll('#keyTicks span')).map(e=>e.textContent)")
+        self.assertEqual(sorted(set(ticks)), ['0', '1', '2'], 'whole signs only')
+        card = self.js("document.getElementById('productCard').textContent")
+        both = self.js('__ol.facts().real.products.fishing[4].both')
+        self.assertIn(f'{both} of', card)
+        self.assertFalse(self.visible('#tchpNote'), 'the cyclone-heat note is for cyclone heat potential only')
+        self.pill('v', 'ssta')
+        card = self.js("document.getElementById('productCard').textContent")
+        trend = self.js('__ol.facts().real.products.series.bay.trendPerDecade')
+        self.assertIn(f'{trend:+.2f}'.replace('-', '\u2212') + ' °C per decade', card)
+        self.assertTrue(self.visible('#seriesChart'))
+        # the products are real data only: the demo hides them and falls back to temperature
+        self.js("__ol.actions.setDataMode('synth')")
+        self.assertEqual(self.js('__ol.state.variable'), 'temp')
+        self.assertFalse(self.visible('#varPills .pill[data-v="pfz"]'))
+        self.assertFalse(self.visible('#productCard'))
+        self.js("__ol.actions.setDataMode('real')")
+        self.pill('v', 'temp')
+        self.assertNoProblems()
+
+
 class SyntheticMode(Controls, AppTestCase):
     data_mode = 'synth'
 

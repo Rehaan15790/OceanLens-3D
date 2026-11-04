@@ -183,6 +183,54 @@ def drifter_check(s, path=None):
     return {'drifters': len(used), 'releases': releases, 'byHours': out}
 
 
+FRONT_MIN, CHL_MIN = 0.03, 0.3       # products.js: an SST front (deg C/km) and chlorophyll-rich water (mg/m3)
+
+
+def product_facts(s, path=None):
+    """The satellite product numbers, as products.js productFacts: per analysis, the sea nodes (not land by ETOPO)
+    showing both fishing signs and the nodes where both are known; the mean SST anomaly of each box's nodes; for each
+    box's yearly series, the least-squares trend per decade, the 1991-2020 mean, 2020 against it and its rank."""
+    path = path or os.path.join(HERE, '..', 'data', 'products-2020-05.json')
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding='utf-8') as f:
+        d = json.load(f)
+    m = d['meta']
+    shape = (len(m['times']), m['nlat'], m['nlon'])
+
+    def dec(key):
+        off, sc = m['quant'][key]
+        q = np.frombuffer(base64.b64decode(d[key]), '<i2').astype(float).reshape(shape)
+        return np.where(q == m['missing'], np.nan, off + q * sc)
+    sst, clim, chl, front = dec('sst'), dec('clim'), dec('chl'), dec('front')
+    land = np.array([[s.cell_median(i, j) > 0 for j in range(m['nlon'])] for i in range(m['nlat'])])
+    lats = m['lat0'] + m['step'] * np.arange(m['nlat'])
+    lons = m['lon0'] + m['step'] * np.arange(m['nlon'])
+    S = d['series']
+    out = {'fishing': [], 'anomaly': [], 'series': {}}
+    for t in range(shape[0]):
+        known = np.isfinite(front[t]) & np.isfinite(chl[t]) & ~land
+        both = known & (front[t] >= FRONT_MIN) & (chl[t] >= CHL_MIN)
+        out['fishing'].append({'both': int(both.sum()), 'known': int(known.sum())})
+        row = {}
+        for name, box in S['boxes'].items():
+            inside = ((lats[:, None] >= box['lat'][0] - 1e-9) & (lats[:, None] <= box['lat'][1] + 1e-9) &
+                      (lons[None, :] >= box['lon'][0] - 1e-9) & (lons[None, :] <= box['lon'][1] + 1e-9))
+            a = (sst[t] - clim[t])[inside]
+            a = a[np.isfinite(a)]
+            row[name] = round(float(a.mean()), 4) if a.size else None
+        out['anomaly'].append(row)
+    yrs = np.array(S['years'], float)
+    for name in S['boxes']:
+        y = np.array(S[name], float)
+        normal = float(y[(yrs >= 1991) & (yrs <= 2020)].mean())
+        i20 = S['years'].index(2020)
+        out['series'][name] = {'trendPerDecade': round(10 * float(np.polyfit(yrs, y, 1)[0]), 4), 'normal': round(normal, 4),
+                               'case': float(y[i20]), 'caseAnomaly': round(float(y[i20] - normal), 4),
+                               'caseRank': int((y > y[i20]).sum()) + 1, 'years': len(y)}
+    return out
+
+
 def rho_eos80(S, T):
     """UNESCO EOS-80 density at one atmosphere (kg/m3), as ocean.js seawaterDensity."""
     rw = (999.842594 + 6.793952e-2 * T - 9.095290e-3 * T ** 2 + 1.001685e-4 * T ** 3 - 1.120083e-6 * T ** 4
@@ -453,6 +501,7 @@ def comparison_and_rest(s, F):
                        'deepRmse': {'median': round(float(np.median(deep)), 3), 'min': min(deep), 'max': max(deep)}
                        if deep else None}
     F['drifters'] = drifter_check(s)
+    F['products'] = product_facts(s)
     F['view'] = {'exaggerationPerSlider': round(KM_PER_DEG * 1000 / SCALE_XZ * DEPTH_SCALE, 2),
                  'deepCompression': round(1 / DEEP_COMPRESSION, 2)}
     return F
@@ -462,7 +511,8 @@ def comparison_and_rest(s, F):
 TOL = {'lat': 0.001, 'lon': 0.001, 'heatBefore': 0.05, 'heatAfter': 0.05, 'sstP25': 0.005, 't1000Mean': 0.005,
        'd26P10': 0.2, 'd26P90': 0.2, 'salMedian': 0.005, 'v': 0.005, 'sstBefore': 0.01, 'sstAfter': 0.01,
        'cooling': 0.01, 'd26Before': 0.2, 'd26After': 0.2, 'bias': 0.005, 'rmse': 0.005, 'median': 0.005,
-       'min': 0.005, 'max': 0.005, 'leadDays': 0.01, 'km': 0.1, 'stillKm': 0.01, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01}
+       'min': 0.005, 'max': 0.005, 'leadDays': 0.01, 'km': 0.1, 'stillKm': 0.01, 'trendPerDecade': 0.001,
+       'normal': 0.001, 'case': 0.001, 'caseAnomaly': 0.001, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01, 'bay': 0.002, 'arabian': 0.002}
 
 
 def expected(F):
@@ -479,7 +529,7 @@ def expected(F):
         elif x is not None and not isinstance(x, bool):
             out['real' + path] = {'value': x, 'tol': TOL.get(leaf, 0) if not isinstance(x, str) else 0,
                                   'how': 'data-pipeline/facts_reference.py'}
-    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'drifters', 'view'):
+    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'drifters', 'products', 'view'):
         if F.get(k) is not None:
             walk(F[k], '.' + k, k)
     return out

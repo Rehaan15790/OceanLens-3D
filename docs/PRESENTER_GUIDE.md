@@ -149,6 +149,18 @@ Press **Drift** (bottom of the 3D view) or `T`, then click the sea. An object is
 - The check over all 12 buoys (61 releases) is in the panel's last paragraph: after 72 h, GLORYS ends a median 31 km from the buoy, HYCOM 55 km, and standing still 46 km. HYCOM's snapshots 3 days apart miss the day-to-day changes; GLORYS's daily means average them.
 - Say the limits before a judge does: current only (no wind, so no leeway for a life raft or a person in the water), currents 3 days apart. A teaching aid, not INCOIS's SARAT.
 
+### Satellite products (real mode)
+
+Four more buttons under Variable, real data only (the demo hides them). All are surface maps from satellites, on the
+same 0.5° cells, for the same 8 days.
+
+| Button | What it shows | What to say |
+| --- | --- | --- |
+| Satellite chlorophyll | Copernicus-GlobColour gap-free chlorophyll (mg/m³, log scale) | Plankton at the surface: high along the coasts and river mouths, low in the open Bay. Gap-free: clouds are filled by interpolation |
+| SST fronts | How fast OSTIA's 0.05° sea-surface temperature changes, the strongest tenth in each cell (°C per 10 km) | Fronts are where warm and cold water meet |
+| Fishing-zone indicator | 0, 1 or 2 signs: a front of at least 0.3 °C/10 km, and chlorophyll of at least 0.3 mg/m³ | The two signs behind INCOIS's potential fishing zone advisories. The panel counts the cells with both. Say it is a teaching version, not an advisory |
+| SST anomaly | The day's OSTIA SST minus the 1991–2020 mean of the same day (°C) | 13 May: the Bay about 1 °C above normal under Amphan's path; 19 May: below normal in the cold wake. The panel adds every May since 1982: +0.26 °C per decade in the Bay, +0.35 °C in the Arabian Sea, where 2020 was the 2nd warmest of 44 years |
+
 ### The Amphan story (real mode)
 
 These are the numbers the app computes; the tour captions show them live.
@@ -381,7 +393,8 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Why no chlorophyll map in real mode? | Neither model has chlorophyll (GLORYS's biogeochemistry product is not used). The 36 BGC-Argo profiles are shown instead; synthetic mode draws a field. |
 | Does it work on INCOIS or Copernicus data? | Copernicus, yes: GLORYS (`GLOBAL_MULTIYEAR_PHY_001_030`) is the second model, read from the native files over HTTPS without an account, only the parts over this map. The INCOIS LAS has not been tried: it could not be reached when we checked. |
 | Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. Checked against 12 real drifting buoys: after 72 h GLORYS ends a median 31 km from the buoy, HYCOM 55 km, standing still 46 km. Current only (no wind, so no leeway): a teaching aid, not SARAT. |
-| Fisheries? | Not implemented: there is no PFZ, SST-front or chlorophyll field product. Listed as a possible use. |
+| Fisheries? | The Fishing-zone indicator: satellite SST fronts and satellite chlorophyll on each day, and the cells showing both, the two signs behind PFZ advisories. A teaching version with fixed thresholds, not INCOIS's method, and not checked against catches. |
+| Climate? | SST anomaly: the day against its 1991–2020 normal, and every May since 1982: the Bay of Bengal warms about 0.26 °C per decade, the Arabian Sea 0.35 °C. |
 | How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 322 automated tests run in a headless browser and on GitHub Actions. |
 | How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, with API keys and rate limits, and streams model files on the case's grid into the 3D view; the plugin API adds sensors and ML products. Production would add scheduled ingestion, user accounts and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
