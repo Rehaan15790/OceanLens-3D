@@ -367,7 +367,7 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Question | Answer |
 | --- | --- |
 | Is this live or forecast data? | No. It is a hindcast of Amphan (May 2020) from 8 HYCOM analyses and the GLORYS daily means of the same days. Live ingestion is on the roadmap. |
-| Why two models, and which is right? | Neither is "right": they are two estimates of the same ocean. GLORYS fits the floats better here (temperature RMSE 0.22 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
+| Why two models, and which is right? | Neither is "right": they are two estimates of the same ocean. GLORYS fits the floats better here (temperature RMSE 0.23 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
 | Is the model validated against Argo? | It is compared, not independently validated: both models assimilate Argo, so it is a consistency check. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
 | Which browsers, and how fast? | Chrome and Edge run the automated tests; Firefox was checked by hand; Safari is untested. On a desktop GPU it is ready in under half a second and far above 60 fps; with software rendering, 18–35 fps (`docs/TESTING.md`). |
 | Can INCOIS use it? What is the licence? | The code is public to read but all rights reserved, so it cannot be copied during the competition. Using or hosting it needs written permission from the team (README, Copyright and licence). |
@@ -395,12 +395,12 @@ HYCOM: all 206 profiles, each compared with HYCOM at its own place and time (the
 | 100–300 m | +0.16 °C | 0.82 °C | 4071 | +0.07 PSU | 0.12 PSU | 3371 |
 | 300–1000 m | +0.16 °C | 0.30 °C | 5753 | +0.03 PSU | 0.06 PSU | 4776 |
 
-The same for GLORYS, each profile compared with the daily mean of its analysis date (`tests/facts_expected_glorys.json`):
+The same for GLORYS, each profile compared with the daily mean of its analysis date (`tests/facts_expected_glorys.json`). GLORYS gives potential temperature, so it is first turned into in-situ temperature at each float level's pressure (UNESCO 1983), the quantity the floats measure:
 
 | Depth | Temperature bias | Temperature RMSE | *n* | Salinity bias | Salinity RMSE | *n* |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0–100 m | −0.13 °C | 0.82 °C | 3949 | +0.05 PSU | 0.21 PSU | 3274 |
-| 100–300 m | −0.31 °C | 0.67 °C | 4071 | +0.01 PSU | 0.08 PSU | 3371 |
-| 300–1000 m | −0.01 °C | 0.22 °C | 5753 | +0.00 PSU | 0.04 PSU | 4776 |
+| 0–100 m | −0.14 °C | 0.82 °C | 3949 | +0.05 PSU | 0.21 PSU | 3274 |
+| 100–300 m | −0.34 °C | 0.68 °C | 4071 | +0.01 PSU | 0.08 PSU | 3371 |
+| 300–1000 m | −0.09 °C | 0.23 °C | 5753 | +0.00 PSU | 0.04 PSU | 4776 |
 
-The misfit is largest in the top 100 m and smallest below 300 m, in both models; GLORYS fits better at every depth. 35 of the 206 profiles have no usable salinity, so the salinity counts are lower. Because both models assimilate Argo, small numbers here show consistency, not independent skill. GLORYS gives potential temperature (about 0.1 °C cooler than in-situ at 1000 m), which is part of its small deep bias.
+The misfit is largest in the top 100 m and smallest below 300 m, in both models; GLORYS fits better at every depth. 35 of the 206 profiles have no usable salinity, so the salinity counts are lower. Because both models assimilate Argo, small numbers here show consistency, not independent skill. Compared like with like, GLORYS is about 0.09 °C warmer than the floats below 300 m; compared in potential temperature without the conversion, that bias would have looked like zero.

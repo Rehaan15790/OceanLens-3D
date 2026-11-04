@@ -51,6 +51,7 @@ class Snapshot:
         mod = A.get('model')
         self.mT = dec(mod['T'], 'temp') if mod else None
         self.mS = dec(mod['S'], 'sal') if mod else None
+        self.potential = m.get('model', {}).get('temperature') == 'potential'
         self.times = [datetime.strptime(t, '%Y-%m-%dT%H:%MZ').replace(tzinfo=timezone.utc) for t in m['times']]
 
     # ---- the app's samplers, re-implemented ----
@@ -143,6 +144,32 @@ def rho_eos80(S, T):
     A = 0.824493 - 4.0899e-3 * T + 7.6438e-5 * T ** 2 - 8.2467e-7 * T ** 3 + 5.3875e-9 * T ** 4
     B = -5.72466e-3 + 1.0227e-4 * T - 1.6546e-6 * T ** 2
     return rw + A * S + B * S ** 1.5 + 4.8314e-4 * S * S
+
+
+def pressure_dbar(z, lat):
+    """Pressure (dbar) at depth z (m), Saunders (1981), as ocean.js pressureDbar."""
+    c1 = (5.92 + 5.25 * math.sin(math.radians(lat)) ** 2) * 1e-3
+    return ((1 - c1) - np.sqrt((1 - c1) ** 2 - 8.84e-6 * np.asarray(z, float))) / 4.42e-6
+
+
+def lapse_rate(S, T, P):
+    """Adiabatic lapse rate (deg C / dbar), Bryden (1973)."""
+    ds = S - 35
+    return ((((-2.1687e-16 * T + 1.8676e-14) * T - 4.6206e-13) * P
+             + ((2.7759e-12 * T - 1.1351e-10) * ds + ((-5.4481e-14 * T + 8.733e-12) * T - 6.7795e-10) * T
+                + 1.8741e-8)) * P
+            + (-4.2393e-8 * T + 1.8932e-6) * ds + ((6.6228e-10 * T - 6.836e-8) * T + 8.5258e-6) * T + 3.5803e-5)
+
+
+def in_situ(S, theta, P, steps=64):
+    """In-situ temperature at pressure P of water with potential temperature theta (0 dbar reference): dT/dP = lapse
+    rate, integrated from the surface in `steps` midpoint steps (the app uses UNESCO 1983's one-step Runge-Kutta)."""
+    T, P = np.array(theta, float), np.asarray(P, float)
+    h = P / steps
+    for n in range(steps):
+        p = n * h
+        T = T + h * lapse_rate(S, T + 0.5 * h * lapse_rate(S, T, p), p + 0.5 * h)
+    return T
 
 
 def tchp(depths, Tc, Sc, bottom, cp=4000.0):
@@ -354,6 +381,8 @@ def comparison_and_rest(s, F):
             else:
                 mt = np.interp(s.levels, D, s.column(0, p['la'], p['lo'], t))
                 ms = np.interp(s.levels, D, s.column(1, p['la'], p['lo'], t))
+                if s.potential:            # potential temperature (GLORYS): in-situ at each level, as a float measures
+                    mt = in_situ(ms, mt, pressure_dbar(s.levels, p['la']))
             dT = (s.T[n] - mt)[ok & np.isfinite(mt)]
             zT = s.levels[ok & np.isfinite(mt)]
             recs['temp'] += list(zip(zT, dT))

@@ -20,17 +20,21 @@ function decodeModel(d){
   }
   return {meta:m, f, per, layer:m.nlat*m.nlon, wet};
 }
-// the words the app uses for a model; meta.model names it, and a snapshot without meta.model is HYCOM
+// the words the app uses for a model; meta.model names it, and a snapshot without meta.model is HYCOM.
+// temperature: 'in-situ' or 'potential' (meta.model.temperature when the snapshot says)
 const MODEL_WORDS = {
   HYCOM: {product:'HYCOM analysis', products:'analyses', label:'HYCOM', kind:'analysis',
-          data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)'},
+          data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)', temperature:'in-situ'},
   GLORYS:{product:'GLORYS daily mean', products:'daily means', label:'GLORYS', kind:'reanalysis',
-          data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means'},
+          data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means',
+          temperature:'potential'},
 };
 function modelWords(meta){
-  const short = (meta.model && meta.model.short) || 'HYCOM';
-  return Object.assign({short}, MODEL_WORDS[short] || {product:`${short} model output`, products:'model times',
-    label:short, kind:'model', data:short, note:short});
+  const mm = meta.model || {}, short = mm.short || 'HYCOM';
+  const w = Object.assign({short}, MODEL_WORDS[short] || {product:`${short} model output`, products:'model times',
+    label:short, kind:'model', data:short, note:short, temperature:'in-situ'});
+  if(mm.temperature==='potential' || mm.temperature==='in-situ') w.temperature = mm.temperature;
+  return w;
 }
 // the real-data models in the page, main snapshot first; the second is decoded the first time it is shown
 const REAL_MODELS = (()=>{
