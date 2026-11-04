@@ -59,7 +59,8 @@ RANGE_BLOCK = 1 << 18
 # replaces this list), redirects included, and a response may not exceed MAX_DOWNLOAD bytes (the largest raw file is
 # 7 MB, the HYCOM cache 43 MB; the GLORYS ranges add about 220 MB in pieces of 1.4 MB or less).
 DEFAULT_HOSTS = frozenset({'tds.hycom.org', 'erddap.ifremer.fr', 'upwell.pfeg.noaa.gov', 'www.ncei.noaa.gov',
-                           's3.waw3-1.cloudferro.com', 'erddap.aoml.noaa.gov'})   # the last: build_drifters.py
+                           's3.waw3-1.cloudferro.com', 'erddap.aoml.noaa.gov',   # build_drifters.py
+                           'coastwatch.pfeg.noaa.gov'})                           # build_moorings.py
 MAX_DOWNLOAD = 128 * 1024 * 1024
 # the files in the original cache were downloaded on this date; later downloads record their own in manifest.json
 DEFAULT_ACCESSED = '2026-09-27'
@@ -925,12 +926,13 @@ CF_MODEL = {   # snapshot variable -> (CF standard names, common variable names)
 MAX_MODEL_TIMES = 16
 
 
-def model_from_netcdf(path, log=print):
-    """Snapshot model fields from a CF NetCDF-3 or NetCDF-4 file (model_from_dataset)."""
+def model_from_netcdf(path, log=print, engine='native'):
+    """Snapshot model fields from a CF NetCDF-3 or NetCDF-4 file (model_from_dataset), read by the project's own
+    readers or, with engine='xarray', through xarray."""
     import ncio
     with open(path, 'rb') as f:
         raw = f.read()
-    ds = ncio.read_bytes(raw)
+    ds = ncio.read_bytes(raw) if engine == 'native' else ncio.read(path, engine=engine)
     model, wet, when, info = model_from_dataset(ds, os.path.basename(path), log)
     info.update({'file': os.path.basename(path), 'sha256': sha256(raw), 'bytes': len(raw)})
     return model, wet, when, info
@@ -1212,7 +1214,7 @@ def inputs_block(F):
 
 
 def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=False, log=print, allow_hosts=None,
-          model_netcdf=None, model_source='hycom'):
+          model_netcdf=None, model_source='hycom', engine='native'):
     """The whole snapshot as a dict, and the Fetcher (for --cache-manifest). Raises CacheMiss, FetchError or
     InvariantError; main turns each into a message and an exit status."""
     F = Fetcher(cache, fetch, cafile, allow_hosts=allow_hosts)
@@ -1220,7 +1222,7 @@ def build(cache, fetch=False, cafile=None, temperature_only=False, model_at_obs=
     glorys = model_source == 'glorys' and not model_netcdf
     if model_netcdf:
         require(not model_at_obs, '--model-at-obs works with HYCOM only')
-        model, wet, times, hinfo = model_from_netcdf(model_netcdf, log)
+        model, wet, times, hinfo = model_from_netcdf(model_netcdf, log, engine)
     elif glorys:
         require(not model_at_obs, '--model-at-obs works with HYCOM only (GLORYS has daily means, no 3-hourly output)')
         model, wet, times, hinfo = fetch_glorys(F, log)
@@ -1409,6 +1411,9 @@ def main(argv=None):
     ap.add_argument('--model-netcdf', metavar='FILE',
                     help='take the model fields from a CF NetCDF-3 or NetCDF-4 file instead (Argo, bathymetry and '
                          'track still come from the cache)')
+    ap.add_argument('--engine', choices=('native', 'xarray'), default='native',
+                    help='how --model-netcdf is read: the project\'s own readers (default) or the xarray backend '
+                         '(pip install xarray scipy h5netcdf)')
     args = ap.parse_args(argv)
     if args.out is None:
         args.out = os.path.join(here, '..', 'data', 'amphan-2020-glorys.json' if args.model == 'glorys' and
@@ -1416,7 +1421,8 @@ def main(argv=None):
 
     try:
         payload, F = build(args.cache, args.fetch, args.ca_bundle, args.temperature_only, args.model_at_obs,
-                           allow_hosts=args.allow_host, model_netcdf=args.model_netcdf, model_source=args.model)
+                           allow_hosts=args.allow_host, model_netcdf=args.model_netcdf, model_source=args.model,
+                           engine=args.engine)
     except CacheMiss as e:
         print(f'error: {e} is not in the cache ({args.cache}); rerun with --fetch to download it', file=sys.stderr)
         return 2

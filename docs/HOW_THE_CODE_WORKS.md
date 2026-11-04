@@ -5,14 +5,14 @@ A walkthrough of the code, the tools behind it and how each part works. For pres
 
 ## The tech stack
 
-The whole project uses only two third-party libraries: **three.js** in the browser and **numpy** in Python. Everything else is written by hand on the browser's and Python's built-in features. That is why the app ships as one offline file.
+The whole project uses only two third-party libraries: **three.js** in the browser and **numpy** in Python. **xarray** is optional: `--engine xarray` reads model files through it in the pipeline and the server, with the same result as the project's own readers. Everything else is written by hand on the browser's and Python's built-in features. That is why the app ships as one offline file.
 
 ### Languages and libraries
 
 | Piece | What we used | Why |
 | --- | --- | --- |
 | 3D graphics | **three.js r128** (MIT), inlined into the page | A thin layer over WebGL: scenes, cameras, meshes, textures, lights. Pinned to one version so the file never changes under us |
-| App code | **Plain JavaScript**, 43 classic script files (about 7,300 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
+| App code | **Plain JavaScript**, 44 classic script files (about 7,400 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
 | Styling | **Plain CSS**, 9 files with design tokens in `tokens.css` | Dark theme, consistent spacing and colours, no CSS framework |
 | Charts in the panels | **HTML canvas 2D**, drawn by hand in `charts.js` | Profile, section and track charts without a chart library |
 | Build, server, pipeline, tests | **Python 3** (3.11/3.12) standard library | Runs anywhere Python does |
@@ -32,6 +32,7 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | Cyclone track | IBTrACS v04r01 from NOAA NCEI | CSV download |
 | Satellite SST (fronts, anomaly, 1982–2025 series) | Copernicus Marine OSTIA reprocessed L4, `s3.waw3-1.cloudferro.com` (`build_products.py`) | Native NetCDF-4 in HTTPS byte ranges |
 | Satellite chlorophyll | Copernicus-GlobColour gap-free L4 daily, same object store | Native NetCDF-4 in HTTPS byte ranges |
+| RAMA moorings | NOAA PMEL GTMBA daily means via NOAA CoastWatch's ERDDAP (`build_moorings.py`) | ERDDAP tabledap CSV |
 | Drifting buoys (the drift check) | NOAA Global Drifter Program hourly product on AOML's ERDDAP, `drifter_hourly_qc` (`build_drifters.py`) | ERDDAP tabledap CSV |
 
 ### File formats
@@ -59,6 +60,7 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | Data | `data-source.js` | One interface over the two data modes, so the rest of the app doesn't care which is active |
 | | `ocean.js` | The science: equation of state, model values at observation points, misfit statistics, heat potential |
 | | `data-synthetic.js` | Generates the synthetic ocean, floats and gliders from formulas |
+| | `moorings.js` | The RAMA moorings: one profile per mooring and analysis day through the mooring plugin, joined to the real source's instruments |
 | | `products.js` | Satellite products, registered through the plugin API: chlorophyll, SST fronts, the fishing-zone indicator, the SST anomaly, and the panel card with the climate series |
 | | `data-real.js` | Decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
 | | `facts.js` | Computes every number shown in captions and panels, once |

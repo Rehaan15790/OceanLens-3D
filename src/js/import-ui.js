@@ -204,6 +204,8 @@ const importUI = (()=>{
   // charts.js updateLegend() calls this on every update: the "Real data only" note follows the data mode
   function syncMode(){
     $('userDataMode').hidden = !$('userDataEmpty').hidden || dataMode==='real';
+    if(dataMode==='real' && MOORING_INSTS.length) $('rowOther').hidden = false;
+    else if(!api().datasets().some(ds=>Object.keys(ds.types || {}).some(t=>!['argo', 'glider'].includes(t)))) $('rowOther').hidden = true;
   }
 
   /* ---- "Your data" list ---- */
@@ -231,7 +233,7 @@ const importUI = (()=>{
     $('userDataOpts').hidden = !any;
     $('userDataMode').hidden = !any || dataMode==='real';
     const other = sets.some(ds=>Object.keys(ds.types || {}).some(t=>!['argo', 'glider'].includes(t)));
-    $('rowOther').hidden = !other;
+    $('rowOther').hidden = !other && !(dataMode==='real' && MOORING_INSTS.length);   // or the built-in moorings
     // Show all times that imports turned on goes off with the last of those datasets
     if(!autoAll.size) return;
     autoAll.forEach(id=>{ if(!sets.some(d=>d.id===id)) autoAll.delete(id); });

@@ -40,7 +40,9 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
 - **Two models:** HYCOM and the Copernicus Marine GLORYS12V1 reanalysis, the product the problem statement lists,
   switched with one click (or `M`). The fields, comparisons and every number in the tour follow the model.
 - **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
-  with bias, RMSE and a density-inversion QC check.
+  with bias, RMSE and a density-inversion QC check. Four real RAMA moorings (NOAA PMEL) in the Bay of Bengal and the
+  Arabian Sea are in the scene too: at 12°N 90°E the surface cooled 2.1 °C as Amphan passed (13 to 19 May), against
+  1.2 °C in HYCOM and 1.0 °C in GLORYS.
 - **Cyclone analysis:** heat potential under Amphan's path before and after the storm, with IMD and JTWC winds.
 - **Fishing-zone indicator:** satellite SST fronts (OSTIA, 0.05°) and satellite chlorophyll (Copernicus-GlobColour,
   gap-free) on each day, and the cells that show both, the two signs behind potential fishing zone advisories. A
@@ -112,7 +114,8 @@ and citation.
 
 The app is plain JavaScript on three.js r128, with no framework and no npm. A Python standard-library script inlines
 the code, three.js and the data snapshot into the single HTML file, with a strict Content Security Policy. The data
-pipeline, the server and the test harness are Python with numpy. The browser tests drive the built file in headless
+pipeline, the server and the test harness are Python with numpy; xarray is an optional NetCDF backend (`--engine
+xarray`). The browser tests drive the built file in headless
 Chromium through our own DevTools-protocol client.
 
 Every number the app quotes is computed from the data at run time. An independent Python script recomputes the same
@@ -180,7 +183,8 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
   own time. GLORYS gives potential temperature; the comparison turns it into in-situ temperature at each float
   level's pressure (UNESCO 1983), so both sides are the same quantity.
 - **NetCDF-4 compressed with szip or zstd** is not read; convert it (for example `nccopy -k classic`) or export CSV.
-- **The ADCP and HF radar plugins are tested on synthetic records only.**
+- **The ADCP and HF radar plugins are tested on synthetic records only** (RAMA had no ADCP data in the map in May
+  2020; the moorings' near-surface current meters are shown as current speed).
 - **Not yet connected:** the INCOIS Live Access Server and Copernicus Marine's other products (biogeochemistry,
   forecasts); scheduled Argo, BGC-Argo and glider ingestion. The server's API keys and rate limits are simple
   (shared keys, one limit per client address); TLS and user accounts belong in the institution's reverse proxy.
@@ -200,7 +204,8 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
 HYCOM GOFS 3.1 (HYCOM Consortium), GLORYS12V1 (E.U. Copernicus Marine Service Information,
 GLOBAL_MULTIYEAR_PHY_001_030, doi:10.48670/moi-00021), Argo (Argo GDAC, doi:10.17882/42182), ETOPO1 (NOAA NCEI, doi:10.7289/V5C8276M) and
 IBTrACS v04r01 (NOAA NCEI, doi:10.25921/82ty-9e16; winds from IMD and JTWC) and the NOAA Global Drifter Program
-hourly drifter data (doi:10.25921/x46c-3620). The sample files come from the Argo GDAC
+hourly drifter data (doi:10.25921/x46c-3620), RAMA moorings (NOAA PMEL GTMBA, McPhaden et al. 2009), and
+Copernicus Marine OSTIA SST and GlobColour chlorophyll. The sample files come from the Argo GDAC
 (its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE experiment, 2016). The full
 acknowledgements and citations are in `THIRD_PARTY_NOTICES.md`, `samples/README.md` and the app's About panel.
 

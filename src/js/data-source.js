@@ -12,7 +12,7 @@ const SOURCES = {
     sal:  (lat, lon, depth, t)=>realAt(1, lat, lon, depth, t),
     uv:   (lat, lon, depth, t)=>({u:realAt(2, lat, lon, depth, t), v:realAt(3, lat, lon, depth, t)}),
     chl:  ()=>NaN,                      // both models are physics only: no chlorophyll
-    instruments: t=>realProfiles.filter(p=>p.snap===t),
+    instruments: t=>realProfiles.filter(p=>p.snap===t).concat(mooringsAt(t)),   // Argo floats, then RAMA moorings
     fixes: ()=>REAL_TRACK,
     hasGliders: false,
 

@@ -183,6 +183,62 @@ def drifter_check(s, path=None):
     return {'drifters': len(used), 'releases': releases, 'byHours': out}
 
 
+def mooring_facts(s, path=None):
+    """The RAMA moorings against the model, as moorings.js mooringFacts: per mooring, the analyses it has (a daily mean
+    on the analysis day), temperature bias and RMSE (observed - model, at every level with a temperature that the
+    density-inversion test does not flag), and its shallowest temperature from 13 to 19 May, observed and in the
+    model (in-situ, so GLORYS is converted)."""
+    path = path or os.path.join(HERE, '..', 'data', 'moorings-2020-05.json')
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding='utf-8') as f:
+        d = json.load(f)
+    days = [t.strftime('%Y-%m-%d') for t in s.times]
+
+    def model_t(lat, lon, z, t):
+        th = s.at(0, lat, lon, z, t)
+        return float(in_situ(s.at(1, lat, lon, z, t), th, pressure_dbar(z, lat))) if s.potential else th
+    out = []
+    for m in d['moorings']:
+        dep = m['depth']
+        z = sorted(set(dep['temp']) | set(dep['sal']) | set(dep['cur']))
+        tops, diffs = {}, []
+        n_an = 0
+        for t, day in enumerate(days):
+            if day not in m['days']:
+                continue
+            i = m['days'].index(day)
+
+            def col(arr, ds):
+                return np.array([np.nan if zz not in ds or arr[ds.index(zz)] is None else arr[ds.index(zz)] for zz in z], float)
+            T, S = col(m['temp'][i], dep['temp']), col(m['sal'][i], dep['sal'])
+            U, V = col(m['u'][i], dep['cur']), col(m['v'][i], dep['cur'])
+            if not (np.isfinite(T) | np.isfinite(S) | np.isfinite(np.hypot(U, V))).any():
+                continue
+            n_an += 1
+            D = np.where(np.isfinite(T) & np.isfinite(S), rho_eos80(S, T) - 1000, np.nan)
+            flag = inversion_flags(D)
+            for k, zz in enumerate(z):
+                if np.isfinite(T[k]) and not flag[k]:
+                    diffs.append(T[k] - model_t(m['lat'], m['lon'], zz, t))
+            k0 = next((k for k in range(len(z)) if np.isfinite(T[k])), None)
+            if k0 is not None:
+                tops[t] = (z[k0], T[k0])
+        a, b = tops.get(days.index('2020-05-13')), tops.get(days.index('2020-05-19'))
+        change = None
+        if a and b and a[0] == b[0]:
+            zz = a[0]
+            change = {'depth': zz, 'observed': round(b[1] - a[1], 4),
+                      'model': round(model_t(m['lat'], m['lon'], zz, days.index('2020-05-19'))
+                                     - model_t(m['lat'], m['lon'], zz, days.index('2020-05-13')), 4)}
+        dd = np.array(diffs)
+        out.append({'station': m['station'], 'analyses': n_an,
+                    'tempBias': round(float(dd.mean()), 4) if dd.size else None,
+                    'tempRmse': round(float(np.sqrt((dd ** 2).mean())), 4) if dd.size else None,
+                    'n': int(dd.size), 'change': change})
+    return out
+
+
 FRONT_MIN, CHL_MIN = 0.03, 0.3       # products.js: an SST front (deg C/km) and chlorophyll-rich water (mg/m3)
 
 
@@ -502,6 +558,7 @@ def comparison_and_rest(s, F):
                        if deep else None}
     F['drifters'] = drifter_check(s)
     F['products'] = product_facts(s)
+    F['moorings'] = mooring_facts(s)
     F['view'] = {'exaggerationPerSlider': round(KM_PER_DEG * 1000 / SCALE_XZ * DEPTH_SCALE, 2),
                  'deepCompression': round(1 / DEEP_COMPRESSION, 2)}
     return F
@@ -512,7 +569,8 @@ TOL = {'lat': 0.001, 'lon': 0.001, 'heatBefore': 0.05, 'heatAfter': 0.05, 'sstP2
        'd26P10': 0.2, 'd26P90': 0.2, 'salMedian': 0.005, 'v': 0.005, 'sstBefore': 0.01, 'sstAfter': 0.01,
        'cooling': 0.01, 'd26Before': 0.2, 'd26After': 0.2, 'bias': 0.005, 'rmse': 0.005, 'median': 0.005,
        'min': 0.005, 'max': 0.005, 'leadDays': 0.01, 'km': 0.1, 'stillKm': 0.01, 'trendPerDecade': 0.001,
-       'normal': 0.001, 'case': 0.001, 'caseAnomaly': 0.001, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01, 'bay': 0.002, 'arabian': 0.002}
+       'normal': 0.001, 'case': 0.001, 'caseAnomaly': 0.001, 'tempBias': 0.002, 'tempRmse': 0.002,
+       'observed': 0.002, 'model': 0.002, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01, 'bay': 0.002, 'arabian': 0.002}
 
 
 def expected(F):
@@ -529,7 +587,7 @@ def expected(F):
         elif x is not None and not isinstance(x, bool):
             out['real' + path] = {'value': x, 'tol': TOL.get(leaf, 0) if not isinstance(x, str) else 0,
                                   'how': 'data-pipeline/facts_reference.py'}
-    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'drifters', 'products', 'view'):
+    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'drifters', 'products', 'moorings', 'view'):
         if F.get(k) is not None:
             walk(F[k], '.' + k, k)
     return out

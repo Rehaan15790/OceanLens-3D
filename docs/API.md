@@ -163,5 +163,7 @@ http://localhost:8080/opendap/amphan-2020.dods?temp[0][0][0:32][0:62],time
   pydap and Panoply have not been tried.
 - No WMS `GetLegendGraphic`, no reprojection beyond `CRS:84`/`EPSG:4326`, no WCS `rangeSubset`, scaling or
   POST/SOAP bindings, no WCS-T.
+- Model files are read by the project's own readers; `--engine xarray` reads them through xarray instead (`pip
+  install xarray scipy h5netcdf`), with the same result.
 - No TLS or user accounts of its own: put it behind the institution's reverse proxy (`docs/DEPLOY.md`, section 4).
   Its API keys are shared secrets, and its rate limit is one bucket per client address.
