@@ -59,7 +59,7 @@ RANGE_BLOCK = 1 << 18
 # replaces this list), redirects included, and a response may not exceed MAX_DOWNLOAD bytes (the largest raw file is
 # 7 MB, the HYCOM cache 43 MB; the GLORYS ranges add about 220 MB in pieces of 1.4 MB or less).
 DEFAULT_HOSTS = frozenset({'tds.hycom.org', 'erddap.ifremer.fr', 'upwell.pfeg.noaa.gov', 'www.ncei.noaa.gov',
-                           's3.waw3-1.cloudferro.com', 'erddap.aoml.noaa.gov',   # build_drifters.py
+                           's3.waw3-1.cloudferro.com', 'erddap.aoml.noaa.gov',   # build_extras.py
                            'coastwatch.pfeg.noaa.gov',                            # build_moorings.py
                            'las.incois.gov.in'})                                  # build_las.py
 MAX_DOWNLOAD = 128 * 1024 * 1024

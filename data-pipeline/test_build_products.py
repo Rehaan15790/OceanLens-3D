@@ -13,17 +13,6 @@ DATA = os.path.join(HERE, '..', 'data', 'products-2020-05.json')
 
 
 class Science(unittest.TestCase):
-    def test_gradient_of_a_linear_field(self):
-        lat, lon = np.arange(10, 11.01, 0.05), np.arange(80, 81.01, 0.05)
-        T = 28 + 0.1 * (lon[None, :] - 80) + 0 * lat[:, None]       # 0.1 deg C per degree of longitude, east
-        g = P.gradient_km(T, lat, lon)
-        want = 0.1 / (111.195 * np.cos(np.radians(lat)))
-        self.assertTrue(np.isnan(g[0]).all() and np.isnan(g[:, -1]).all(), 'the edge has no central difference')
-        np.testing.assert_allclose(g[1:-1, 1:-1], np.repeat(want[1:-1, None], len(lon) - 2, 1), rtol=1e-9)
-        T[5, 5] = np.nan                                               # a land pixel: its neighbours have no gradient
-        g = P.gradient_km(T, lat, lon)
-        self.assertTrue(np.isnan(g[4, 5]) and np.isnan(g[5, 6]) and np.isfinite(g[4, 4]))
-
     def test_cells_need_a_quarter_of_their_pixels(self):
         a = np.arange(16, dtype=float).reshape(4, 4)
         rows, cols = [np.array([0, 1]), np.array([2, 3])], [np.array([0, 1]), np.array([2, 3])]
@@ -43,11 +32,11 @@ class Science(unittest.TestCase):
         self.assertEqual(P.box_mean(f, P.BOXES['bay']), 3.0)
 
     def test_pack_round_trip_and_missing(self):
-        a = np.array([0.0, 0.123456, np.nan, 99.0])                   # 99 C/km clips to the packing's top
-        q = np.frombuffer(base64.b64decode(P.pack(a, 'front')), '<i2')
-        off, sc = P.QUANT['front']
+        a = np.array([0.0, 0.123456, np.nan, 99.0])                   # 99 mg/m3 clips to the packing's top
+        q = np.frombuffer(base64.b64decode(P.pack(a, 'chl')), '<i2')
+        off, sc = P.QUANT['chl']
         self.assertEqual(q[2], P.MISSING)
-        self.assertAlmostEqual(off + q[1] * sc, 0.12346, places=5)
+        self.assertAlmostEqual(off + q[1] * sc, 0.123, places=6)
         self.assertEqual(q[3], 32767)
 
     def test_the_days_are_the_analysis_days(self):
@@ -67,7 +56,7 @@ class Committed(unittest.TestCase):
         d, m = self.d, self.d['meta']
         n = len(m['times']) * m['nlat'] * m['nlon']
         self.assertEqual(m['times'], [t.strftime('%Y-%m-%dT%H:%MZ') for t in B.SNAPS])
-        for k in ('sst', 'clim', 'chl', 'front'):
+        for k in ('sst', 'clim', 'chl'):
             q = np.frombuffer(base64.b64decode(d[k]), '<i2')
             self.assertEqual(q.size, n, k)
             self.assertGreater((q != m['missing']).mean(), 0.5, k)

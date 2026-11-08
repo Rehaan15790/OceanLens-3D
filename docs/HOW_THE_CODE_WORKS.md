@@ -32,10 +32,11 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | Cyclone track | IBTrACS v04r01 from NOAA NCEI | CSV download |
 | Third model: IGORA (INCOIS) | INCOIS Live Access Server, `las.incois.gov.in`, product server `Data_Extract_netCDF` (`build_las.py`) | LAS XML request, NetCDF-3 out |
 | Today's forecast (a served case) | Copernicus Marine `GLOBAL_ANALYSISFORECAST_PHY_001_024`, latest daily run, same object store (`build_forecast.py`) | Native NetCDF-4 in HTTPS byte ranges |
-| Satellite SST (fronts, anomaly, 1982–2025 series) | Copernicus Marine OSTIA reprocessed L4, `s3.waw3-1.cloudferro.com` (`build_products.py`) | Native NetCDF-4 in HTTPS byte ranges |
+| Satellite SST (anomaly, 1982–2025 series) | Copernicus Marine OSTIA reprocessed L4, `s3.waw3-1.cloudferro.com` (`build_products.py`) | Native NetCDF-4 in HTTPS byte ranges |
 | Satellite chlorophyll | Copernicus-GlobColour gap-free L4 daily, same object store | Native NetCDF-4 in HTTPS byte ranges |
 | RAMA moorings | NOAA PMEL GTMBA daily means via NOAA CoastWatch's ERDDAP (`build_moorings.py`) | ERDDAP tabledap CSV |
-| Drifting buoys (the drift check) | NOAA Global Drifter Program hourly product on AOML's ERDDAP, `drifter_hourly_qc` (`build_drifters.py`) | ERDDAP tabledap CSV |
+| Drift currents, drifting buoys (the drift check) | HYCOM and GLORYS surface currents as above; NOAA Global Drifter Program hourly product on AOML's ERDDAP, `drifter_hourly_qc` (`build_extras.py`) | As above; ERDDAP tabledap CSV |
+| Satellite SST and SST fronts | NOAA OISST v2.1 from the INCOIS Live Access Server, product server `Data_Extract_netCDF` (`build_extras.py`) | LAS XML request, NetCDF-3 out |
 
 ### File formats
 
@@ -63,7 +64,7 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | | `ocean.js` | The science: equation of state, model values at observation points, misfit statistics, heat potential |
 | | `data-synthetic.js` | Generates the synthetic ocean, floats and gliders from formulas |
 | | `moorings.js` | The RAMA moorings: one profile per mooring and analysis day through the mooring plugin, joined to the real source's instruments |
-| | `products.js` | Satellite products, registered through the plugin API: chlorophyll, SST fronts, the fishing-zone indicator, the SST anomaly, and the panel card with the climate series |
+| | `products.js` | Satellite products, registered through the plugin API: chlorophyll, the fishing-zone indicator (with the SST fronts of `plugins/satellite.js`), the SST anomaly, and the panel card with the climate series |
 | | `data-real.js` | The case in the page (`CASE`: Amphan, or a forecast the server put in its place: the header, context line, track, floats and tour follow it); decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
 | | `facts.js` | Computes every number shown in captions and panels, once |
 | 3D | `render.js` | The only file that creates three.js materials: colour conversion, palette ramps, draw order, fog, test hooks |
@@ -75,14 +76,13 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | | `isosurface.js` | Marching cubes for the Isosurface (3D) view |
 | | `track.js` | The cyclone track line and fixes |
 | | `section.js` | Vertical sections: drawing the line, cutting the curtain |
-| | `drift.js` | The surface drift tool: the trajectory model, its 3D drawing and its panel |
-| | `drifters.js` | Real drifting buoys: their tracks, a drift released from one, and the check of the drift tool against them |
+| | `drift.js` | The surface drift tool: the trajectory model, the NOAA buoys, its 3D drawing and its panel |
 | | `flow.js` | Current arrows and streaks |
 | | `markers.js` | Float, glider and instrument markers, their depth stems, and clicking them |
 | UI | `charts.js` | Canvas charts in the panels and the colour key |
 | | `controls.js` | Wires buttons and sliders to **actions**, the only code allowed to change `state` |
 | | `timeline.js` | The time slider and playback |
-| | `tour-steps.js`, `tour.js` | The eight tour steps and the code that runs them |
+| | `tour-steps.js`, `tour.js` | The nine tour steps and the code that runs them |
 | | `panels.js` | Right-hand panels: validation summary, float profile, track details (the drift panel is in `drift.js`) |
 | Import | `import/csv.js` | Parses comma, tab or semicolon text and guesses which column is which |
 | | `import/netcdf3.js` | A NetCDF-3 reader written from scratch |
@@ -226,17 +226,20 @@ This follows GODAE Class 4 verification, the standard way forecast centres compa
 
 ### Surface drift
 
-`driftRun` in `drift.js` moves an object with the surface current (the model's top level):
+`driftRun` in `drift.js` moves an object with a model's surface current:
 
-- **Time:** the current at any moment is linear in time between the two analyses around it (3 days apart).
+- **Currents:** real data take each model's surface currents from the extras (`surfCurrents` in `data-real.js`): HYCOM every 6 hours, GLORYS daily means. Without the extras, and in the synthetic demo, the fields at the analyses. The current at any moment is linear in time between the two steps around it.
 - **Steps:** one hour each, by the midpoint rule: the current at the start moves the object half a step, and the current there (half an hour on) moves it the whole step. A metre is 1/111 320 of a degree of latitude, and of longitude divided by cos(latitude). Back in time, the steps run the other way.
-- **Spread:** member 0 is the central drift with no spread. 200 more start within about 1 km and each step add a random walk, σ = √(2·K·dt) per axis with K = 1000 m²/s, standing for eddies smaller than the 0.5° grid. The generator is seeded from the start point and time, so the same click gives the same drift.
+- **Spread:** member 0 is the central drift with no spread. 200 more start within about 1 km and each step add a random walk, σ = √(2·K·dt) per axis. K comes from the drift check for each model (HYCOM 3000, GLORYS 1000 m²/s; 1000 in the demo). The generator is seeded from the start point and time, so the same click gives the same drift.
 - **Search area:** at every 24 h the members still afloat give a mean and a covariance; the ellipse with semi-axes 2.146 × the square roots of its eigenvalues holds 90 % of a two-dimensional normal.
-- **Ends:** a member stops when it reaches land (ETOPO1 above 0 m, amber) or leaves the map.
+- **Ends:** a member stops when it reaches land (ETOPO1 above 0 m, a cross) or leaves the map.
+- **Buoys:** the NOAA drifters with a position at the analysis on screen are drawn while the tool is in use; a drift released from one also takes the buoy's own hourly track for the same hours.
 
-With more models in the page, the central drift is also run with each other model (dashed, then dotted) (`realAtIn` reads any decoded model), from the same point and time. `facts_reference.py` (`drift_path`) recomputes the central drift with numpy, and the tests compare the two hour by hour.
+With more models in the page, the central drift is also run with each other model (dashed, then dotted) from the same point and time; IGORA's monthly mean gives the same currents every day. `data-pipeline/drift_reference.py` is the same model in numpy: `facts_reference.drift_path` uses it, the tests compare it with the app hour by hour, and `drift_validation.py` runs it against the buoys (see `data-pipeline/README.md`).
 
-**The check against real buoys** (`drifters.js`). `data/drifters-2020-05.json` holds 12 NOAA Global Drifter Program buoys in the map, every 6 h. `drifterCheck` starts the central drift from each buoy's position at each analysis that has 72 h of currents after it (61 releases), and at 24, 48 and 72 h measures the great-circle distance to where the buoy really was, and to where it started (the object standing still, the simplest forecast to beat). The medians go into `facts().real.drifters`, per model; `facts_reference.py` (`drifter_check`) recomputes them and the facts test compares. After 72 h: GLORYS 31 km, HYCOM 55 km, standing still about 46 km. Clicking a buoy (the Drifting buoys overlay) releases a drift there; `drifterTruth` adds the buoy's real path and the distances to the panel.
+### Satellite SST and SST fronts
+
+`src/js/plugins/satellite.js` registers two map products through the plugin API from the extras' NOAA OISST (from the INCOIS LAS): the mean of the 0.25° cells around each map point, and front strength: one 3 × 3 median pass, then the Sobel gradient in °C per 100 km where the whole 3 × 3 neighbourhood is sea, the strongest of the cells around each map point. `facts_reference.satellite_maps` recomputes both. `satelliteSstStats` in `panels.js` gives the model's surface temperature minus the satellite's over the map for the comparison panel.
 
 ### Other derived quantities
 
@@ -291,7 +294,7 @@ Three Python scripts do the work the browser can't: fetch and pack the data, ass
 - stamps the version from `VERSION`;
 - adds a strict **Content Security Policy** with a SHA-256 hash of every inline script and style, so the page refuses to run any code it didn't ship with.
 
-It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 6 MB budget (the page is about 6.0 MB with three models, the buoys, moorings and satellite products; IGORA's one monthly field is embedded once). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
+It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 7.5 MB budget (the page is about 7.4 MB with three models, the extras, moorings and satellite products; IGORA's one monthly field is embedded once). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
 
 ### `data-pipeline/build_snapshot.py`: making the data
 
@@ -303,6 +306,10 @@ It refuses to build if a file is missing from the manifest or listed twice, the 
 6. **Pack** everything as 16-bit integers in base64 and write the JSON. The same cache always gives a byte-identical file, which a test checks.
 
 With `--model glorys` step 2 reads Copernicus Marine GLORYS12V1 instead, for `data/amphan-2020-glorys.json`. The native daily-mean files are global NetCDF-4, 1.34 GB each; a bucket listing names them, and `nc4.py` reads each file's metadata, its chunk index and only the deflated chunks over the map, through a `RangeSource` that sends HTTPS `Range` requests via the same cached, hashed fetcher. The 21 levels around the app depths are kept, then gridded and interpolated by the same `model_from_dataset` that `--model-netcdf` uses. Each build also reads two `thetao` chunks from Copernicus's ARCO Zarr store (Blosc/LZ4, decoded by `blosc.py`) and stops unless they equal the NetCDF-4 values exactly.
+
+### `data-pipeline/build_extras.py` and `drift_validation.py`: the extras and the drift check
+
+`build_extras.py` writes `data/amphan-2020-extras.json` through the same cache: HYCOM surface currents every 6 hours and GLORYS daily-mean surface currents for 4–25 May (gridded exactly as the snapshots, and equal to them at the analyses), the NOAA Global Drifter Program's hourly positions from AOML ERDDAP, and NOAA OISST asked from the **INCOIS Live Access Server** as NetCDF extracts (LAS answers a product request with a redirect to the file it wrote; the pipeline fetches that file over https and caches it with its SHA-256). `drift_validation.py` runs `drift_reference.py` (the drift tool's model in numpy) from every buoy each day and writes `data/drift-validation.json`. build.py embeds both files as JSON tags; the page parses them only when a feature needs them.
 
 `ncio.py` is our own NetCDF-3 reader and writer in numpy (classic, 64-bit offset, CDF-5), with CF helpers for scale factors, fill values and time units; it hands NetCDF-4 files to `nc4.py` and returns the same dict. `nc4.py` reads only the chunks a selection touches, from bytes, a file or byte ranges; `nc4_fixtures.py` writes NetCDF-4 test files in both HDF5 layouts. `make_palettes.py` generates the colour ramps in `palettes.js`.
 
@@ -338,13 +345,13 @@ The tests click and type in a real browser, exactly as a user would, against the
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| unit | 18 + 150 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for each of the three models; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
-| server | 51 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
-| smoke | 58 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
-| extend | 21 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
-| tour | 8 | All eight steps in both modes; captions of 35 words or fewer under every model; a monthly mean claims no cold wake; timing races |
+| unit | 22 + 160 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for each of the three models; the satellite maps and the drift tool against their recomputations; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
+| server | 52 | REST, WMS, WCS, OPeNDAP answers and errors; server models, API keys, rate limits and reloads; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
+| smoke | 60 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, drifts from the sea and from buoys, satellite maps and products, moorings, timeline, the colour key, export |
+| extend | 21 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog, server models and the forecast case |
+| tour | 8 | All nine steps in both modes; captions of 35 words or fewer under every model; a monthly mean claims no cold wake; timing races |
 | robust | 6 | No WebGL, a lost graphics context and recovery, no memory growth over 20 rebuilds |
-| security | 38 | Hostile file contents stay text, damaged files and crafted NetCDF-4 end with a message instead of hanging, the Content Security Policy is enforced and never violated |
+| security | 39 | Hostile file contents stay text, damaged files and crafted NetCDF-4 end with a message instead of hanging, the Content Security Policy is enforced and never violated |
 | render | 9 | Pixel checks: a slice matches its colour bar, streaks stand out, floats aren't cut by the sea surface, the seabed is closed |
 | a11y | 6 | Accessible names, keyboard reach, text at least 12 px, WCAG AA contrast |
 | sizes | 3 | Six screen sizes from 1024×768 to 1920×1080 plus the phone notice |

@@ -28,7 +28,7 @@ function snapshotApp(){
   TOUR_KEYS.forEach(k=>{ s[k] = state[k]; });
   return {state:s, camera:{az:camAz, el:camEl, r:camR, target:camTarget.clone()},
           section: section ? {a:section.a.slice(), b:section.b.slice(), name:section.name} : null,
-          drift: drift ? {lat:drift.lat, lon:drift.lon, hours:drift.hours, dir:drift.dir} : null,
+          drift: drift ? {lat:drift.lat, lon:drift.lon, hours:drift.hours, dir:drift.dir, buoy:drift.buoy} : null,
           panel: state.panel, profile: profileState.current};
 }
 function restoreApp(saved){
@@ -80,11 +80,17 @@ function applyTourStep(){
   ui.tourText.textContent = step.caption;
   ui.tourBack.disabled = tour.idx===0;
   ui.tourNext.textContent = tour.idx===n-1 ? 'Finish' : 'Next';
-  tourRotating = !step.section;   // hold the camera still while it faces a section
+  tourRotating = !step.section && !step.drift;   // hold the camera still while it faces a section or a drift
   if(step.section) tourLater(()=>showSectionPreset(step.section), 900);
   // open the float that disagrees most with the model, so the comparison has something to show
   if(step.openFloat) tourLater(()=>{ if(openWorstFloat()) document.getElementById('profChart')?.scrollIntoView({block:'nearest'}); }, 1400);
   if(step.openTrack) tourLater(openTrack, 1400);
+  // the drift step: from a real buoy (real data), else from the open Bay of Bengal; the camera eases in over it
+  if(step.drift) tourLater(()=>{
+    const b = dataMode==='real' ? tourDriftBuoy() : null;
+    if(b) startDriftFromBuoy(b.index, {hours:72, dir:1, fromTour:true});
+    else startDrift(15, 88, {hours:72, dir:1, fromTour:true});
+  }, 900);
   if(tour.autoplay && !tourPaused) tour.timer = setTimeout(()=>nextTourStep(true), readingTime(step.caption));
 }
 

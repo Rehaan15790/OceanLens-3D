@@ -15,8 +15,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 PY = sys.executable
 
-# well-known token formats and private keys (no generic "password=" rule: it would flag test fixtures)
-SECRETS = re.compile(r'AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|xox[abprs]-[A-Za-z0-9-]{10,}|'
+# well-known token formats and private keys (no generic "password=" rule: it would flag test fixtures); an AWS key id
+# stands alone, so one inside a longer base64 run (packed data in data/*.json) is not one
+SECRETS = re.compile(r'(?<![A-Za-z0-9+/])AKIA[0-9A-Z]{16}(?![A-Za-z0-9+/])|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,}|xox[abprs]-[A-Za-z0-9-]{10,}|'
                      r'AIza[0-9A-Za-z_-]{35}|(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{32,}|glpat-[A-Za-z0-9_-]{20,}|npm_[A-Za-z0-9]{36}|'
                      r'-----BEGIN [A-Z ]*PRIVATE KEY-----')
 # the vendored library must stay byte-for-byte the official three@0.128.0 (npm build/three.min.js and LICENSE)

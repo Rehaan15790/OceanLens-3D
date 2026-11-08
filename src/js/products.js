@@ -1,16 +1,17 @@
 /* ============================================================
    SATELLITE PRODUCTS (real data): a fishing-zone indicator and climate monitoring
    #snapshot-products (data-pipeline/build_products.py) holds, on the app grid and the 8 analysis days: OSTIA
-   sea-surface temperature and its front strength, the 1991–2020 normal of the same days, Copernicus-GlobColour
-   chlorophyll, and each year's mean SST 1982–2025 in a Bay of Bengal and an Arabian Sea box.
+   sea-surface temperature, the 1991–2020 normal of the same days, Copernicus-GlobColour chlorophyll, and each year's
+   mean SST 1982–2025 in a Bay of Bengal and an Arabian Sea box.
    They are registered through the plugin API as 2D products, shown in real-data mode only:
-   - Satellite chlorophyll, and SST fronts (the strongest tenth of the 0.05° gradients in each 0.5° cell).
-   - Fishing-zone indicator: how many of two signs fish gather by a cell shows on the day, an SST front and water
-     rich in chlorophyll. The idea behind INCOIS's potential fishing zone advisories, simplified; not an advisory.
+   - Satellite chlorophyll.
+   - Fishing-zone indicator: how many of two signs fish gather by a cell shows on the day, an SST front (the SST fronts
+     map of plugins/satellite.js, from NOAA OISST on the INCOIS LAS) and water rich in chlorophyll. The idea behind
+     INCOIS's potential fishing zone advisories, simplified; not an advisory.
    - SST anomaly: the day against its 1991–2020 normal. The panel adds the yearly series and its trend.
    productFacts() computes every number shown; data-pipeline/facts_reference.py product_facts recomputes them.
    ============================================================ */
-const FRONT_MIN = 0.03;      // °C per km: a front on the 0.05° OSTIA field
+const FRONT_MIN = 0.75;      // °C per 100 km: a front on the SST fronts map (about its strongest 15 % in May 2020)
 const CHL_MIN = 0.3;         // mg/m³: water richer in plankton than the open Bay and Arabian Sea in May
 const PRODUCTS = (()=>{
   const el = document.getElementById('snapshot-products');
@@ -27,7 +28,7 @@ const PRODUCTS = (()=>{
     for(let n=0;n<q.length;n++) f[n] = q[n]===m.missing ? NaN : off + q[n]*sc;
     return f;
   };
-  return {meta:m, sst:dec('sst'), clim:dec('clim'), chl:dec('chl'), front:dec('front'), series:d.series, layer:m.nlat*m.nlon};
+  return {meta:m, sst:dec('sst'), clim:dec('clim'), chl:dec('chl'), series:d.series, layer:m.nlat*m.nlon};
 })();
 // a product's value at analysis t and map point n (gridPts order), null where it has none
 function productAt(key, t, n){
@@ -38,9 +39,14 @@ function sstAnomalyAt(t, n){
   const a = productAt('sst', t, n), b = productAt('clim', t, n);
   return a===null || b===null ? null : a - b;
 }
+// the SST front strength (°C per 100 km) at analysis t and map point n, null without it (no satellite data there)
+function frontAt(t, n){
+  const g = VAR_META.front ? field2dGrid('front', t) : null, v = g ? g[n] : null;
+  return Number.isFinite(v) ? v : null;
+}
 // 0, 1 or 2: an SST front, and water rich in chlorophyll; null where either is unknown
 function fishingScore(t, n){
-  const f = productAt('front', t, n), c = productAt('chl', t, n);
+  const f = frontAt(t, n), c = productAt('chl', t, n);
   return f===null || c===null ? null : (f >= FRONT_MIN ? 1 : 0) + (c >= CHL_MIN ? 1 : 0);
 }
 // map points inside a box {lat:[s, n], lon:[w, e]} (the pipeline's boxes, edges included)
@@ -82,20 +88,25 @@ if(PRODUCTS){
   const grid = fn=>t=>gridPts.map((p, n)=>dataMode!=='real' || gridLand[n] ? null : fn(t, n));
   registerProduct('schl', {label:'Satellite chlorophyll', unit:'mg/m³', palette:PALETTES.chlorophyll ? 'chlorophyll' : 'speed',
     scale:'log', range:[0.05, 5], modes:['real'], grid:grid((t, n)=>productAt('chl', t, n)),
-    note:'Copernicus-GlobColour gap-free satellite chlorophyll at the surface (clouds filled by interpolation), each cell the geometric mean of its 4 km pixels.'});
-  registerProduct('front', {label:'SST fronts', unit:'°C/10 km', palette:'heat', range:[0, 0.8], modes:['real'],
-    grid:grid((t, n)=>{ const v = productAt('front', t, n); return v===null ? null : 10*v; }),
-    note:'How fast the satellite sea-surface temperature (OSTIA, 0.05°) changes across a front: the strongest tenth in each cell.'});
+    about:'Chlorophyll at the sea surface seen from space: Copernicus-GlobColour gap-free daily chlorophyll (clouds filled '+
+          'by interpolation), each 0.5° cell the geometric mean of its 4 km pixels. More chlorophyll means more plankton.',
+    keyNote:'Copernicus-GlobColour gap-free daily chlorophyll, 4 km pixels averaged to 0.5°.'});
   registerProduct('pfz', {label:'Fishing-zone indicator', unit:'signs', palette:'heat', range:[0, 2], ticks:[0, 1, 2], modes:['real'],
     grid:grid(fishingScore),
-    note:`Fish gather where warm and cold water meet in water rich in plankton. 2 = an SST front (at least ${fmt.dp(10*FRONT_MIN, 1)} °C/10 km) `+
-      `and chlorophyll of at least ${CHL_MIN} mg/m³; 1 = one of them. A teaching version of the idea, not a potential fishing zone advisory (INCOIS issues those).`});
+    about:`Fish gather where warm and cold water meet in water rich in plankton. 2 = an SST front (at least `+
+          `${fmt.dp(FRONT_MIN, 2)} °C per 100 km on the SST fronts map) and chlorophyll of at least ${CHL_MIN} mg/m³; 1 = one `+
+          `of them. A teaching version of the idea, not a potential fishing zone advisory (INCOIS issues those).`,
+    keyNote:()=>VAR_META.front && field2dGrid('front', state.time).some(v=>v!==null) ? 'SST fronts (NOAA OISST, INCOIS LAS) and '+
+      'Copernicus-GlobColour chlorophyll.' : 'Needs the satellite SST (data/amphan-2020-extras.json) for its fronts: chlorophyll alone here.'});
   registerProduct('ssta', {label:'SST anomaly', unit:'°C', palette:'temperature', range:[-2, 2], modes:['real'],
     grid:grid(sstAnomalyAt),
-    note:'Satellite sea-surface temperature (OSTIA) against the 1991–2020 mean of the same day: dark is cooler than normal, bright warmer.'});
+    about:'Satellite sea-surface temperature (OSTIA) against the 1991–2020 mean of the same day: dark is cooler than '+
+          'normal, bright warmer. The panel adds the same days of every May since 1982.',
+    keyNote:'OSTIA SST minus its 1991–2020 normal of the same day.'});
 }
 // true when variable key can be shown in data mode `mode` (satellite products: real data only)
-function varInMode(key, mode = dataMode){ const v = VAR_META[key]; return !!v && (!v.modes || v.modes.includes(mode)); }
+function varInMode(key, mode = dataMode){ const v = VAR_META[key];
+  return !!v && (!v.modes || v.modes.includes(mode)) && (typeof v.available!=='function' || !!v.available()); }
 
 /* ---- the right panel's card for a satellite product: what it shows today, and the climate series ---- */
 // an element with text; parts are strings (text) or [string] (bold), so nothing from the data is ever read as HTML
@@ -111,7 +122,7 @@ function el$(tag, cls, parts){
 function renderProductCard(){
   const el = document.getElementById('productCard');
   if(!el) return;
-  const key = state.variable, on = !!PRODUCTS && dataMode==='real' && ['schl', 'front', 'pfz', 'ssta'].includes(key);
+  const key = state.variable, on = !!PRODUCTS && dataMode==='real' && ['pfz', 'ssta'].includes(key);
   el.hidden = !on;
   if(!on){ el.replaceChildren(); return; }
   const F = facts().real.products, t = state.time, day = timeLabel(t);

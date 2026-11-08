@@ -98,89 +98,18 @@ class Snapshot:
         return np.array([self.at(vi, lat, lon, d, t) for d in self.depths])
 
 
-def drift_path(s, lat, lon, t0, hours, direction):
-    """The central surface drift, as drift.js driftRun's member 0 (no spread, no random walk): surface u and v linear
-    in time between the analyses, one-hour midpoint steps (forward, direction 1, or back, -1), ending at the coast
-    (ETOPO bilinear above 0 m) or at the map's edge. Returns [(hour, lat, lon)], the end ('ashore', 'edge' or None)."""
-    m, M = s.m, 111320.0
-    clock = [t.timestamp() * 1000 for t in s.times]
-    lat1, lon1 = m['lat0'] + (s.nlat - 1) * m['step'], m['lon0'] + (s.nlon - 1) * m['step']
-
-    def uv(la, lo, ms):
-        k = 0
-        while k < len(clock) - 2 and ms > clock[k + 1]:
-            k += 1
-        w = max(0.0, min(1.0, (ms - clock[k]) / (clock[k + 1] - clock[k])))
-        u0, v0 = s.at(2, la, lo, 0, k), s.at(3, la, lo, 0, k)
-        if w == 0:
-            return u0, v0
-        u1, v1 = s.at(2, la, lo, 0, k + 1), s.at(3, la, lo, 0, k + 1)
-        return u0 + (u1 - u0) * w, v0 + (v1 - v0) * w
-
-    dt, cos = 3600.0, lambda a: math.cos(math.radians(a))
-    path, la, lo, end = [(0, lat, lon)], lat, lon, None
-    for step in range(1, int(round(hours)) + 1):
-        ms = clock[t0] + direction * (step - 1) * dt * 1000
-        k = direction * dt / M
-        u, v = uv(la, lo, ms)
-        mla, mlo = la + 0.5 * v * k, lo + 0.5 * u * k / cos(la)
-        u, v = uv(mla, mlo, ms + direction * dt * 500)
-        nla, nlo = la + v * k, lo + u * k / cos(mla)
-        if not (m['lat0'] <= nla <= lat1 and m['lon0'] <= nlo <= lon1):
-            end = 'edge'
-            break
-        la, lo = nla, nlo
-        path.append((step, la, lo))
-        if s.land(la, lo):
-            end = 'ashore'
-            break
-    return path, end
-
-
-def haversine_km(a, b):
-    """Great-circle distance (km) between (lat, lon) points, as geo.js haversineKm (radius 6371 km)."""
-    la1, la2 = math.radians(a[0]), math.radians(b[0])
-    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin(math.radians(b[1] - a[1]) / 2) ** 2
-    return 2 * 6371 * math.asin(math.sqrt(h))
-
-
-def drifter_check(s, path=None):
-    """The drift tool against real drifters, as drifters.js drifterCheck: from every drifter position at an analysis
-    with 72 h of currents after it (on the sea), the central drift; at 24, 48 and 72 h, the distance from the drifter's
-    real position (km), and the distance had the object stayed put (stillKm); medians, and the count of pairs.
-    None without the drifter file."""
-    path = path or os.path.join(HERE, '..', 'data', 'drifters-2020-05.json')
-    if not os.path.exists(path):
-        return None
-    with open(path, encoding='utf-8') as f:
-        D = json.load(f)
-    t0 = datetime.strptime(D['meta']['t0'], '%Y-%m-%dT%H:%MZ').replace(tzinfo=timezone.utc)
-    step = D['meta']['stepH']
-    hours, rows, used = (24, 48, 72), {24: [], 48: [], 72: []}, set()
-    releases = 0
-    for b in D['drifters']:
-        fx = {k: (la, lo) for k, la, lo in b['fixes']}
-        for t, T in enumerate(s.times):
-            k = (T - t0).total_seconds() / 3600 / step
-            if k != int(k) or int(k) not in fx or (s.times[-1] - T).total_seconds() < 72 * 3600:
-                continue
-            p0 = fx[int(k)]
-            if s.land(*p0):
-                continue
-            line, _ = drift_path(s, p0[0], p0[1], t, 72, 1)
-            releases += 1
-            used.add(b['id'])
-            for h in hours:
-                g = fx.get(int(k) + h // step)
-                if g is None or len(line) <= h:
-                    continue
-                rows[h].append((haversine_km(line[h][1:], g), haversine_km(p0, g)))
-    out = []
-    for h in hours:
-        a = np.array(rows[h])
-        out.append({'h': h, 'n': len(a), 'km': round(float(np.median(a[:, 0])), 2),
-                    'stillKm': round(float(np.median(a[:, 1])), 2)} if len(a) else {'h': h, 'n': 0})
-    return {'drifters': len(used), 'releases': releases, 'byHours': out}
+def drift_path(s, lat, lon, t0, hours, direction, extras=None, model=None):
+    """The central surface drift, as drift.js driftRun's member 0 (no spread, no random walk), from analysis t0 of
+    snapshot s: with the surface currents of `model` in `extras` (data/amphan-2020-extras.json) when given, else the
+    snapshot's own surface fields at its analyses (data-pipeline/drift_reference.py does the stepping). Returns
+    [(hour, lat, lon)] as the app's path (the step that reaches land included, the one that would leave the map not)
+    and the end ('ashore', 'edge' or None)."""
+    import drift_reference as dr
+    cur = dr.Currents.from_extras(extras, model) if extras else dr.Currents.from_snapshot(s)
+    la, lo, end, end_h = dr.run(cur, dr.Land(s), [lat], [lon], s.times[t0].timestamp() * 1000, hours, direction)
+    last = int(end_h[0]) - (1 if end[0] == 2 else 0)
+    path = [(h, float(la[h, 0]), float(lo[h, 0])) for h in range(last + 1)]
+    return path, {0: None, 1: 'ashore', 2: 'edge'}[int(end[0])]
 
 
 def mooring_facts(s, path=None):
@@ -239,12 +168,13 @@ def mooring_facts(s, path=None):
     return out
 
 
-FRONT_MIN, CHL_MIN = 0.03, 0.3       # products.js: an SST front (deg C/km) and chlorophyll-rich water (mg/m3)
+FRONT_MIN, CHL_MIN = 0.75, 0.3       # products.js: an SST front (deg C per 100 km) and chlorophyll-rich water (mg/m3)
 
 
-def product_facts(s, path=None):
+def product_facts(s, path=None, extras_path=None):
     """The satellite product numbers, as products.js productFacts: per analysis, the sea nodes (not land by ETOPO)
-    showing both fishing signs and the nodes where both are known; the mean SST anomaly of each box's nodes; for each
+    showing both fishing signs (a front on the SST fronts map of satellite_maps, from the extras, and chlorophyll from
+    the products file) and the nodes where both are known; the mean SST anomaly of each box's nodes; for each
     box's yearly series, the least-squares trend per decade, the 1991-2020 mean, 2020 against it and its rank."""
     path = path or os.path.join(HERE, '..', 'data', 'products-2020-05.json')
     if not os.path.exists(path):
@@ -258,7 +188,18 @@ def product_facts(s, path=None):
         off, sc = m['quant'][key]
         q = np.frombuffer(base64.b64decode(d[key]), '<i2').astype(float).reshape(shape)
         return np.where(q == m['missing'], np.nan, off + q * sc)
-    sst, clim, chl, front = dec('sst'), dec('clim'), dec('chl'), dec('front')
+    sst, clim, chl = dec('sst'), dec('clim'), dec('chl')
+    extras_path = extras_path or os.path.join(HERE, '..', 'data', 'amphan-2020-extras.json')
+    extras = None
+    if os.path.exists(extras_path):
+        with open(extras_path, encoding='utf-8') as f:
+            extras = json.load(f)
+    front = np.full(shape, np.nan)
+    for t in range(shape[0]):
+        if extras and extras['sat']['sst']['times'] == m['times']:
+            for (i, j), (_, fr) in satellite_maps(s, extras, t).items():
+                if fr is not None:
+                    front[t, i, j] = fr
     land = np.array([[s.cell_median(i, j) > 0 for j in range(m['nlon'])] for i in range(m['nlat'])])
     lats = m['lat0'] + m['step'] * np.arange(m['nlat'])
     lons = m['lon0'] + m['step'] * np.arange(m['nlon'])
@@ -556,7 +497,6 @@ def comparison_and_rest(s, F):
     F['comparison'] = {'matchedInTime': matched, 'bands': comp, 'worst': worst,
                        'deepRmse': {'median': round(float(np.median(deep)), 3), 'min': min(deep), 'max': max(deep)}
                        if deep else None}
-    F['drifters'] = drifter_check(s)
     F['products'] = product_facts(s)
     F['moorings'] = mooring_facts(s)
     F['view'] = {'exaggerationPerSlider': round(KM_PER_DEG * 1000 / SCALE_XZ * DEPTH_SCALE, 2),
@@ -587,9 +527,51 @@ def expected(F):
         elif x is not None and not isinstance(x, bool):
             out['real' + path] = {'value': x, 'tol': TOL.get(leaf, 0) if not isinstance(x, str) else 0,
                                   'how': 'data-pipeline/facts_reference.py'}
-    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'drifters', 'products', 'moorings', 'view'):
+    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'products', 'moorings', 'view'):
         if F.get(k) is not None:
             walk(F[k], '.' + k, k)
+    return out
+
+
+def satellite_maps(snap, extras, t):
+    """The app's satellite SST and SST-front map points at analysis t (src/js/plugins/satellite.js), recomputed:
+    {(i, j): (sst, front)} for every sea map point with data. Fronts: a 3 x 3 median filter on the 0.25 deg OISST,
+    then the Sobel gradient in C per 100 km where the whole 3 x 3 neighbourhood is sea; a map point takes the mean SST
+    and the strongest front of the 0.25 deg cells within a quarter degree of it."""
+    s = extras['sat']['sst']
+    g = s['grid']
+    q = np.frombuffer(base64.b64decode(s['data']), '<i2').astype('f8').reshape(len(s['times']), g['nlat'], g['nlon'])
+    T = np.where(q[t] == extras['meta']['missing'], np.nan, s['quant'][0] + q[t] * s['quant'][1]).astype('f4').astype('f8')
+    ny, nx = T.shape
+    M = np.full_like(T, np.nan)
+    for i in range(1, ny - 1):
+        for j in range(1, nx - 1):
+            w = T[i - 1:i + 2, j - 1:j + 2]
+            if np.isfinite(w).all():
+                M[i, j] = np.median(w)
+    G = np.full_like(T, np.nan)
+    km = 111.32 * g['step']
+    for i in range(1, ny - 1):
+        for j in range(1, nx - 1):
+            w = M[i - 1:i + 2, j - 1:j + 2]
+            if not np.isfinite(w).all():
+                continue
+            gx = (w[0, 2] + 2 * w[1, 2] + w[2, 2] - w[0, 0] - 2 * w[1, 0] - w[2, 0]) / 8
+            gy = (w[2, 0] + 2 * w[2, 1] + w[2, 2] - w[0, 0] - 2 * w[0, 1] - w[0, 2]) / 8
+            dx = km * math.cos(math.radians(g['lat0'] + i * g['step']))
+            G[i, j] = math.hypot(gx / dx, gy / km) * 100
+    m = snap.m
+    out = {}
+    for i in range(m['nlat']):
+        for j in range(m['nlon']):
+            lat, lon = m['lat0'] + i * m['step'], m['lon0'] + j * m['step']
+            if snap.cell_median(i, j) > 0:
+                continue
+            ci = [k for k in range(ny) if abs(g['lat0'] + k * g['step'] - lat) < 0.25]
+            cj = [k for k in range(nx) if abs(g['lon0'] + k * g['step'] - lon) < 0.25]
+            sv = [T[a, b] for a in ci for b in cj if np.isfinite(T[a, b])]
+            fv = [G[a, b] for a in ci for b in cj if np.isfinite(G[a, b])]
+            out[(i, j)] = (float(np.mean(sv)) if sv else None, float(max(fv)) if fv else None)
     return out
 
 

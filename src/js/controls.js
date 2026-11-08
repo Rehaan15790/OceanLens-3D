@@ -8,7 +8,7 @@ const MODES = ['surface', 'layers', 'slice', 'iso', 'iso3d'];
 const OVERLAYS = {swArgo:'showArgo', swMisfit:'colorMisfit', swGlider:'showGlider', swTrack:'showTrack',
                   swFlow:'showFlow', swGrid:'showGrid'};
 // switches ux may add; wired only when present
-const OPTIONAL_OVERLAYS = {swOther:'showOther', swAllImported:'showAllImported', swDrifters:'showDrifters'};
+const OPTIONAL_OVERLAYS = {swOther:'showOther', swAllImported:'showAllImported'};
 const optUi = Object.fromEntries(['scaleToggle', ...Object.keys(OPTIONAL_OVERLAYS)].map(id=>[id, document.getElementById(id)]));
 const ISO_MODES = ['iso', 'iso3d'];
 
@@ -165,13 +165,11 @@ function setOverlay(key, on){
   if(!Object.values(OVERLAYS).includes(key) && !Object.values(OPTIONAL_OVERLAYS).includes(key)) return;
   state[key] = !!on;
   if(key==='colorMisfit' && on) state.showArgo = true;   // misfit colours need the floats on
-  requestUpdate(['colorMisfit', 'showTrack', 'showAllImported', 'showDrifters'].includes(key) ? 'full' : 'overlay');
+  requestUpdate(['colorMisfit', 'showTrack', 'showAllImported'].includes(key) ? 'full' : 'overlay');
 }
 // the overlays that change visibility only
 function applyOverlays(){
   applyMarkerVisibility();
-  refreshDrifters();
-  applyDrifterVisibility();
   updateLegend();
   applyFlowVisibility();
   graticule.visible = state.showGrid; boxLines.visible = state.showGrid;
@@ -203,7 +201,14 @@ function syncControls(){
     b.disabled = ISO_MODES.includes(b.dataset.m) && !ISO_META[state.variable];
   });
   ui.modeGrp.hidden = tchp;
-  ui.tchpNote.hidden = state.variable!=='tchp';     // other map products explain themselves in the key
+  ui.tchpNote.hidden = !tchp;
+  // a map variable explains itself (its registered `about`); the track details belong to the heat map
+  if(tchp){
+    const about = VAR_META[state.variable].about;
+    document.getElementById('mapAbout').textContent = (typeof about==='function' ? about() : about) || '';
+    const tb = document.getElementById('trackDetailsBtn');
+    if(tb) tb.hidden = state.variable!=='tchp';
+  }
   ui.depthGrp.hidden = tchp || state.mode!=='slice';
   ui.isoGrp.hidden = !isoMode();
   ui.depthSlider.max = DEPTHS.length-1;
@@ -226,8 +231,6 @@ function syncControls(){
   const gliders = src.hasGliders || (dataMode==='real' && importedInsts.some(i=>i.kind==='glider'));
   ui.swGlider.disabled = !gliders;
   ui.rowGlider.title = gliders ? '' : 'No glider data in this data set';
-  const rd = document.getElementById('rowDrifters');
-  if(rd) rd.hidden = dataMode!=='real' || !DRIFTERS;
   updateColorbarUI();
   ui.dataToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.mode===dataMode));
   ui.modelGrp.hidden = dataMode!=='real' || ui.modelToggle.children.length < 2;
@@ -237,7 +240,7 @@ function syncControls(){
   ui.secTrackBtn.disabled = currentTrack().length===0;
   // another case (a forecast) has no storm track, no floats and no tour: their buttons go
   const noTrack = currentTrack().length===0, show = (id, on)=>{ const e = document.getElementById(id); if(e) e.hidden = !on; };
-  show('openTrackBtn', !noTrack); show('trackDetailsBtn', !noTrack); show('rowTrack', !noTrack);
+  show('openTrackBtn', !noTrack); show('trackDetailsBtn', !noTrack && state.variable==='tchp'); show('rowTrack', !noTrack);
   show('startTourBtn', CASE.tour); ui.presentBtn.hidden = !CASE.tour;
   const floats = dataMode!=='real' || realProfiles.length > 0;
   show('worstFloatBtn', floats);

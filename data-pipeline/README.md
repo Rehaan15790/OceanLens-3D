@@ -75,7 +75,8 @@ A single JSON object, ASCII only, with `</` escaped so it can sit inside a `<scr
   deficiency.
 - `facts_reference.py` recomputes every number the app quotes (track, path heat, basin statistics, section,
   model–Argo comparison) straight from the data file, so tests can check the app's `facts.js` against an
-  independent implementation. `drift_path` does the same for the drift tool's central surface drift.
+  independent implementation. `drift_path` does the same for the drift tool's central surface drift, and
+  `satellite_maps` for the satellite SST and SST-front maps.
 
 ## Citations
 
@@ -150,6 +151,51 @@ global field (the GLORYS route above reads global files in ranges instead). The 
 same snapshot fields as NetCDF-3 and as NetCDF-4 (`test_nc4.ModelThroughNetcdf4`). The INCOIS LAS has its own route,
 `build_las.py` (below).
 
+## The extras: drift currents, drifting buoys and satellite SST (`build_extras.py`)
+
+    python data-pipeline/build_extras.py [--fetch] [--check] [--cache-manifest data-pipeline/CACHE_MANIFEST_EXTRAS.txt]
+
+writes `data/amphan-2020-extras.json`, which the page embeds beside the snapshots and reads only when a feature needs it:
+
+- **surf.hycom:** HYCOM GOFS 3.1 surface currents every 6 hours, 4 May 12Z to 25 May 12Z (85 times), sampled and averaged
+  onto the 0.5° grid exactly as the snapshot is. At the 8 analyses they equal the snapshot's surface currents (a test
+  checks this). The snapshot alone, 3 days apart, cannot follow currents that turn in about two days.
+- **surf.glorys:** GLORYS12V1 daily-mean surface currents (0.49 m) for the 22 days, read from the native NetCDF-4 files
+  in byte ranges like the GLORYS snapshot; they equal it at the 8 analysis days.
+- **drifters:** NOAA Global Drifter Program hourly positions inside the map, 4–25 May (AOML ERDDAP,
+  `drifter_hourly_qc`), with each buoy's drogue-loss date: 12 buoys, 4469 positions.
+- **sat.sst:** NOAA OISST v2.1 (AVHRR only) daily SST at 0.25°, the 8 analysis days, from the **INCOIS Live Access
+  Server**. For each day the script sends LAS a product request (`Data_Extract_netCDF`, the map box, the day at 12:00),
+  takes the file LAS writes (LAS answers with a redirect to http://; the same file is fetched over https from the same
+  host) and checks its grid, its day and its units. LAS writes land as 0 with no missing value, so 0 becomes land.
+  LAS's OPeNDAP (F-TDS) endpoints answered with empty bodies on 20 October 2026.
+
+Every file goes through the same cache and manifest as `build_snapshot.py`; `CACHE_MANIFEST_EXTRAS.txt` lists the 494
+files (133 MB, the GLORYS ranges shared with the snapshot included). The same cache always gives a byte-identical file.
+
+## The drift check (`drift_reference.py`, `drift_validation.py`)
+
+`drift_reference.py` is the drift tool's trajectory model in numpy (currents bilinear in space and linear in time,
+one-hour midpoint steps, an optional random walk, stops at the coast and the map's edge), written from its description
+and compared with the app hour by hour in the tests. `drift_validation.py` uses it:
+
+    python data-pipeline/drift_validation.py [--check]
+
+For every buoy with a whole 72 h of hourly positions, a drift is released from it at 12:00 UTC each day, 4–22 May, and
+compared with where the buoy went: the separation after 24, 48 and 72 h, a baseline that assumes the buoy stays put,
+the Liu and Weisberg (2011) skill score, and for several K the share of buoys inside the ensemble's 90 % ellipse.
+Results in `data/drift-validation.json` (drogued buoys, 116 releases from 10 buoys):
+
+| Currents | Median separation 24 / 48 / 72 h | Closer than staying put (72 h) | Skill | Inside the 90 % ellipse |
+|---|---|---|---|---|
+| GLORYS daily (the app) | 11 / 20 / 28 km | 80 % | 0.50 | 85 % at K = 1000 m²/s |
+| HYCOM every 6 h (the app) | 17 / 33 / 47 km | 52 % | 0.21 | 91 % at K = 3000 m²/s |
+| GLORYS, 8 analyses only | 12 / 20 / 29 km | 72 % | 0.46 | |
+| HYCOM, 8 analyses only | 21 / 38 / 54 km | 47 % | 0.07 | |
+
+A buoy that stayed put would be a median 46 km off after 72 h. The app's K for each model is the tested value whose
+coverage came closest to 90 %. The buoys' drogues hang at 15 m; the currents are the models' top levels.
+
 ## The NetCDF readers
 
 - `ncio.py` is the numpy NetCDF classic reader/writer (CDF-1, CDF-2, CDF-5) used here and by `server/serve.py`.
@@ -165,22 +211,6 @@ same snapshot fields as NetCDF-3 and as NetCDF-4 (`test_nc4.ModelThroughNetcdf4`
   HDF5 specification, which is why the tests also read a real GLORYS file and check it against the Zarr store.
 - `blosc.py` decodes Blosc frames with LZ4 and byte shuffle (the Copernicus ARCO Zarr chunks), for that check.
 
-## Drifting buoys (`build_drifters.py`)
-
-    python data-pipeline/build_drifters.py [--fetch]          # ../data/drifters-2020-05.json
-
-writes the NOAA Global Drifter Program buoys inside the map during the Amphan window, which the app uses to check its
-surface drift tool (`src/js/drifters.js`).
-
-- **Source:** the GDP hourly product (`drifter_hourly_qc`, version 2.01: quality-controlled positions, interpolated
-  to the hour; Elipot et al. 2016), one ERDDAP query on `erddap.aoml.noaa.gov` for 4–25 May 2020 inside the map. The
-  response goes through the same cache and manifest as the snapshot (`cache/drifters/gdp_hourly_2020-05.csv`, 0.6 MB).
-- **What is kept:** the positions at 00, 06, 12 and 18 UTC inside the map, from the first analysis to the last, as
-  `[step, lat, lon]` with step counting 6 h from `meta.t0`; the buoy type and the date it lost its drogue. A drogued
-  SVP buoy follows the current at 15 m; without its drogue the wind also moves it. 12 buoys, 752 positions, 18 kB.
-- **Tests:** `test_build_drifters.py` (parsing, the 6-hourly selection, the committed file's shape, and a byte-identical
-  rebuild when the cache has the response). The comparison itself is `facts_reference.py drifter_check`.
-
 ## Satellite products (`build_products.py`)
 
     python data-pipeline/build_products.py [--fetch]         # ../data/products-2020-05.json
@@ -190,20 +220,20 @@ app grid and the 8 analysis days:
 
 - **SST** from OSTIA (Copernicus Marine `SST_GLO_SST_L4_REP_OBSERVATIONS_010_011`, reprocessed L4, 0.05° daily):
   each 0.5° cell the mean of the pixels inside it.
-- **Front strength:** the gradient of the 0.05° field by central differences (°C per km), and in each cell the 90th
-  percentile of the pixel gradients (where at least a quarter are defined), so a narrow front inside a cell shows.
 - **Climatology:** the mean of the same calendar day over 1991–2020 (30 days per analysis day).
 - **Series:** every year 1982–2025, the mean over the 8 days in a Bay of Bengal box (8–21°N, 80.5–92°E) and an
   Arabian Sea box (8–22°N, 61–77°E).
 - **Chlorophyll-a** from Copernicus-GlobColour (`OCEANCOLOUR_GLO_BGC_L4_MY_009_104`, gap-free multi-sensor 4 km
   daily): each cell the geometric mean of its pixels (where at least a quarter are defined).
 
+The fronts the fishing-zone indicator pairs with chlorophyll are the app's SST fronts map (NOAA OISST from the INCOIS
+LAS, in the extras; `src/js/plugins/satellite.js`), so this file has none of its own.
+
 The native NetCDF-4 files (16 MB a day for OSTIA, 94 MB for GlobColour, global) are read in HTTPS byte ranges by
 `nc4.py`, only the parts over the map, through the same cache and manifest as the snapshot: 352 OSTIA days and 8
 GlobColour days, about 800 MB of cache under `cache/ostia/` and `cache/globcolour/`, 3 minutes on a fast link. The
-same cache gives a byte-identical file (181 kB). `test_build_products.py` tests the gradient, the cell statistics and
-the packing, and rebuilds the committed file when the cache is there. `facts_reference.py product_facts` recomputes
-every number the app quotes from it.
+same cache gives a byte-identical file (137 kB). `test_build_products.py` tests the cell statistics and the packing, and rebuilds the committed file when the cache is there. `facts_reference.py product_facts` recomputes
+every number the app quotes from it (the fishing-zone counts with the fronts of `satellite_maps`).
 
 ## RAMA moorings (`build_moorings.py`)
 

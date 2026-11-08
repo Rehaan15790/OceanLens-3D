@@ -382,11 +382,11 @@ function keySpec(){
   }
   if(dataMode==='real' && MOORING_INSTS.length && state.showOther!==false && mooringsAt(state.time).length)
     legend.push({sw:'mooring', text:'RAMA mooring'});
-  if(drifterLayerOn()) legend.push({sw:'drifter', text:'Drifting buoy (NOAA GDP); click one to drift from it'});
   importedLegend().forEach(r=>legend.push(r));
   const scale = c.scale || (c.editable ? state.scale : 'linear');
   if(state.variable==='chl' && dataSource().vars && dataSource().vars.chlKey) notes.unshift(dataSource().vars.chlKey);
-  if(VAR_META[state.variable].note) notes.unshift(VAR_META[state.variable].note);
+  const vn = VAR_META[state.variable] && VAR_META[state.variable].keyNote;   // a registered variable's own note
+  if(vn){ const t = typeof vn==='function' ? vn() : vn; if(t) notes.unshift(t); }
   if(scale==='log' && !c.empty) notes.unshift('Log colour scale.');
   notes.push(`Vertical exaggeration ≈\u00a0${exaggerationRatio(state.exagg)}\u00a0:\u00a01; below 1000\u00a0m the sea floor is compressed a further\u00a012×.`);
   if(c.empty) return {title, palette:c.palette, min:c.min, max:c.max, unit:c.unit, scale, ticks:[], ends:{min:'–', max:'–'},

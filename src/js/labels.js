@@ -70,6 +70,10 @@ function updateLabels(){
   const camKey = camera.position.toArray().map(v=>v.toFixed(3)).join(',') + rect.width + 'x' + rect.height;
   const cameraMoved = camKey !== lastLabelCamera;
   lastLabelCamera = camKey;
+  // a label whose anchor sits under the view's toolbar is hidden on screen (the PNG export, which has no toolbar, keeps it)
+  const tb = document.getElementById('viewTools'), t = tb ? tb.getBoundingClientRect() : null;
+  const under = (x, y)=>t && t.width > 0 && x > t.left - rect.left - 30 && x < t.right - rect.left + 30 &&
+                         y > t.top - rect.top - 12 && y < t.bottom - rect.top + 12;
   labelEls.forEach(L=>{
     const wanted = !(L.onlyWhen && L.onlyWhen!==state.variable) && !(L.visibleIf && !L.visibleIf());
     const p = _lp.copy(L.pos).project(camera);
@@ -81,6 +85,7 @@ function updateLabels(){
       L.el.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%)`;
       L.x = x; L.y = y;
     }
+    L.el.classList.toggle('under-tools', under(x, y));
     if(cameraMoved && occluders.length){
       const dist = _ld.copy(L.pos).sub(camera.position).length();
       labelRay.set(camera.position, _ld.normalize());

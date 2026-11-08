@@ -1259,76 +1259,6 @@
   "tol": 0.005,
   "value": 0.517
  },
- "real.drifters.byHours[0].h": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 24
- },
- "real.drifters.byHours[0].km": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0.1,
-  "value": 18.56
- },
- "real.drifters.byHours[0].n": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 60
- },
- "real.drifters.byHours[0].stillKm": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0.01,
-  "value": 17.48
- },
- "real.drifters.byHours[1].h": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 48
- },
- "real.drifters.byHours[1].km": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0.1,
-  "value": 35.13
- },
- "real.drifters.byHours[1].n": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 58
- },
- "real.drifters.byHours[1].stillKm": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0.01,
-  "value": 33.92
- },
- "real.drifters.byHours[2].h": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 72
- },
- "real.drifters.byHours[2].km": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0.1,
-  "value": 52.01
- },
- "real.drifters.byHours[2].n": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 49
- },
- "real.drifters.byHours[2].stillKm": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0.01,
-  "value": 46.15
- },
- "real.drifters.drifters": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 12
- },
- "real.drifters.releases": {
-  "how": "data-pipeline/facts_reference.py",
-  "tol": 0,
-  "value": 61
- },
  "real.moorings[0].analyses": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
@@ -1577,82 +1507,82 @@
  "real.products.fishing[0].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 49
+  "value": 18
  },
  "real.products.fishing[0].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.fishing[1].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 72
+  "value": 15
  },
  "real.products.fishing[1].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.fishing[2].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 58
+  "value": 20
  },
  "real.products.fishing[2].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.fishing[3].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 39
+  "value": 16
  },
  "real.products.fishing[3].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.fishing[4].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 35
+  "value": 27
  },
  "real.products.fishing[4].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.fishing[5].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 35
+  "value": 41
  },
  "real.products.fishing[5].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.fishing[6].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 47
+  "value": 83
  },
  "real.products.fishing[6].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.fishing[7].both": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 85
+  "value": 40
  },
  "real.products.fishing[7].known": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
-  "value": 1600
+  "value": 1369
  },
  "real.products.series.arabian.case": {
   "how": "data-pipeline/facts_reference.py",

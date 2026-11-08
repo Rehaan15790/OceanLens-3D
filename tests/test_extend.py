@@ -771,10 +771,13 @@ class ServerForecastCase(AppTestCase):
         self.assertIn('No floats in this case', self.js("document.getElementById('valPanel').textContent"))
         self.assertNotIn('Argo float', self.js("document.getElementById('keyLegend').textContent"))
         self.assertIn('(+2 days)', ctx)
-        for sel in ('#presentBtn', '#rowTrack', '#rowDrifters', '#modelGrp'):
+        for sel in ('#presentBtn', '#rowTrack', '#modelGrp'):
             self.assertFalse(shown(sel), f'{sel} belongs to the Amphan case')
         self.assertEqual(self.js('__ol.models'), ['forecast'])
         self.assertEqual(self.js("document.querySelectorAll('#varPills .pill[data-v=pfz]').length"), 0)
+        for v in ('sstsat', 'front'):
+            self.assertFalse(shown(f'#varPills .pill[data-v="{v}"]'), f'{v}: May 2020 satellite data')
+        self.assertIsNone(self.js('EXTRAS()'), 'the May 2020 extras belong to the Amphan case')
         self.assertEqual(self.js('instrumentsNow().length'), 0)
         self.js('__ol.actions.startTour()')
         self.assertFalse(self.js('isTourRunning()'))

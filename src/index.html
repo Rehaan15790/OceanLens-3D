@@ -27,8 +27,8 @@
   <div class="splash-inner">
     <p class="splash-eyebrow">Smart India Hackathon 2026 · Problem statement 26067</p>
     <h1 id="splashTitle">OceanLens 3D</h1>
-    <p id="splashLede" class="splash-lede">Two ocean models, HYCOM and Copernicus Marine GLORYS, and Argo float profiles
-      for Cyclone Amphan (May 2020) in one 3D view, with each model checked against the floats.</p>
+    <p id="splashLede" class="splash-lede">Two ocean models, HYCOM and Copernicus Marine GLORYS, with Argo floats, NOAA
+      drifting buoys and satellite SST for Cyclone Amphan (May 2020) in one 3D view, each model checked against them.</p>
     <div class="splash-actions">
       <!-- boot-guard (platform) will disable both with "Loading data…" until the app is ready -->
       <button id="enterBtn" class="btn btn-primary" disabled>Loading data…</button>
@@ -129,7 +129,7 @@
 
       <section class="grp" id="tchpNote" hidden aria-labelledby="grpTchp">
         <h2 id="grpTchp" class="grp-label">What the map shows</h2>
-        <p class="note">Heat stored in water warmer than 26 °C, from the surface down to the 26 °C isotherm (D26),
+        <p class="note" id="mapAbout">Heat stored in water warmer than 26 °C, from the surface down to the 26 °C isotherm (D26),
           computed from the model's temperature and salinity. The white contour marks 50 kJ/cm², a common threshold
           for cyclone intensification.</p>
         <button type="button" id="trackDetailsBtn" data-needs-shell hidden class="btn btn-block">Show Amphan's track details</button>
@@ -168,9 +168,6 @@
             <span id="hintOther" class="sr-only">Markers for imported instruments that are not Argo floats or gliders</span></li>
           <li id="rowTrack"><span id="lblTrack">Cyclone track</span>
             <button type="button" class="switch on" id="swTrack" role="switch" aria-checked="true" aria-labelledby="lblTrack"><span class="knob"></span></button></li>
-          <li id="rowDrifters" hidden><span id="lblDrifters">Drifting buoys</span>
-            <button type="button" class="switch" id="swDrifters" role="switch" aria-checked="false" aria-labelledby="lblDrifters" aria-describedby="hintDrifters"><span class="knob"></span></button>
-            <span id="hintDrifters" class="sr-only">Real drifting buoys in May 2020; click one to release a drift from it and compare</span></li>
           <li><span id="lblFlow">Current streaks</span>
             <button type="button" class="switch on" id="swFlow" role="switch" aria-checked="true" aria-labelledby="lblFlow"><span class="knob"></span></button></li>
           <li><span id="lblGrid">Grid</span>
@@ -422,7 +419,7 @@
         <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
     </div>
     <table class="keys">
-      <tr><th scope="row"><kbd>1</kbd>–<kbd>5</kbd></th><td>Temperature, salinity, current speed, cyclone heat potential, chlorophyll</td></tr>
+      <tr><th scope="row"><kbd>1</kbd>–<kbd>7</kbd></th><td>Temperature, salinity, current speed, cyclone heat potential, chlorophyll, satellite SST, SST fronts</td></tr>
       <tr><th scope="row"><kbd>U</kbd> <kbd>L</kbd> <kbd>D</kbd> <kbd>I</kbd> <kbd>O</kbd></th><td>Surface, all depth levels, depth slice, depth of a value, isosurface (3D)</td></tr>
       <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Depth slice up or down</td></tr>
       <tr><th scope="row"><kbd>Space</kbd></th><td>Play or pause the analyses</td></tr>
@@ -501,6 +498,15 @@
         mean since 1982.</dd>
       <dt>Coast and sea floor</dt>
       <dd>ETOPO1, sampled every 0.1° (now superseded by ETOPO 2022).</dd>
+      <dt>Currents for the drift tool</dt>
+      <dd>Each model's surface currents for every day from 4 to 25 May: HYCOM every 6 hours, GLORYS as daily means, on
+        the same 0.5° cells. At the 8 analyses they equal the fields on the map.</dd>
+      <dt>Drifting buoys</dt>
+      <dd>Hourly positions of the NOAA Global Drifter Program buoys inside the map, 4–25 May, with the date each lost its
+        15 m drogue. Shown while the drift tool is in use; a click on one releases a drift from it.</dd>
+      <dt>Satellite SST</dt>
+      <dd>NOAA OISST v2.1 (AVHRR only) daily sea-surface temperature at 0.25° on the 8 analysis days, extracted as NetCDF
+        from the INCOIS Live Access Server (las.incois.gov.in). SST fronts are computed from it in the browser.</dd>
     </dl>
 
     <h3>Read with care</h3>
@@ -521,6 +527,10 @@
       <li>Neither model has chlorophyll or oxygen. In real mode those come only from BGC-Argo floats, so there is no
         model column to compare them with.</li>
       <li>No glider data is included for this period.</li>
+      <li>The drift tool moves objects with the surface current only: no wind (leeway) and no waves (Stokes drift). It was
+        checked against the drifting buoys (data-pipeline/drift_validation.py): GLORYS came closer to them than HYCOM.
+        It is a teaching aid, not a search plan.</li>
+      <li>LAS writes land in its OISST extracts as 0 °C with no missing-value attribute; the pipeline treats 0 as land.</li>
     </ul>
 
     <h3>Add your own data</h3>
@@ -553,11 +563,12 @@
       <li data-cite="igora"></li>
       <li data-cite="ibtracs"></li>
       <li data-cite="etopo1"></li>
-      <li data-cite="gdp"></li>
+      <li data-cite="gdp">NOAA Global Drifter Program hourly drifter data (Elipot et al. 2022), via NOAA AOML ERDDAP.</li>
+      <li data-cite="oisst">NOAA OISST v2.1 (Huang et al. 2021), from the INCOIS Live Access Server.</li>
       <li data-cite="rama"></li>
       <li data-cite="ostia"></li>
       <li data-cite="globcolour"></li>
-      <li>Methods: UNESCO EOS-80 equation of state; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test.</li>
+      <li>Methods: UNESCO EOS-80 equation of state; UNESCO (1983) potential temperature; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test; Liu and Weisberg (2011) for the drift skill score; Belkin and O’Reilly (2009) for SST fronts.</li>
       <li>three.js r128, MIT licence (full text in THIRD_PARTY_NOTICES.md).</li>
     </ul>
 
@@ -629,7 +640,8 @@
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
 <script type="application/json" id="snapshot-glorys" src="../data/amphan-2020-glorys.json" data-embed="model"></script>
 <script type="application/json" id="snapshot-igora" src="../data/amphan-2020-igora.json" data-embed="model"></script>
-<script type="application/json" id="snapshot-drifters" src="../data/drifters-2020-05.json"></script>
+<script type="application/json" id="snapshot-extras" src="../data/amphan-2020-extras.json"></script>
+<script type="application/json" id="drift-validation" src="../data/drift-validation.json"></script>
 <script type="application/json" id="snapshot-products" src="../data/products-2020-05.json"></script>
 <script type="application/json" id="snapshot-moorings" src="../data/moorings-2020-05.json"></script>
 <!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element.
@@ -643,6 +655,7 @@
 <script src="js/plugins/mooring.js"></script>
 <script src="js/plugins/adcp.js"></script>
 <script src="js/plugins/hfradar.js"></script>
+<script src="js/plugins/satellite.js"></script>
 <script src="js/fmt.js"></script>
 <script src="js/geo.js"></script>
 <script src="js/data-source.js"></script>
@@ -662,7 +675,6 @@
 <script src="js/track.js"></script>
 <script src="js/section.js"></script>
 <script src="js/drift.js"></script>
-<script src="js/drifters.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/flow.js"></script>
 <script src="js/markers.js"></script>

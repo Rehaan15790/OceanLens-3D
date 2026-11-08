@@ -30,11 +30,11 @@ function decodeModel(d){
 // a forecast (build_forecast.py): its name, its label on the Real data button, and whether the Amphan tour applies
 const CASE = (()=>{
   const c = REAL_DATA.meta.case;
-  if(!c) return {kind:'cyclone', name:'Cyclone Amphan', button:'Amphan 2020', storm:'Amphan', tour:true};
+  if(!c) return {kind:'cyclone', name:'Cyclone Amphan', button:'Amphan 2020', storm:'Amphan', tour:true, extras:true};
   const forecast = c.kind==='forecast', issued = forecast && c.issued ? Date.parse(c.issued + 'T00:00Z') : NaN;
   return {kind:String(c.kind || 'case'), name:String(c.name || REAL_DATA.meta.title || 'Real data'),
           button:forecast && Number.isFinite(issued) ? `forecast ${fmt.dayMonth(new Date(issued).toISOString())}` : String(c.name || 'case'),
-          storm:null, tour:false, forecast, issued};
+          storm:null, tour:false, extras:false, forecast, issued};
 })();
 // the Real data button names the case
 document.querySelectorAll('#dataToggle button[data-mode="real"]').forEach(b=>{ b.textContent = `Real data: ${CASE.button}`; });
@@ -213,3 +213,44 @@ const REAL_TRACK = (()=>{
   return T;
 })();
 REAL_TRACK.forEach(f=>{ f.h = (Date.parse(f.t)-Date.parse(REAL_TRACK[0].t))/3.6e6; });
+
+/* ---- real data beyond the snapshots, parsed the first time a feature needs it ----
+   #snapshot-extras (data/amphan-2020-extras.json): surface currents every 6 h (HYCOM) and daily (GLORYS) for the drift
+   tool, NOAA drifting buoys and NOAA OISST from the INCOIS LAS. #drift-validation: the drift tool checked against those
+   buoys (data-pipeline/drift_validation.py). Either may be missing; the features that use them then say so. */
+function lazyJson(id){
+  let d;
+  return ()=>{
+    if(d!==undefined) return d;
+    const el = document.getElementById(id);
+    try { d = el ? JSON.parse(el.textContent) : null; } catch(err){ console.error(err); d = null; }
+    return d;
+  };
+}
+// the May 2020 add-ons belong to the Amphan case: another case served in its place (a forecast) leaves them out
+const amphanOnly = f=>()=>CASE.extras ? f() : null;
+const EXTRAS = amphanOnly(lazyJson('snapshot-extras'));
+const DRIFT_VALIDATION = amphanOnly(lazyJson('drift-validation'));
+// a model's surface currents from the extras on the app grid: {clock (ms), f [time][u, v][lat][lon], grid}; null without
+const surfCache = {};
+function surfCurrents(id){
+  if(id in surfCache) return surfCache[id];
+  const e = EXTRAS(), s = e && e.surf && e.surf[id], g = e && e.meta.grid;
+  let out = null;
+  if(s && ['lat0', 'lon0', 'step', 'nlat', 'nlon'].every(k=>g[k]===META[k])){
+    const q = b64Int16(s.data), [off, sc] = s.quant, f = new Float32Array(q.length);
+    for(let n=0;n<q.length;n++) f[n] = off + q[n]*sc;
+    if(f.length===s.times.length*2*g.nlat*g.nlon) out = {clock:s.times.map(t=>Date.parse(t)), f, g, layer:g.nlat*g.nlon};
+  }
+  return (surfCache[id] = out);
+}
+// surface current of surfCurrents() at its time step k, bilinear as realAt
+function surfAt(S, k, lat, lon){
+  const g = S.g, f = S.f;
+  const y = Math.max(0, Math.min(g.nlat-1.000001, (lat-g.lat0)/g.step));
+  const x = Math.max(0, Math.min(g.nlon-1.000001, (lon-g.lon0)/g.step));
+  const i = Math.floor(y), j = Math.floor(x), fy = y-i, fx = x-j;
+  const at = o=>(f[o]*(1-fx) + f[o+1]*fx)*(1-fy) + (f[o+g.nlon]*(1-fx) + f[o+g.nlon+1]*fx)*fy;
+  const o = 2*k*S.layer + i*g.nlon + j;
+  return {u:at(o), v:at(o + S.layer)};
+}

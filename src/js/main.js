@@ -51,8 +51,6 @@ function refreshMarkers(){
 // check that the action ends in requestUpdate() and that the stale piece is refreshed here.
 function fullUpdate(){
   refreshMarkers();
-  refreshDrifters();
-  applyDrifterVisibility();
   followProfile();
   updateStormNow();
   updateLayerColors();
@@ -64,7 +62,7 @@ function fullUpdate(){
   if(state.panel==='profile'){ renderDerived(); drawProfileChart(); }
   if(state.panel==='track') renderTrack();
   if(section){ buildSection(); if(state.panel==='section') drawSectionPanel(); }
-  if(drift){ computeDrift(); buildDrift(); if(state.panel==='drift') renderDriftPanel(); }
+  if(drift || state.driftPlace){ computeDrift(); buildDrift(); if(drift && state.panel==='drift') renderDriftPanel(); }
   renderValidation();
   renderProductCard();
 }
@@ -116,15 +114,15 @@ function exposeTestSurface(){
     setExaggeration,
     setRange, setPalette, setScale, setShowAllImported, resetRange: ()=>{ resetRange(); requestUpdate('full'); },
     openPanel, closePanels:closeSidePanels, openProfile, openWorstFloat, startTour, stopTour, goToTourStep, nextTourStep, setTourAutoplay,
-    showSectionPreset, clearSection, startDrift, setDriftOptions, clearDrift, setDriftPlace
+    showSectionPreset, clearSection, startDrift, startDriftFromBuoy, setDriftOptions, clearDrift, setDriftPlace
   }).map(([k, f])=>[k, now(f)]));
   ol.flush = flushUpdate;
   ol.plugins = OceanLens;
   ol.facts = facts;
   ol.fn = {seawaterDensity, sigmaT, tchpColumn, firstCrossing, contourSegments, summarize, misfit, realAt, obsInterp,
            modelTchp, b64Int16, fmt, parseDelimited, NetCDF3, depthFromPressure, field2dGrid, instrumentsNow,
-           driftRun, driftClock, uvAtTime, realAtIn, decodeModel, adiabaticLapse, potentialTemp, inSituTemp,
-           modelAsMeasured};
+           driftRun, driftClock, driftCurrents, driftStart, uvAtTime, realAtIn, decodeModel, buoysNow, insideEllipse,
+           satelliteSstStats, adiabaticLapse, potentialTemp, inSituTemp, modelAsMeasured};
   ol.render = Render.test;
 }
 

@@ -97,7 +97,33 @@ const TOUR_STEP_DEFS = [
      plain:()=>`Argo profiles (solid) against ${M().short} (dashed) while Amphan was over the Bay. ${assimilationWords(false)}`,
      synth:'Synthetic floats sample a slightly different ocean from the model, with noise and gaps. Solid: observed; ' +
        'dashed: model. One float has a bad salinity sample that the QC check flags.'}},
+
+  {id:'drift', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:4, drift:true,
+   title:{real:'Search and rescue', synth:'Search and rescue (synthetic)'},
+   caption:{
+     real:(f,fmt,t)=>{
+       const d = tourDriftCheck();
+       if(!d && !DRIFT_VALIDATION()) throw new Error('no drift validation in this page');
+       return `Search and rescue: a drift from a real NOAA buoy on ${fmt.dayMonth(f.analysis.times[t])}. White: the ` +
+         `${M().short} forecast; amber: where the buoy went. ` + (d
+           ? `Over ${d.n} releases ${M().short} missed by a median ${fmt.int(d.median)} km after 72 h.`
+           : `${M().short}${M().monthly ? ', a monthly mean,' : ''} was not checked against the buoys.`);
+     },
+     plain:()=>`Search and rescue: the drift tool (T) lets ${M().short}'s surface currents carry an object for 72 h, with ` +
+       'a search ellipse for each day; amber is where a real buoy went.',
+     synth:'Search and rescue: the drift tool (T) lets the currents carry an object for 72 h, with a search ellipse ' +
+       'for each day. These currents are made up.'}},
 ];
+// the drift check of the model on screen against drogued buoys at 72 h: {median, n}, or null
+function tourDriftCheck(){
+  const v = DRIFT_VALIDATION(), m = v && v.models && v.models[realModel];
+  const s = m && m.drogued && m.drogued.separation_km['72'];
+  return s ? {median:s.median, n:s.n} : null;
+}
+// the buoy the drift step releases from: the first one with a drogue and 72 h of record after the analysis on screen
+function tourDriftBuoy(){
+  return buoysNow().find(b=>b.drogued && buoyTrack(b.index, b.h, 72, 1).length===73) || null;
+}
 
 // derived from the landfall time rather than typed: the last analysis before landfall, and whole days since it
 function tourLandfall(f){ return Date.parse(f.track && f.track.landfall ? f.track.landfall.time : REAL_TRACK[REAL_TRACK.length-1].t); }

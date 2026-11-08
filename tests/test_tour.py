@@ -13,15 +13,26 @@ class TourSteps:
         self.b.key('p')
         self.b.pump(0.4)
         self.assertTrue(self.js(TOUR_ON), 'P did not start the tour')
-        seen = []
-        for i in range(8):
+        seen, n = [], self.js('tourSteps.length')
+        self.assertEqual(n, 9)
+        for i in range(n):
             self.b.pump(2.0)
             seen.append(self.js(STEP_TEXT))
+            if i == n - 1:
+                # the last step releases a drift: from a real buoy in real data, with its true path to compare
+                d = self.js('(d=>d && {run:!!d.run, buoy:d.buoy, path:(d.buoyPath||[]).length, panel:__ol.state.panel})(__ol.drift)')
+                self.assertTrue(d and d['run'], 'the search-and-rescue step drew no drift')
+                self.assertEqual(d['panel'], 'drift')
+                if self.js('__ol.dataMode') == 'real':
+                    self.assertIsNotNone(d['buoy'], 'the real-data drift step is not released from a buoy')
+                    self.assertEqual(d['path'], 73, "the buoy's 72 h path is missing")
+                self.assertTrue(self.js(TOUR_ON), 'releasing the drift stopped the tour')
             self.b.key('ArrowRight')
         self.b.key('Escape')
         self.b.pump(0.5)
         self.assertFalse(self.js(TOUR_ON), 'Esc did not stop the tour')
-        self.assertEqual(len(set(seen)), 8, f'expected 8 distinct steps, saw {seen}')
+        self.assertIsNone(self.js('__ol.drift'), "the tour's drift stayed after the tour")
+        self.assertEqual(len(set(seen)), n, f'expected {n} distinct steps, saw {seen}')
         self.assertNoProblems()
 
 
