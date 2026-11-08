@@ -36,11 +36,12 @@ const SOURCES = {
           sub: (t, nArgo)=>`${fmt.analysisTime(META.times[t])} · ${nArgo} Argo profiles`,
           get foot(){ const F = facts().real;
             const M = MODEL();
-            return (F.comparison && F.comparison.matchedInTime
+            return (M.monthly
+              ? `Each profile is compared with the ${M.short} monthly mean of its month, interpolated `
+              : F.comparison && F.comparison.matchedInTime
               ? `The model is matched to each profile’s time and place (nearest 3-hourly ${M.short} output) and interpolated `
               : `Each profile is compared with the ${M.product} nearest in time (within 1.5 days), interpolated `) +
-              `to its depths, as in GODAE Class 4 verification. ${M.short} assimilates Argo, so this is a consistency check, ` +
-              'not independent validation.'; }},
+              `to its depths, as in GODAE Class 4 verification. ${assimilationWords(false)}`; }},
     profile: {kind: inst=>inst.bgc ? 'BGC-Argo float' : 'Argo float',
               none:(id, t)=>`${id} has no profile within 1.5 days of ${fmt.dayMonth(META.times[t])}.`},
     vars: {get chlNote(){ return `From BGC-Argo floats only. ${MODEL().short} has no chlorophyll, so the map has no model field: click a float to see its profile.`; },

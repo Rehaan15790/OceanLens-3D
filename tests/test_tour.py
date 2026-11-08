@@ -53,6 +53,22 @@ class Captions(AppTestCase):
             self.js("__ol.actions.setRealModel(__ol.models[0])")
         self.assertFalse(long, 'captions over 35 words:\n' + '\n'.join(long))
 
+    def test_a_monthly_mean_claims_no_cold_wake(self):
+        if 'igora' not in (self.js('__ol.models') or []):
+            self.skipTest('this build has no IGORA model')
+        self.b.click('#dataToggle button[data-mode="real"]')
+        try:
+            self.js("__ol.actions.setRealModel('igora')")
+            caps = self.js("tourSteps.map(s => String(s.caption))")
+            wake = [c for c in caps if 'cold wake' in c]
+            self.assertTrue(wake and all('no before and after' in c for c in wake), wake)
+            self.assertFalse([c for c in caps if '°C cooler' in c], 'a monthly mean quotes a cooling')
+            self.assertTrue(any('IGORA likely assimilates Argo' in c for c in caps))
+            self.assertTrue(any('dashed: IGORA May mean' in c for c in caps))
+        finally:
+            self.js("__ol.actions.setRealModel(__ol.models[0])")
+        self.assertNoProblems()
+
 
 class TourRaces(AppTestCase):
     """Delayed work scheduled by a step must not run after the step (or the tour) has ended."""

@@ -40,26 +40,34 @@ const CASE = (()=>{
 document.querySelectorAll('#dataToggle button[data-mode="real"]').forEach(b=>{ b.textContent = `Real data: ${CASE.button}`; });
 
 // the words the app uses for a model; meta.model names it, and a snapshot without meta.model is HYCOM.
-// temperature: 'in-situ' or 'potential' (meta.model.temperature when the snapshot says)
+// temperature: 'in-situ' or 'potential' (meta.model.temperature when the snapshot says); argo: 'yes' when the model's
+// documentation says it assimilates Argo, else 'likely'; monthly: one monthly mean stands for every analysis day
 const MODEL_WORDS = {
   HYCOM: {product:'HYCOM analysis', products:'analyses', label:'HYCOM', kind:'analysis',
-          data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)', temperature:'in-situ'},
+          data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)', temperature:'in-situ', argo:'yes'},
   GLORYS:{product:'GLORYS daily mean', products:'daily means', label:'GLORYS', kind:'reanalysis',
           data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means',
-          temperature:'potential'},
+          temperature:'potential', argo:'yes'},
   IGORA: {product:'IGORA May 2020 mean', products:'monthly mean', label:'IGORA', kind:'reanalysis',
-          data:'INCOIS IGORA reanalysis (INCOIS LAS)', temperature:'potential',
+          data:'INCOIS IGORA reanalysis (INCOIS LAS)', temperature:'potential', argo:'likely', monthly:true,
           note:'INCOIS Global Ocean ReAnalysis from the INCOIS Live Access Server: the May 2020 monthly mean, the same at every analysis day'},
   Forecast:{product:'daily mean', products:'daily means', label:'Forecast', kind:'forecast',
           data:'Copernicus Marine global analysis and forecast', note:'Copernicus Marine global ocean analysis and forecast (1/12°), daily means',
-          temperature:'potential'},
+          temperature:'potential', argo:'yes'},
 };
 function modelWords(meta){
   const mm = meta.model || {}, short = mm.short || 'HYCOM';
   const w = Object.assign({short}, MODEL_WORDS[short] || {product:`${short} model output`, products:'model times',
-    label:short, kind:'model', data:short, note:short, temperature:'in-situ'});
+    label:short, kind:'model', data:short, note:short, temperature:'in-situ', argo:'likely'});
   if(mm.temperature==='potential' || mm.temperature==='in-situ') w.temperature = mm.temperature;
+  if(mm.monthly) w.monthly = true;
   return w;
+}
+// the comparison with floats is a consistency check: said as firmly as the model's documentation allows
+function assimilationWords(short){
+  const M = MODEL();
+  return M.argo==='yes' ? `${M.short} assimilates Argo${short ? ':' : ', so this is'} a consistency check, not independent validation.`
+    : `${M.short} likely assimilates Argo${short ? ':' : ', so read this as'} a consistency check, not independent validation.`;
 }
 // another model must sit on the main snapshot's grid, levels and times to be drawn and compared on it
 function sameGridAsMain(m){

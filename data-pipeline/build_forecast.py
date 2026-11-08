@@ -37,21 +37,25 @@ CITATION = {'id': 'glo12', 'doi': '10.48670/moi-00016',
                     'al., Mercator Ocean International.'}
 
 
-def listing(F, key, month):
+def listing(F, key, month, stamp):
+    """The object-store listing of one month of one variable, as seen on day `stamp` (YYYYMMDD): a new run adds files
+    every day, so each day's listing is a cache file of its own."""
     p = urllib.parse.quote(f'{PRODUCT}/{DATASETS[key]}/{month:%Y/%m}/', safe='/')
-    return F.get(f'{ROOT}?list-type=2&prefix={p}', f'forecast/listing-{key}-{month:%Y-%m}.xml', B.parse_s3_listing)
+    return F.get(f'{ROOT}?list-type=2&prefix={p}', f'forecast/listing-{key}-{month:%Y-%m}-{stamp}.xml', B.parse_s3_listing)
 
 
 def run_files(F, run=None, today=None):
     """{key: [(day, s3 key, size)]} of one run (the latest found when run is None) and the run date; every day must
-    have its three files."""
-    today = today or datetime.now(timezone.utc)
+    have its three files. The listings are those of the run's day (a rebuild of that run reads them from the cache), or
+    of today when no run is named."""
+    today = today or (datetime.strptime(run, '%Y%m%d').replace(tzinfo=timezone.utc) if run else datetime.now(timezone.utc))
+    stamp = run or f'{today:%Y%m%d}'
     months = sorted({datetime(d.year, d.month, 1) for d in (today - timedelta(days=12), today, today + timedelta(days=12))})
     found = {k: {} for k in DATASETS}
     for k in DATASETS:
         for m in months:
             try:
-                L = listing(F, k, m)
+                L = listing(F, k, m, stamp)
             except (B.FetchError, B.InvariantError):
                 continue                                  # a month with no files yet
             for key, size in L.items():

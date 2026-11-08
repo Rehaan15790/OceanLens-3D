@@ -11,9 +11,9 @@ OceanLens 3D is a browser-based 3D viewer for ocean model output and Argo float 
 **Say this early, and say it honestly:**
 
 - It is a student prototype. It is not affiliated with or endorsed by INCOIS or the Ministry of Earth Sciences.
-- The real-data case is a **hindcast** of Cyclone Amphan (May 2020). There are no forecasts and no live data.
-- Both models (HYCOM and GLORYS) assimilate Argo, so the model–Argo comparison is a **consistency check**, not
-  independent validation.
+- The built-in case is a **hindcast** of Cyclone Amphan (May 2020). Today's forecast is a separate case a data server can show.
+- HYCOM and GLORYS assimilate Argo (IGORA very likely does too), so the model–Argo comparison is a **consistency
+  check**, not independent validation. IGORA is a monthly mean: no day-to-day change, so no cold wake in it.
 
 **Who it is for:**
 
@@ -330,7 +330,7 @@ flowchart LR
   SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3/4 models"]
   CLI["<b>Other clients</b><br/>GIS tools via WMS<br/>netCDF-C via OPeNDAP<br/>scripts via REST"]
   FILES["<b>Your files</b><br/>CSV, NetCDF-3, NetCDF-4<br/>read in the browser,<br/>never uploaded"]
-  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>347 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
+  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>371 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
   SRC --> PIPE --> SNAP --> BUILD --> APP
   SNAP --> SRV --> CLI
   FILES --> APP
@@ -347,11 +347,11 @@ flowchart LR
 
 For an elevator pitch or the opening of a longer slot. Start with the app open on the heat-potential map (`4`) at 13 May, the track showing. One click and one key.
 
-> Forecasters compare ocean model output with what Argo floats measured by switching between desktop software and 2D map portals. OceanLens 3D puts both in one 3D scene: temperature, salinity, currents and cyclone heat potential down to 1000 metres from two models, HYCOM and Copernicus GLORYS, with 206 real Argo profiles placed where and when they were measured.
+> Forecasters compare ocean model output with what Argo floats measured by switching between desktop software and 2D map portals. OceanLens 3D puts both in one 3D scene: temperature, salinity, currents and cyclone heat potential down to 1000 metres from three models, HYCOM, Copernicus GLORYS and INCOIS's IGORA, with 206 real Argo profiles placed where and when they were measured.
 >
 > This is Cyclone Amphan, May 2020. Before it, HYCOM puts about 85 kilojoules per square centimetre of heat under its path. *(Press M.)* GLORYS says 109: two good models, a quarter apart. Every float is compared with each model at the same place and time.
 >
-> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 347 automated tests check the rest.
+> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 371 automated tests check the rest.
 
 ## A 3-minute walkthrough
 
@@ -398,8 +398,8 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Question | Answer |
 | --- | --- |
 | Is this live or forecast data? | No. It is a hindcast of Amphan (May 2020) from 8 HYCOM analyses and the GLORYS daily means of the same days. Live ingestion is on the roadmap. |
-| Why two models, and which is right? | Neither is "right": they are two estimates of the same ocean. GLORYS fits the floats better here (temperature RMSE 0.23 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
-| Is the model validated against Argo? | It is compared, not independently validated: both models assimilate Argo, so it is a consistency check. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
+| Why three models, and which is right? | None is "right": they are estimates of the same ocean (IGORA, INCOIS's, is a monthly mean, so compare it for the month, not the storm). GLORYS fits the floats better here (temperature RMSE 0.23 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
+| Is the model validated against Argo? | It is compared, not independently validated: HYCOM and GLORYS assimilate Argo (IGORA very likely too), so it is a consistency check. The RAMA moorings and drifting buoys are the more independent checks. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
 | Which browsers, and how fast? | Chrome and Edge run the automated tests; Firefox was checked by hand; Safari is untested. On a desktop GPU it is ready in under half a second and far above 60 fps; with software rendering, 18–35 fps (`docs/TESTING.md`). |
 | Can INCOIS use it? What is the licence? | The code is public to read but all rights reserved, so it cannot be copied during the competition. Using or hosting it needs written permission from the team (README, Copyright and licence). |
 | Is it real volume rendering? | Stacked translucent layers plus a marching-cubes isosurface, not ray-marched volume rendering. |
@@ -412,7 +412,7 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Search and rescue? | Press `T` and click the sea: the drift tool moves an object with the model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day from 200 spread drifts, and the other model's drift for comparison. Checked against 12 real drifting buoys: after 72 h GLORYS ends a median 31 km from the buoy, HYCOM 55 km, standing still 46 km. Current only (no wind, so no leeway): a teaching aid, not SARAT. |
 | Fisheries? | The Fishing-zone indicator: satellite SST fronts and satellite chlorophyll on each day, and the cells showing both, the two signs behind PFZ advisories. A teaching version with fixed thresholds, not INCOIS's method, and not checked against catches. |
 | Climate? | SST anomaly: the day against its 1991–2020 normal, and every May since 1982: the Bay of Bengal warms about 0.26 °C per decade, the Arabian Sea 0.35 °C. |
-| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 347 automated tests run in a headless browser and on GitHub Actions. |
+| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 371 automated tests run in a headless browser and on GitHub Actions. |
 | How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, with API keys and rate limits, and streams model files on the case's grid into the 3D view; the plugin API adds sensors and ML products. Production would add scheduled ingestion, user accounts and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |
