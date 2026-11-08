@@ -2,7 +2,7 @@
 """OceanLens 3D data server: the built app, a REST API, OGC WMS 1.3.0, OGC WCS 2.0.1 and OPeNDAP DAP2.
 Python standard library and numpy only; NetCDF through data-pipeline/ncio.py.
 
-    python server/serve.py                                   app + data/*.json on http://127.0.0.1:8080/
+    python server/serve.py                                   app + the model snapshots in data/ on http://127.0.0.1:8080/
     python server/serve.py --netcdf model.nc --port 8000     add a CF NetCDF-3 model file as a dataset
     python server/serve.py --host 0.0.0.0 --cors '*'         listen on every interface, allow any origin
     python server/serve.py --api-keys-file keys.txt --rate-limit 120   data routes need a key; 120 requests/min per client
@@ -561,7 +561,7 @@ class OceanServer(ThreadingHTTPServer):
         files named at start), so a forecast rebuilt every day by build_forecast.py is served without a restart.
         A file that fails to load keeps the version already served. Returns the ids reloaded."""
         paths, _ = self.watch
-        files = [p for p in sorted((REPO / 'data').glob('*.json')) if is_snapshot(p)] if paths is None else paths
+        files = default_snapshots() if paths is None else paths
         seen = self.__dict__.setdefault('_mtimes', {})
         done = []
         for p in files:
@@ -1737,21 +1737,24 @@ def load_datasets(snapshots=(), netcdfs=(), engine='native'):
     return out
 
 
-def is_snapshot(path):
-    """True for a schema-1 snapshot with model fields (data/ also holds other JSON, such as the drifting buoys)."""
-    try:
-        d = json.loads(Path(path).read_bytes())
-    except (OSError, ValueError):
-        return False
-    return isinstance(d, dict) and d.get('schema') == 1 and 'model' in d and 'meta' in d
+def default_snapshots():
+    """The model snapshots in data/: the schema-1 files with model fields (the extras and the drift check sit beside
+    them but are not datasets)."""
+    out = []
+    for path in sorted((REPO / 'data').glob('*.json')):
+        try:
+            d = json.loads(path.read_bytes())
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get('schema') == 1 and 'model' in d and 'times' in d.get('meta', {}):
+            out.append(path)
+    return out
 
 
 def make_server(host='127.0.0.1', port=8080, snapshots=None, netcdfs=(), app=None, cors=(), public_url=None, quiet=False,
                 api_keys=(), rate_limit=0, trust_forwarded=False, engine='native'):
-    """A configured OceanServer, not yet serving (tests/test_server.py starts it on a thread). By default every
-    model snapshot in data/."""
-    snapshots = ([p for p in sorted((REPO / 'data').glob('*.json')) if is_snapshot(p)] if snapshots is None
-                 else [Path(p) for p in snapshots])
+    """A configured OceanServer, not yet serving (tests/test_server.py starts it on a thread)."""
+    snapshots = default_snapshots() if snapshots is None else [Path(p) for p in snapshots]
     datasets = load_datasets(snapshots, [Path(p) for p in netcdfs], engine)
     return OceanServer((host, port), datasets, app if app is not None else default_app(), cors, public_url, quiet,
                        api_keys, rate_limit, trust_forwarded)

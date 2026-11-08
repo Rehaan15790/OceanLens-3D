@@ -3,12 +3,13 @@
 
 - Sea-surface temperature from OSTIA (Copernicus Marine SST_GLO_SST_L4_REP_OBSERVATIONS_010_011, 0.05 deg daily
   reprocessed analysis) on the 8 analysis days: each 0.5 deg cell the mean of the native pixels inside it.
-- SST front strength on the same days: the gradient of the 0.05 deg field (central differences, deg C per km), and in
-  each cell the 90th percentile of the pixel gradients, so a narrow front inside a cell still shows.
 - The 1991-2020 climatology of the same calendar days (one day a year, 30 years), and every year's mean over those
   8 days in a Bay of Bengal box and an Arabian Sea box, 1982-2025, for the anomaly map and the long series.
 - Surface chlorophyll-a from Copernicus-GlobColour (OCEANCOLOUR_GLO_BGC_L4_MY_009_104, gap-free 4 km daily
   multi-sensor) on the 8 days: each cell the geometric mean of its pixels (chlorophyll is log-normal).
+
+The SST fronts the fishing-zone indicator pairs with the chlorophyll are the app's SST fronts map
+(src/js/plugins/satellite.js, from NOAA OISST in data/amphan-2020-extras.json), not computed here.
 
 The native NetCDF-4 files are read in HTTPS byte ranges by nc4.py, only the parts over the map, through
 build_snapshot.py's cached Fetcher. Without --fetch nothing is downloaded.
@@ -35,10 +36,9 @@ YEARS = list(range(1982, 2026))                 # OSTIA starts in October 1981
 CLIM = (1991, 2020)                             # the WMO normal period
 CASE_YEAR = 2020
 BOXES = {'bay': {'lat': [8.0, 21.0], 'lon': [80.5, 92.0]}, 'arabian': {'lat': [8.0, 22.0], 'lon': [61.0, 77.0]}}
-QUANT = {'sst': (15.0, 0.001), 'clim': (15.0, 0.001), 'chl': (0.0, 0.001), 'front': (0.0, 0.00002)}
+QUANT = {'sst': (15.0, 0.001), 'clim': (15.0, 0.001), 'chl': (0.0, 0.001)}
 MISSING = -32768
-MIN_SHARE = 0.25                                # a front or chlorophyll cell needs a quarter of its pixels
-KM_PER_DEG = 111.195
+MIN_SHARE = 0.25                                # a chlorophyll cell needs a quarter of its pixels
 SCHEMA = 1
 CITATIONS = [
     {'id': 'ostia', 'doi': '10.48670/moi-00168',
@@ -83,17 +83,6 @@ def box_of(lat, lon, pad=0.35):
     return slice(ii[0], ii[-1] + 1), slice(jj[0], jj[-1] + 1)
 
 
-def gradient_km(T, lat, lon):
-    """|grad T| (per km) on a regular lat/lon grid, central differences; NaN on the edge and next to a gap."""
-    ky = KM_PER_DEG * abs(lat[1] - lat[0])
-    kx = KM_PER_DEG * abs(lon[1] - lon[0]) * np.cos(np.radians(lat))
-    g = np.full(T.shape, np.nan)
-    gy = (T[2:, 1:-1] - T[:-2, 1:-1]) / (2 * ky)
-    gx = (T[1:-1, 2:] - T[1:-1, :-2]) / (2 * kx[1:-1, None])
-    g[1:-1, 1:-1] = np.hypot(gx, gy)
-    return g
-
-
 def cell_stat(a, rows, cols, fn):
     """fn over the finite samples of each cell, NaN where under MIN_SHARE of them are finite."""
     out = np.full((len(rows), len(cols)), np.nan)
@@ -119,8 +108,8 @@ def box_mean(field, box):
     return float(np.nanmean(sub)) if np.isfinite(sub).any() else np.nan
 
 
-def ostia_day(F, t, files, fronts=False):
-    """OSTIA on day t on the app grid (deg C, cell means), and with fronts the cell front strength (deg C/km)."""
+def ostia_day(F, t, files):
+    """OSTIA on day t on the app grid (deg C, cell means)."""
     f = open_day(F, OSTIA, t, files)
     lat, lon = f.vars['lat'].read(), f.vars['lon'].read()
     ys, xs = box_of(lat, lon)
@@ -128,9 +117,7 @@ def ostia_day(F, t, files, fronts=False):
     a = np.asarray(v.read((0, ys, xs)), 'f8') - 273.15            # nc4 applies scale_factor, add_offset and fill
     lat, lon = lat[ys], lon[xs]
     rows, cols = B.cell_members(lat, B.LATS), B.cell_members(lon, B.LONS)
-    sst = B.cell_mean(a, rows, cols)
-    front = cell_stat(gradient_km(a, lat, lon), rows, cols, lambda x: float(np.percentile(x, 90))) if fronts else None
-    return sst, front
+    return B.cell_mean(a, rows, cols)
 
 
 def chl_day(F, t, files):
@@ -155,16 +142,15 @@ def build(F, log=print, workers=8):
     oc_files = listing(F, GLOBCOLOUR, CASE_YEAR, 5)
     jobs = [(y, d) for y in YEARS for d in range(len(B.SNAPS))]
     with ThreadPoolExecutor(workers) as ex:
-        got = dict(zip(jobs, ex.map(lambda j: ostia_day(F, days(j[0])[j[1]], files, fronts=j[0] == CASE_YEAR), jobs)))
+        got = dict(zip(jobs, ex.map(lambda j: ostia_day(F, days(j[0])[j[1]], files), jobs)))
         chl = list(ex.map(lambda t: chl_day(F, t, oc_files), days(CASE_YEAR)))
     log(f'  OSTIA: {len(jobs)} days read ({len(YEARS)} years x {len(B.SNAPS)}); GlobColour: {len(chl)} days')
-    sst = np.stack([got[(CASE_YEAR, d)][0] for d in range(len(B.SNAPS))])
-    front = np.stack([got[(CASE_YEAR, d)][1] for d in range(len(B.SNAPS))])
+    sst = np.stack([got[(CASE_YEAR, d)] for d in range(len(B.SNAPS))])
     clim_years = [y for y in YEARS if CLIM[0] <= y <= CLIM[1]]
     with warnings.catch_warnings():                 # land cells have no value in any year: NaN, said once here
         warnings.simplefilter('ignore', RuntimeWarning)
-        clim = np.stack([np.nanmean([got[(y, d)][0] for y in clim_years], axis=0) for d in range(len(B.SNAPS))])
-    series = {name: [round(float(np.mean([box_mean(got[(y, d)][0], box) for d in range(len(B.SNAPS))])), 3)
+        clim = np.stack([np.nanmean([got[(y, d)] for y in clim_years], axis=0) for d in range(len(B.SNAPS))])
+    series = {name: [round(float(np.mean([box_mean(got[(y, d)], box) for d in range(len(B.SNAPS))])), 3)
                      for y in YEARS] for name, box in BOXES.items()}
     B.require(np.isfinite(sst).mean() > 0.5 and np.isfinite(chl).mean() > 0.5, 'the satellite fields are mostly empty')
     B.require(len(clim_years) == 30, 'the climatology needs the 30 years 1991-2020')
@@ -176,17 +162,15 @@ def build(F, log=print, workers=8):
     return {
         'schema': SCHEMA,
         'meta': {
-            'title': 'Satellite SST, fronts, climatology and chlorophyll, Cyclone Amphan window, May 2020',
+            'title': 'Satellite SST, climatology and chlorophyll, Cyclone Amphan window, May 2020',
             'times': [t.strftime('%Y-%m-%dT%H:%MZ') for t in B.SNAPS],
             'lat0': B.LAT0, 'lon0': B.LON0, 'step': B.STEP, 'nlat': len(B.LATS), 'nlon': len(B.LONS),
             'quant': {k: list(v) for k, v in QUANT.items()}, 'missing': MISSING,
-            'units': {'sst': 'degree_Celsius', 'clim': 'degree_Celsius', 'chl': 'mg m-3', 'front': 'degree_Celsius per km'},
+            'units': {'sst': 'degree_Celsius', 'clim': 'degree_Celsius', 'chl': 'mg m-3'},
             'climatology': {'years': list(CLIM), 'days': 'the same calendar days, one a year'},
             'sources': {
                 'sst': 'OSTIA reprocessed L4 foundation SST, 0.05 deg daily (Copernicus Marine '
                        'SST_GLO_SST_L4_REP_OBSERVATIONS_010_011); each 0.5 deg cell the mean of the pixels inside it.',
-                'front': 'The gradient of the 0.05 deg OSTIA field by central differences (deg C per km); each cell the '
-                         '90th percentile of its pixel gradients, where at least a quarter of them are defined.',
                 'clim': 'The mean of the same calendar day over 1991-2020 (30 OSTIA days for each analysis day).',
                 'chl': 'Copernicus-GlobColour gap-free L4 daily multi-sensor chlorophyll-a, 4 km '
                        '(OCEANCOLOUR_GLO_BGC_L4_MY_009_104); each cell the geometric mean of its pixels, where at least '
@@ -198,7 +182,7 @@ def build(F, log=print, workers=8):
                            'globcolour': {'url': GLOBCOLOUR[0], 'prefix': GLOBCOLOUR[1], 'year': CASE_YEAR}},
             'inputs': inputs,
         },
-        'sst': pack(sst, 'sst'), 'front': pack(front, 'front'), 'clim': pack(clim, 'clim'), 'chl': pack(np.stack(chl), 'chl'),
+        'sst': pack(sst, 'sst'), 'clim': pack(clim, 'clim'), 'chl': pack(np.stack(chl), 'chl'),
         'series': {'years': YEARS, 'boxes': BOXES, **series},
     }
 

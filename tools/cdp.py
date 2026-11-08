@@ -13,7 +13,7 @@ The browser is found from $OCEANLENS_BROWSER or $CHROME, then the usual install 
 throwaway profile in the system temp folder and --remote-debugging-port=0; the chosen port is read from
 DevToolsActivePort and the page is driven over a small RFC 6455 WebSocket client.
 """
-import base64, hashlib, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
+import atexit, base64, hashlib, json, os, shutil, socket, struct, subprocess, sys, tempfile, time
 import urllib.parse, urllib.request
 from pathlib import Path
 
@@ -200,6 +200,18 @@ BACKENDS = {
     'warp': ['--use-angle=d3d11-warp'],                                            # Windows software fallback
 }
 
+_OPEN = set()       # browsers started and not closed yet
+
+
+def _close_all():
+    """At exit, stop every browser still open and delete its profile: Ctrl+C in a test run skips tearDownClass."""
+    for b in list(_OPEN):
+        b._kill()
+        b._remove_profile()
+
+
+atexit.register(_close_all)
+
 
 class Browser:
     """One headless browser with one page. Use it as a context manager so the browser always exits."""
@@ -208,30 +220,54 @@ class Browser:
                  network_log=True, browser=None, profile=None):
         # a browser that exits at once (for example while it updates itself) is skipped for the next candidate
         candidates = [browser] if browser else find_browsers()
+        self.keep_profile = bool(profile)
         for i, exe in enumerate(candidates):
             try:
                 self._start(exe, width, height, args, headless, backend, offline, network_log, profile)
+                _OPEN.add(self)
                 break
             except BaseException as e:      # whatever went wrong, the browser must not be left running
                 self._kill()
-                if not profile:
-                    shutil.rmtree(getattr(self, 'profile', ''), ignore_errors=True)
+                self._remove_profile()
                 if not isinstance(e, CDPError) or i == len(candidates) - 1:
                     raise
 
     def _kill(self):
-        """Stop the browser and its child processes."""
+        """Stop the browser and its child processes.
+
+        On Windows, also stop whatever still runs on the throwaway profile. Edge can hand its start-up to a new
+        process and exit at once; taskkill /T cannot reach that process once its parent is gone, and it would keep
+        the profile locked (and fill it) long after the test."""
         proc = getattr(self, 'proc', None)
-        if proc is None or proc.poll() is not None:
+        if proc is not None and proc.poll() is None:
+            if os.name == 'nt':
+                subprocess.run(['taskkill', '/PID', str(proc.pid), '/T', '/F'], capture_output=True)
+            else:
+                proc.kill()
+            try:
+                proc.wait(10)
+            except subprocess.TimeoutExpired:
+                pass
+        if os.name == 'nt' and not self.keep_profile and getattr(self, 'profile', None):
+            ps = (f"Get-CimInstance Win32_Process -Filter \"CommandLine LIKE '%{Path(self.profile).name}%'\" | "
+                  "Where-Object ProcessId -ne $PID | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction Ignore }")
+            try:
+                subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', ps], capture_output=True, timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                pass
+
+    def _remove_profile(self):
+        """Delete the throwaway profile. Windows keeps a file locked until the last process holding it has exited, so
+        retry for up to 5 s, and stop whatever still runs on the profile if it is not free after 1 s."""
+        if self.keep_profile or not getattr(self, 'profile', None):
             return
-        if os.name == 'nt':
-            subprocess.run(['taskkill', '/PID', str(proc.pid), '/T', '/F'], capture_output=True)
-        else:
-            proc.kill()
-        try:
-            proc.wait(10)
-        except subprocess.TimeoutExpired:
-            pass
+        for i in range(20):
+            shutil.rmtree(self.profile, ignore_errors=True)
+            if not os.path.exists(self.profile):
+                return
+            if i == 4:
+                self._kill()
+            time.sleep(0.25)
 
     def _stderr_tail(self, n=3):
         """The browser's last stderr lines, for an error message."""
@@ -245,7 +281,6 @@ class Browser:
         """Launch one browser executable, find its DevTools port and connect to its page."""
         self.exe = exe
         self.profile = profile or tempfile.mkdtemp(prefix='oceanlens-cdp-')
-        self.keep_profile = bool(profile)
         port_file = Path(self.profile) / 'DevToolsActivePort'
         if port_file.exists():
             port_file.unlink()
@@ -503,13 +538,8 @@ class Browser:
             self.proc.wait(10)
         except subprocess.TimeoutExpired:
             self._kill()
-        if not self.keep_profile:
-            for _ in range(10):
-                try:
-                    shutil.rmtree(self.profile)
-                    break
-                except OSError:
-                    time.sleep(0.3)
+        self._remove_profile()
+        _OPEN.discard(self)
 
     def __enter__(self):
         return self

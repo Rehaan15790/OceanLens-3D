@@ -1,0 +1,585 @@
+{
+ "schema": 1,
+ "meta": {
+  "title": "The drift tool against NOAA Global Drifter Program buoys, 4-25 May 2020",
+  "script": "data-pipeline/drift_validation.py",
+  "method": "A drift released at each buoy's position at 12:00 UTC every day from 4 to 22 May, run for 72 h with the drift tool's model (data-pipeline/drift_reference.py, as src/js/drift.js). Separation: great-circle distance from the buoy. Baseline: the buoy assumed to stay at its start. Skill: Liu and Weisberg (2011), hourly, n = 1. Coverage: the share of cases whose buoy ends inside the 90 % ellipse of 200 random-walk members released within 1 km.",
+  "citation": "Liu, Y. and Weisberg, R. H. (2011). Evaluation of trajectory modeling in different dynamic regions using normalized cumulative Lagrangian separation. Journal of Geophysical Research, 116, C09013.",
+  "drogue": "GDP drogues are centred at 15 m; the model currents are at the surface (HYCOM 0 m, GLORYS 0.49 m).",
+  "cases": {
+   "drogued": 116,
+   "undrogued": 26,
+   "mixed": 0
+  },
+  "drifters": {
+   "drogued": 10,
+   "undrogued": 4,
+   "mixed": 0
+  },
+  "k_values_m2_s": [
+   0,
+   100,
+   300,
+   1000,
+   3000
+  ],
+  "best_k_m2_s": {
+   "hycom": 3000,
+   "glorys": 1000
+  }
+ },
+ "models": {
+  "hycom": {
+   "label": "HYCOM surface currents every 6 h (what the app uses)",
+   "drogued": {
+    "separation_km": {
+     "24": {
+      "median": 17.0,
+      "mean": 18.7,
+      "p90": 32.8,
+      "n": 116
+     },
+     "48": {
+      "median": 33.0,
+      "mean": 34.4,
+      "p90": 58.9,
+      "n": 116
+     },
+     "72": {
+      "median": 47.3,
+      "mean": 50.0,
+      "p90": 79.7,
+      "n": 116
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 17.0,
+      "mean": 20.3,
+      "p90": 34.0,
+      "n": 116
+     },
+     "48": {
+      "median": 31.8,
+      "mean": 37.7,
+      "p90": 61.6,
+      "n": 116
+     },
+     "72": {
+      "median": 46.1,
+      "mean": 54.3,
+      "p90": 95.7,
+      "n": 116
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 46.6,
+     "48": 51.7,
+     "72": 51.7
+    },
+    "skill_72h": {
+     "median": 0.21,
+     "mean": 0.25
+    },
+    "stopped": 2,
+    "ensemble": {
+     "0": {
+      "inside_pct": {
+       "24": 0.0,
+       "48": 0.0,
+       "72": 0.0
+      },
+      "area_km2": {
+       "24": 14,
+       "48": 14,
+       "72": 14
+      }
+     },
+     "100": {
+      "inside_pct": {
+       "24": 13.8,
+       "48": 6.0,
+       "72": 4.3
+      },
+      "area_km2": {
+       "24": 264,
+       "48": 523,
+       "72": 778
+      }
+     },
+     "300": {
+      "inside_pct": {
+       "24": 38.8,
+       "48": 23.3,
+       "72": 13.0
+      },
+      "area_km2": {
+       "24": 772,
+       "48": 1538,
+       "72": 2366
+      }
+     },
+     "1000": {
+      "inside_pct": {
+       "24": 81.9,
+       "48": 73.3,
+       "72": 54.8
+      },
+      "area_km2": {
+       "24": 2554,
+       "48": 5196,
+       "72": 7932
+      }
+     },
+     "3000": {
+      "inside_pct": {
+       "24": 98.3,
+       "48": 92.2,
+       "72": 91.4
+      },
+      "area_km2": {
+       "24": 7628,
+       "48": 15226,
+       "72": 23484
+      }
+     }
+    }
+   },
+   "undrogued": {
+    "separation_km": {
+     "24": {
+      "median": 16.7,
+      "mean": 17.2,
+      "p90": 31.0,
+      "n": 26
+     },
+     "48": {
+      "median": 31.0,
+      "mean": 32.0,
+      "p90": 60.0,
+      "n": 26
+     },
+     "72": {
+      "median": 47.6,
+      "mean": 48.4,
+      "p90": 82.7,
+      "n": 26
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 19.8,
+      "mean": 21.9,
+      "p90": 34.8,
+      "n": 26
+     },
+     "48": {
+      "median": 35.2,
+      "mean": 39.5,
+      "p90": 57.6,
+      "n": 26
+     },
+     "72": {
+      "median": 54.1,
+      "mean": 58.2,
+      "p90": 85.9,
+      "n": 26
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 65.4,
+     "48": 65.4,
+     "72": 69.2
+    },
+    "skill_72h": {
+     "median": 0.38,
+     "mean": 0.38
+    },
+    "stopped": 2
+   }
+  },
+  "glorys": {
+   "label": "GLORYS daily-mean surface currents (what the app uses)",
+   "drogued": {
+    "separation_km": {
+     "24": {
+      "median": 11.1,
+      "mean": 12.4,
+      "p90": 21.6,
+      "n": 116
+     },
+     "48": {
+      "median": 19.8,
+      "mean": 22.0,
+      "p90": 39.5,
+      "n": 116
+     },
+     "72": {
+      "median": 28.0,
+      "mean": 32.4,
+      "p90": 58.2,
+      "n": 116
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 17.0,
+      "mean": 20.3,
+      "p90": 34.0,
+      "n": 116
+     },
+     "48": {
+      "median": 31.8,
+      "mean": 37.7,
+      "p90": 61.6,
+      "n": 116
+     },
+     "72": {
+      "median": 46.1,
+      "mean": 54.3,
+      "p90": 95.7,
+      "n": 116
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 76.7,
+     "48": 76.7,
+     "72": 80.2
+    },
+    "skill_72h": {
+     "median": 0.5,
+     "mean": 0.46
+    },
+    "stopped": 1,
+    "ensemble": {
+     "0": {
+      "inside_pct": {
+       "24": 1.7,
+       "48": 0.0,
+       "72": 0.0
+      },
+      "area_km2": {
+       "24": 14,
+       "48": 14,
+       "72": 14
+      }
+     },
+     "100": {
+      "inside_pct": {
+       "24": 39.7,
+       "48": 31.0,
+       "72": 21.6
+      },
+      "area_km2": {
+       "24": 266,
+       "48": 526,
+       "72": 774
+      }
+     },
+     "300": {
+      "inside_pct": {
+       "24": 72.4,
+       "48": 56.9,
+       "72": 50.0
+      },
+      "area_km2": {
+       "24": 769,
+       "48": 1538,
+       "72": 2316
+      }
+     },
+     "1000": {
+      "inside_pct": {
+       "24": 98.3,
+       "48": 87.9,
+       "72": 84.5
+      },
+      "area_km2": {
+       "24": 2551,
+       "48": 5138,
+       "72": 7865
+      }
+     },
+     "3000": {
+      "inside_pct": {
+       "24": 98.3,
+       "48": 98.3,
+       "72": 98.3
+      },
+      "area_km2": {
+       "24": 7563,
+       "48": 15198,
+       "72": 23054
+      }
+     }
+    }
+   },
+   "undrogued": {
+    "separation_km": {
+     "24": {
+      "median": 14.9,
+      "mean": 16.1,
+      "p90": 24.5,
+      "n": 26
+     },
+     "48": {
+      "median": 29.4,
+      "mean": 28.6,
+      "p90": 39.9,
+      "n": 26
+     },
+     "72": {
+      "median": 38.3,
+      "mean": 42.7,
+      "p90": 73.9,
+      "n": 26
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 19.8,
+      "mean": 21.9,
+      "p90": 34.8,
+      "n": 26
+     },
+     "48": {
+      "median": 35.2,
+      "mean": 39.5,
+      "p90": 57.6,
+      "n": 26
+     },
+     "72": {
+      "median": 54.1,
+      "mean": 58.2,
+      "p90": 85.9,
+      "n": 26
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 80.8,
+     "48": 73.1,
+     "72": 80.8
+    },
+    "skill_72h": {
+     "median": 0.48,
+     "mean": 0.45
+    },
+    "stopped": 0
+   }
+  },
+  "hycom_analyses": {
+   "label": "HYCOM at the 8 analyses only, 3 days apart",
+   "drogued": {
+    "separation_km": {
+     "24": {
+      "median": 20.5,
+      "mean": 21.2,
+      "p90": 34.2,
+      "n": 116
+     },
+     "48": {
+      "median": 37.5,
+      "mean": 39.5,
+      "p90": 58.1,
+      "n": 116
+     },
+     "72": {
+      "median": 53.9,
+      "mean": 56.6,
+      "p90": 87.4,
+      "n": 116
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 17.0,
+      "mean": 20.3,
+      "p90": 34.0,
+      "n": 116
+     },
+     "48": {
+      "median": 31.8,
+      "mean": 37.7,
+      "p90": 61.6,
+      "n": 116
+     },
+     "72": {
+      "median": 46.1,
+      "mean": 54.3,
+      "p90": 95.7,
+      "n": 116
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 45.7,
+     "48": 44.0,
+     "72": 47.4
+    },
+    "skill_72h": {
+     "median": 0.07,
+     "mean": 0.2
+    },
+    "stopped": 6
+   },
+   "undrogued": {
+    "separation_km": {
+     "24": {
+      "median": 20.6,
+      "mean": 23.2,
+      "p90": 41.8,
+      "n": 26
+     },
+     "48": {
+      "median": 40.2,
+      "mean": 46.4,
+      "p90": 79.1,
+      "n": 26
+     },
+     "72": {
+      "median": 62.4,
+      "mean": 71.2,
+      "p90": 124.5,
+      "n": 26
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 19.8,
+      "mean": 21.9,
+      "p90": 34.8,
+      "n": 26
+     },
+     "48": {
+      "median": 35.2,
+      "mean": 39.5,
+      "p90": 57.6,
+      "n": 26
+     },
+     "72": {
+      "median": 54.1,
+      "mean": 58.2,
+      "p90": 85.9,
+      "n": 26
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 57.7,
+     "48": 50.0,
+     "72": 42.3
+    },
+    "skill_72h": {
+     "median": 0.18,
+     "mean": 0.19
+    },
+    "stopped": 2
+   }
+  },
+  "glorys_analyses": {
+   "label": "GLORYS at the 8 analysis days only, 3 days apart",
+   "drogued": {
+    "separation_km": {
+     "24": {
+      "median": 11.7,
+      "mean": 14.3,
+      "p90": 23.4,
+      "n": 116
+     },
+     "48": {
+      "median": 20.0,
+      "mean": 24.9,
+      "p90": 44.5,
+      "n": 116
+     },
+     "72": {
+      "median": 28.7,
+      "mean": 35.7,
+      "p90": 65.5,
+      "n": 116
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 17.0,
+      "mean": 20.3,
+      "p90": 34.0,
+      "n": 116
+     },
+     "48": {
+      "median": 31.8,
+      "mean": 37.7,
+      "p90": 61.6,
+      "n": 116
+     },
+     "72": {
+      "median": 46.1,
+      "mean": 54.3,
+      "p90": 95.7,
+      "n": 116
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 68.1,
+     "48": 69.8,
+     "72": 72.4
+    },
+    "skill_72h": {
+     "median": 0.46,
+     "mean": 0.42
+    },
+    "stopped": 1
+   },
+   "undrogued": {
+    "separation_km": {
+     "24": {
+      "median": 18.4,
+      "mean": 18.8,
+      "p90": 29.6,
+      "n": 26
+     },
+     "48": {
+      "median": 32.4,
+      "mean": 33.4,
+      "p90": 51.3,
+      "n": 26
+     },
+     "72": {
+      "median": 46.8,
+      "mean": 48.9,
+      "p90": 82.6,
+      "n": 26
+     }
+    },
+    "stay_put_km": {
+     "24": {
+      "median": 19.8,
+      "mean": 21.9,
+      "p90": 34.8,
+      "n": 26
+     },
+     "48": {
+      "median": 35.2,
+      "mean": 39.5,
+      "p90": 57.6,
+      "n": 26
+     },
+     "72": {
+      "median": 54.1,
+      "mean": 58.2,
+      "p90": 85.9,
+      "n": 26
+     }
+    },
+    "beats_stay_put_pct": {
+     "24": 61.5,
+     "48": 61.5,
+     "72": 57.7
+    },
+    "skill_72h": {
+     "median": 0.39,
+     "mean": 0.36
+    },
+    "stopped": 0
+   }
+  }
+ }
+}

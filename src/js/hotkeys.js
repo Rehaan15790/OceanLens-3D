@@ -14,7 +14,7 @@ document.addEventListener('click', e=>{
   if(b && e.detail > 0) b.blur();
 });
 
-const VARIABLE_KEYS = {'1':'temp', '2':'sal', '3':'cur', '4':'tchp', '5':'chl'};
+const VARIABLE_KEYS = {'1':'temp', '2':'sal', '3':'cur', '4':'tchp', '5':'chl', '6':'sstsat', '7':'front'};
 const MODE_KEYS = {u:'surface', l:'layers', d:'slice', i:'iso', o:'iso3d'};
 window.addEventListener('keydown', e=>{
   if(e.ctrlKey || e.metaKey || e.altKey) return;   // leave browser shortcuts (print, save, reload) alone

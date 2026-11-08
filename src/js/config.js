@@ -67,7 +67,7 @@ const state = {
   // 'surface': opaque sea surface with faint deeper layers; 'layers': all depth levels;
   // 'slice': one depth; 'iso': the depth of a value; 'iso3d': the isosurface of a value
   variable:'temp', mode:'surface', depthIdx:4, isoVal:26, opacity:0.25,
-  exagg:3.0, showArgo:true, showGlider:true, showGrid:true, showFlow:true, colorMisfit:false, showTrack:true, showDrifters:false,
+  exagg:3.0, showArgo:true, showGlider:true, showGrid:true, showFlow:true, colorMisfit:false, showTrack:true,
   cbMin:0, cbMax:1, palette:'temperature', scale:'linear', customRange:false,   // boot runs resetRange()
   showOther:true, showAllImported:false,   // imported non-Argo/glider instruments; imported data outside ±1.5 days
   time:0, playing:false, sectionDraw:false, driftPlace:false,

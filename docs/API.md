@@ -6,7 +6,7 @@ output go through `data-pipeline/ncio.py` (NetCDF classic, CDF-1/2/5).
 
 ```
 python build.py --out dist/OceanLens3D.html             # the page served at /
-python server/serve.py                                  # http://127.0.0.1:8080/, datasets from data/*.json
+python server/serve.py                                  # http://127.0.0.1:8080/, datasets: the model snapshots in data/
 python server/serve.py --netcdf model.nc --port 8000    # add a CF NetCDF-3 model file
 python server/serve.py --host 0.0.0.0 --cors '*' --public-url https://example.org/oceanlens
 ```
@@ -15,7 +15,7 @@ python server/serve.py --host 0.0.0.0 --cors '*' --public-url https://example.or
 |---|---|
 | `--host`, `--port` | Interface and port. Default `127.0.0.1:8080` (this machine only). |
 | `--app FILE` | The single-file app served at `/`. Default `dist/OceanLens3D.html`, then `OceanLens3D.html`. |
-| `--data FILE ...` | Schema-1 snapshot JSON files. Default `data/*.json`. |
+| `--data FILE ...` | Schema-1 snapshot JSON files. Default: the model snapshots in `data/` (files with model fields; the extras and the drift check are skipped). |
 | `--netcdf FILE ...` | CF NetCDF-3 model files on a rectilinear latitude/longitude grid, with optional depth and time axes. |
 | `--cors ORIGIN` | Allow cross-origin requests from this origin (`'*'` for any). Repeatable. Off by default. |
 | `--public-url URL` | The base URL clients see, for capabilities documents behind a reverse proxy. |

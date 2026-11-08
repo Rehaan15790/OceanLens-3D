@@ -29,6 +29,9 @@ EXPORT_KEY = """(()=>{ const c=document.createElement('canvas'); c.width=300; c.
 SEA_POINT = """(()=>{ const v=new THREE.Vector3((%f-(LON0+LON1)/2)*SCALE_XZ, 0, -(%f-(LAT0+LAT1)/2)*SCALE_XZ).project(camera);
   const r=renderer.domElement.getBoundingClientRect(); return [r.left+(v.x*0.5+0.5)*r.width, r.top+(-v.y*0.5+0.5)*r.height]; })()"""
 
+# client coordinates of a drifting buoy's mark (drawn just above the sea, as drift.js _dv)
+BUOY_POINT = SEA_POINT.replace(', 0, -(', ', 0.07, -(')
+
 
 class Boot(AppTestCase):
     enter = False
@@ -460,7 +463,7 @@ class Controls:
         # the timeline moves the release time; at the first analysis there is nothing to drift back with
         self.js('__ol.actions.setTime(0)')
         self.assertIsNone(self.js('__ol.drift.run'))
-        self.assertIn('no currents before it', self.js("document.getElementById('driftBody').textContent"))
+        self.assertIn('There are no currents before the first', self.js("document.getElementById('driftBody').textContent"))
         # a profile opened over it goes back to the drift when closed; Esc then removes the drift
         self.js('__ol.actions.setTime(4)')
         self.js('__ol.actions.openWorstFloat()')
@@ -470,6 +473,19 @@ class Controls:
         self.b.pump(0.1)
         self.assertIsNone(self.js('__ol.drift'))
         self.assertEqual(self.js('__ol.state.panel'), 'empty')
+        self.assertNoProblems()
+
+    def test_satellite_maps_by_key(self):
+        real = self.js(DATA_MODE) == 'real'
+        for key, var in (('6', 'sstsat'), ('7', 'front')):
+            self.b.key(key)
+            self.js('__ol.flush()')
+            self.assertEqual(self.js(f'{STATE}.variable'), var)
+            note = self.js("document.getElementById('keyNote').textContent")
+            self.assertIn('INCOIS' if real else 'real Amphan case only', note)
+            self.assertIn('Belkin' if var == 'front' else 'OISST', self.js("document.getElementById('mapAbout').textContent"))
+            self.assertFalse(self.visible('#trackDetailsBtn'), 'the track details button shows on a satellite map')
+        self.b.key('1')
         self.assertNoProblems()
 
     def test_help_and_about(self):
@@ -485,6 +501,40 @@ class Controls:
 
 class RealMode(Controls, AppTestCase):
     data_mode = 'real'
+
+    def test_drift_from_a_buoy_by_click(self):
+        self.js('__ol.actions.setTime(4)')
+        self.b.key('r')                           # the camera still, so the buoy is where it is projected
+        self.b.pump(0.3)
+        self.b.key('t')
+        self.b.pump(0.2)
+        buoys = self.js('__ol.fn.buoysNow()')
+        self.assertGreater(len(buoys), 3)
+        b = min(buoys, key=lambda x: abs(x['lat'] - 14) + abs(x['lon'] - 80))   # the one nearest the middle of the view
+        self.b.click_at(*self.js(BUOY_POINT % (b['lon'], b['lat'])))
+        self.b.pump(1.2)
+        d = self.js('({buoy:__ol.drift.buoy, path:__ol.drift.buoyPath.length, meta:document.getElementById("driftMeta").textContent})')
+        self.assertEqual(d['buoy'], b['index'])
+        self.assertGreater(d['path'], 1)
+        self.assertIn(b['id'], d['meta'])
+        self.assertIn('Where the buoy really went', self.js("document.getElementById('driftBody').textContent"))
+        self.assertIn('Checked against', self.js("document.getElementById('driftFoot').textContent"))
+        # the timeline moves the release to where the buoy is at the new analysis
+        self.js('__ol.actions.setTime(5)')
+        later = [x for x in self.js('__ol.fn.buoysNow()') if x['index'] == b['index']]
+        if later:
+            self.assertEqual((self.js('__ol.drift.lat'), self.js('__ol.drift.lon')), (later[0]['lat'], later[0]['lon']))
+        self.js('__ol.actions.clearDrift()')
+        self.assertNoProblems()
+
+    def test_about_cites_the_buoys_and_the_satellite(self):
+        self.b.click('#aboutBtn')
+        self.b.pump(0.2)
+        cites = self.js("[...document.querySelectorAll('#aboutCitations [data-cite]')].map(e=>e.dataset.cite+': '+e.textContent)")
+        self.assertTrue(any(c.startswith('gdp: Elipot') for c in cites), cites)
+        self.assertTrue(any(c.startswith('oisst: Huang') and 'INCOIS' in c for c in cites), cites)
+        self.b.key('Escape')
+        self.assertNoProblems()
 
     def test_model_switch_by_click_and_key(self):
         if len(self.js('__ol.models') or []) < 2:
@@ -611,45 +661,11 @@ class RealMode(Controls, AppTestCase):
         self.assertNoProblems()
 
 
-    def test_drift_from_a_real_buoy(self):
-        if not self.js("typeof DRIFTERS !== 'undefined' && !!DRIFTERS"):
-            self.skipTest('this build has no drifter data')
-        self.js('__ol.actions.setTime(3)')
-        self.assertTrue(self.visible('#rowDrifters'))
-        self.assertEqual(self.js("__ol.render.marks('drifter').length"), 0, 'the buoys are off at first')
-        self.press('#swDrifters')
-        self.assertTrue(self.js('__ol.state.showDrifters'))
-        self.assertIn('Drifting buoy', self.js("document.getElementById('keyLegend').textContent"))
-        # click, with the mouse, the buoy mark farthest from any other mark
-        pick = self.js("""(()=>{ const all = __ol.render.marks(), d = all.filter(m=>m.kind==='drifter');
-            const gap = m=>Math.min(...all.filter(o=>o!==m).map(o=>Math.hypot(o.x-m.x, o.y-m.y)));
-            return d.sort((a, b)=>gap(b)-gap(a))[0]; })()""")
-        self.assertTrue(pick, 'no buoy mark on screen')
-        self.b.click_at(pick['x'], pick['y'])
-        self.b.pump(1.2)
-        self.assertEqual(self.js('__ol.drift && __ol.drift.drifter'), pick['id'])
-        self.assertEqual(self.js('__ol.state.panel'), 'drift')
-        body = self.js("document.getElementById('driftBody').textContent")
-        self.assertIn(f"Distance from the real buoy {pick['id']}", body)
-        self.assertIn('Had it stayed put', body)
-        foot = self.js("document.getElementById('driftFoot').textContent")
-        n = self.js('__ol.facts().real.drifters.drifters')
-        self.assertIn(f'Checked against {n} real drifting buoys', foot)
-        self.assertNotIn('Not checked', foot)
-        # another time: the buoy is elsewhere, so the drift no longer compares with it
-        self.js('__ol.actions.setTime(5)')
-        self.assertNotIn('Distance from the real buoy', self.js("document.getElementById('driftBody').textContent"))
-        self.b.key('Escape')
-        self.press('#swDrifters')
-        self.assertFalse(self.js('__ol.state.showDrifters'))
-        self.assertNoProblems()
-
-
     def test_satellite_products_by_click(self):
         if not self.js("typeof PRODUCTS !== 'undefined' && !!PRODUCTS"):
             self.skipTest('this build has no satellite products')
         self.js('__ol.actions.setTime(4)')
-        for v in ('schl', 'front', 'pfz', 'ssta'):
+        for v in ('schl', 'pfz', 'ssta'):
             self.assertTrue(self.visible(f'#varPills .pill[data-v="{v}"]'), v)
         self.pill('v', 'pfz')
         self.assertEqual(self.js('__ol.state.variable'), 'pfz')
@@ -659,7 +675,8 @@ class RealMode(Controls, AppTestCase):
         card = self.js("document.getElementById('productCard').textContent")
         both = self.js('__ol.facts().real.products.fishing[4].both')
         self.assertIn(f'{both} of', card)
-        self.assertFalse(self.visible('#tchpNote'), 'the cyclone-heat note is for cyclone heat potential only')
+        self.assertIn('SST front', self.js("document.getElementById('mapAbout').textContent"))
+        self.assertFalse(self.visible('#trackDetailsBtn'), 'the track details belong to the heat map')
         self.pill('v', 'ssta')
         card = self.js("document.getElementById('productCard').textContent")
         trend = self.js('__ol.facts().real.products.series.bay.trendPerDecade')
@@ -698,13 +715,6 @@ class RealMode(Controls, AppTestCase):
 
 class SyntheticMode(Controls, AppTestCase):
     data_mode = 'synth'
-
-    def test_no_buoys_in_the_demo(self):
-        self.assertFalse(self.visible('#rowDrifters'))
-        self.js('__ol.actions.setOverlay("showDrifters", true)')
-        self.assertEqual(self.js("__ol.render.marks('drifter').length"), 0)
-        self.js('__ol.actions.setOverlay("showDrifters", false)')
-        self.assertNoProblems()
 
 
 if __name__ == '__main__':

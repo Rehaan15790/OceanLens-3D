@@ -216,6 +216,18 @@ class HostileText(AppTestCase):
         finally:
             self.js(f'(w => REAL_MODELS.forEach((m, i) => Object.assign(m.words, w[i])))({saved})')
             self.js('clearDrift(); flushUpdate()')
+        # a buoy id from the extras reaches the drift panel's heading
+        b = self.js('setTime(4) || buoysNow()[0]')
+        saved_id = self.js(f"EXTRAS().drifters.drifters[{b['index']}].id")
+        try:
+            self.js(f"EXTRAS().drifters.drifters[{b['index']}].id = {json.dumps(IMG)}")
+            self.assertTrue(self.js(f"startDriftFromBuoy({b['index']})"))
+            self.js('flushUpdate()')
+            self.assertIn('&lt;img', self.js("document.getElementById('driftMeta').innerHTML"))
+            self.assertClean()
+        finally:
+            self.js(f"EXTRAS().drifters.drifters[{b['index']}].id = {json.dumps(saved_id)}")
+            self.js('clearDrift(); flushUpdate()')
         self.assertNoProblems()
 
     # attack: CSV header cells, a cell in the id column and the file name reached the import dialog

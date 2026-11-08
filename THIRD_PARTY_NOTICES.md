@@ -40,7 +40,7 @@ None. The app uses the operating system's fonts.
 
 ## Data
 
-The real-data snapshot embedded in the built file is derived from the datasets below. None of them needs an
+The real-data snapshots and extras embedded in the built file are derived from the datasets below. None of them needs an
 account. Each asks to be acknowledged or cited when used. The same texts are in the app's About panel and in the
 snapshot's `meta.citations`.
 
@@ -117,9 +117,14 @@ MoES/INCOIS and other partners.
 
 ### NOAA Global Drifter Program
 
-Elipot, S., A. Sykulski, R. Lumpkin, L. Centurioni and M. Pazos (2022), Hourly location, current velocity, and
-temperature collected from Global Drifter Program drifters world-wide, version v2.01, NOAA NCEI,
-doi:10.25921/x46c-3620; Elipot, S. et al. (2016), A global surface drifter data set at hourly resolution, J. Geophys.
-Res. Oceans 121, 2937–2966, doi:10.1002/2016JC011716. Collected and made freely available by the NOAA Global
-Drifter Program (https://www.aoml.noaa.gov/phod/gdp/), accessed from erddap.aoml.noaa.gov. Creative Commons
-Attribution 4.0 (CC BY 4.0). `data/drifters-2020-05.json` keeps 6-hourly positions of 12 drifters, 4–25 May 2020.
+`data/amphan-2020-extras.json` (drifters) and `data/drift-validation.json` use it. Elipot, S., Sykulski, A., Lumpkin,
+R., Centurioni, L. and Pazos, M. (2022), Hourly location, current velocity, and temperature collected from Global
+Drifter Program drifters world-wide, NOAA National Centers for Environmental Information, doi:10.25921/x46c-3620.
+Served by NOAA AOML ERDDAP (drifter_hourly_qc) under Creative Commons Attribution 4.0.
+
+### NOAA OISST v2.1, from the INCOIS Live Access Server
+
+`data/amphan-2020-extras.json` (sat.sst) holds NOAA OISST v2.1 (AVHRR only) daily SST, provided by NOAA PSL and
+extracted as NetCDF from the INCOIS Live Access Server (las.incois.gov.in). Huang, B. et al. (2021), Improvements of
+the Daily Optimum Interpolation Sea Surface Temperature (DOISST) Version 2.1, J. Climate 34, 2923–2939,
+doi:10.1175/JCLI-D-20-0166.1. A US government work in the public domain.

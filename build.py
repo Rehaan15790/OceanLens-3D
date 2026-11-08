@@ -31,7 +31,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, 'src')
 SHIPPED = os.path.join(ROOT, 'OceanLens3D.html')
 DEFAULT_OUT = os.path.join(ROOT, 'dist', 'OceanLens3D.html')
-BUDGET = 6_000_000                  # bytes; with three models, the buoys, moorings and satellite products the page is about 5.98 MB
+BUDGET = 7_500_000                  # bytes; three models, the extras, the drift check, moorings and satellite products
 BANNER = '<!-- Built by build.py from src/. Edit the sources, not this file. -->\n'
 # the page's content security policy; script-src and style-src get a hash for every inline script and style that runs,
 # so neither allows 'unsafe-inline' (nothing here uses eval, inline handlers, javascript: URLs or style="" markup)
