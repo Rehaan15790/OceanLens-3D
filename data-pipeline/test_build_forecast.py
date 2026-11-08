@@ -1,6 +1,6 @@
 """Unit tests for build_forecast.py (no network): picking the latest run and its days from the object-store listings,
 and the committed file's shape when there is one."""
-import json, os, sys, unittest
+import json, os, re, sys, unittest
 from datetime import datetime, timezone
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -17,8 +17,9 @@ class Listings:
         self.names = names
 
     def get(self, url, name, parse, **kw):
-        key = name.split('listing-')[1].rsplit('-', 2)[0]
-        month = name.rsplit('-', 2)[-2] + '/' + name.rsplit('-', 1)[-1][:2]
+        self.names_asked = getattr(self, 'names_asked', []) + [name]
+        key, y, mo, _stamp = re.search(r'listing-(\w+)-(\d{4})-(\d{2})-(\d{8})\.xml$', name).groups()
+        month = f'{y}/{mo}'
         out = {f'{FC.PRODUCT}/{FC.DATASETS[key]}/{month}/{n}': 100 for n in self.names
                if f'-{key}_fcst_' in n and n.split('_')[3][:6] == month.replace('/', '')}
         if not out:
@@ -51,6 +52,14 @@ class Runs(unittest.TestCase):
         L = names('20261130', ['20261129', '20261130', '20261201', '20261202'])
         run, days, _ = FC.run_files(Listings(L), today=datetime(2026, 11, 30, tzinfo=timezone.utc))
         self.assertEqual(days, ['20261129', '20261130', '20261201', '20261202'])
+
+    def test_each_day_lists_afresh(self):
+        L = Listings(names('20261105', ['20261104', '20261105']))
+        FC.run_files(L, today=datetime(2026, 11, 5, tzinfo=timezone.utc))
+        self.assertTrue(all(n.endswith('-20261105.xml') for n in L.names_asked), L.names_asked)
+        L2 = Listings(names('20261104', ['20261103', '20261104']))
+        FC.run_files(L2, run='20261104')                  # a named run reads the listings of its own day
+        self.assertTrue(all(n.endswith('-20261104.xml') for n in L2.names_asked), L2.names_asked)
 
     def test_no_files(self):
         with self.assertRaises(B.InvariantError):

@@ -448,6 +448,10 @@ class Controls:
         self.assertIn('90 % area', body)
         if self.js(DATA_MODE) == 'real' and len(self.js('__ol.models')) > 1:
             self.assertIn('GLORYS drift (dashed)', body)
+            if 'igora' in self.js('__ol.models'):         # each other model has its own line and label
+                self.assertIn('IGORA drift (dotted)', body)
+                labels = self.js("Array.from(document.querySelectorAll('.geoLabel.drift')).filter(e=>e.style.display!=='none').map(e=>e.textContent)")
+                self.assertTrue(any(l.startswith('GLORYS') for l in labels) and any(l.startswith('IGORA') for l in labels), labels)
         # back in time and 24 h by real clicks on the panel
         self.press('#driftDir button[data-dir="-1"]')
         self.press('#driftHours button[data-h="24"]')

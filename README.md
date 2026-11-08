@@ -9,8 +9,8 @@
 ![OceanLens 3D: sea-surface temperature over the Arabian Sea and the Bay of Bengal, with Argo floats and Cyclone Amphan's track](docs/images/temperature-surface.png)
 
 OceanLens 3D puts ocean model fields, Argo float profiles and a cyclone track into one 3D scene that you can slice,
-probe and compare. It covers the Arabian Sea and the Bay of Bengal (6–22°N, 61–92°E, 0–1000 m), with two models to
-switch between: HYCOM and Copernicus Marine GLORYS.
+probe and compare. It covers the Arabian Sea and the Bay of Bengal (6–22°N, 61–92°E, 0–1000 m), with three models to
+switch between: HYCOM, Copernicus Marine GLORYS and INCOIS's IGORA reanalysis from the INCOIS Live Access Server.
 
 It was built by **Team ByteForge** for Smart India Hackathon 2026, problem statement 26067 (problem owner: INCOIS).
 It is a student prototype and is not affiliated with or endorsed by INCOIS or the Ministry of Earth Sciences.
@@ -35,7 +35,7 @@ desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 
 - **Surface drift for search and rescue:** click the sea (`T`) to release an object; the model's surface currents
   carry it up to 72 h forward, or back in time to ask where something found there came from. 200 spread drifts give
   a 90 % search ellipse for each day and the share that reaches the coast, and the other model's drift from the same
-  point shows how far the two models disagree. Turn on **Drifting buoys** to release a drift where one of 12 real NOAA
+  point shows how far the models disagree. Turn on **Drifting buoys** to release a drift where one of 12 real NOAA
   drifting buoys was, and see where the buoy really went.
 - **Today's ocean forecast (served):** `build_forecast.py` puts the latest Copernicus Marine global forecast (the day
   before the run and the next 9 days) on the same map; the data server offers it as a case beside Amphan, under

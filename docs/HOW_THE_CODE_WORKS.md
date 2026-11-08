@@ -234,7 +234,7 @@ This follows GODAE Class 4 verification, the standard way forecast centres compa
 - **Search area:** at every 24 h the members still afloat give a mean and a covariance; the ellipse with semi-axes 2.146 × the square roots of its eigenvalues holds 90 % of a two-dimensional normal.
 - **Ends:** a member stops when it reaches land (ETOPO1 above 0 m, amber) or leaves the map.
 
-With two models in the page, the central drift is also run with the other model (`realAtIn` reads any decoded model), from the same point and time. `facts_reference.py` (`drift_path`) recomputes the central drift with numpy, and the tests compare the two hour by hour.
+With more models in the page, the central drift is also run with each other model (dashed, then dotted) (`realAtIn` reads any decoded model), from the same point and time. `facts_reference.py` (`drift_path`) recomputes the central drift with numpy, and the tests compare the two hour by hour.
 
 **The check against real buoys** (`drifters.js`). `data/drifters-2020-05.json` holds 12 NOAA Global Drifter Program buoys in the map, every 6 h. `drifterCheck` starts the central drift from each buoy's position at each analysis that has 72 h of currents after it (61 releases), and at 24, 48 and 72 h measures the great-circle distance to where the buoy really was, and to where it started (the object standing still, the simplest forecast to beat). The medians go into `facts().real.drifters`, per model; `facts_reference.py` (`drifter_check`) recomputes them and the facts test compares. After 72 h: GLORYS 31 km, HYCOM 55 km, standing still about 46 km. Clicking a buoy (the Drifting buoys overlay) releases a drift there; `drifterTruth` adds the buoy's real path and the distances to the panel.
 
@@ -338,11 +338,11 @@ The tests click and type in a real browser, exactly as a user would, against the
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| unit | 17 + 131 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for both models; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
-| server | 50 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
-| smoke | 57 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
-| extend | 20 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
-| tour | 7 | All eight steps in both modes; captions of 35 words or fewer, under both models; timing races |
+| unit | 18 + 150 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for each of the three models; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
+| server | 51 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
+| smoke | 58 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
+| extend | 21 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
+| tour | 8 | All eight steps in both modes; captions of 35 words or fewer under every model; a monthly mean claims no cold wake; timing races |
 | robust | 6 | No WebGL, a lost graphics context and recovery, no memory growth over 20 rebuilds |
 | security | 38 | Hostile file contents stay text, damaged files and crafted NetCDF-4 end with a message instead of hanging, the Content Security Policy is enforced and never violated |
 | render | 9 | Pixel checks: a slice matches its colour bar, streaks stand out, floats aren't cut by the sea surface, the seabed is closed |

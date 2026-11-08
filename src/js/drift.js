@@ -4,8 +4,8 @@
    (or back in time, to ask where something found there came from) for up to 72 h. One drift with no spread draws
    the line. 200 more, released within about a kilometre and given a random walk for the eddies a 0.5° grid cannot
    hold, show how far apart the same start can end; the ellipse holding 90 % of those still afloat is the search
-   area at each day. With two models in the page the other model's drift from the same point is drawn too, dashed:
-   where the two part is the model uncertainty a forecaster would weigh.
+   area at each day. With more models in the page, each other model's drift from the same point is drawn too (dashed,
+   then dotted, each labelled): where they part is the model uncertainty a forecaster would weigh.
    Current only: the snapshots have no wind, so there is no leeway and no Stokes drift (the panel says so).
    drifters.js checks the drift against real drifting buoys and draws a drifter's own path when a drift starts from one.
    ============================================================ */
@@ -143,8 +143,11 @@ const driftVisible = ()=>!!(drift && drift.run && driftGroup.visible);
 const driftLabels = {
   start: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:driftVisible}),
   end: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:driftVisible}),
-  other: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:()=>driftVisible() && drift.others.length > 0})
+  other: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:()=>driftVisible() && drift.others.length > 0}),
+  other2: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:()=>driftVisible() && drift.others.length > 1})
 };
+// how each other model's drift is drawn and named: dashed, then dotted (the dash length in scene units)
+const OTHER_LINES = [{dash:0.06, word:'dashed'}, {dash:0.02, word:'dotted'}];
 const _dv = (lat, lon, lift = 0)=>{ const [x, z] = toXZ(lat, lon); return new THREE.Vector3(x, DRIFT_Y + lift, z); };
 // a flat ribbon on the sea surface along path [{lat, lon}], half-width `half`, `lift` above DRIFT_Y, dashed every `dash`
 function surfaceRibbon(path, half, lift, dash){
@@ -196,7 +199,7 @@ function buildDrift(){
   add(new THREE.Points(g, Render.marks({shape:'circle', sizePx:6})), Render.ORDER.particles);
   // the central drift as a white ribbon with a dark edge (a 1 px line is lost on the bright end of the palette),
   // the other model's dashed, and a real drifter's own path (drifters.js) in its colour
-  [[run.path, null], ...drift.others.map(o=>[o.run.path, 0.06])].forEach(([path, dash])=>{
+  [[run.path, null], ...drift.others.slice(0, OTHER_LINES.length).map((o, i)=>[o.run.path, OTHER_LINES[i].dash])].forEach(([path, dash])=>{
     add(new THREE.Mesh(surfaceRibbon(path, 0.036, 0.008, dash), Render.flat(0x0b0f13, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
     add(new THREE.Mesh(surfaceRibbon(path, 0.02, 0.011, dash), Render.flat(0xffffff, {side:THREE.DoubleSide})), Render.ORDER.surfaceLines);
   });
@@ -219,16 +222,19 @@ function buildDrift(){
   driftLabels.start.pos.copy(_dv(startAt[0], startAt[1], 0.03));
   driftLabels.end.el.textContent = `${driftModelName()} ${sign}${last.h} h`;
   driftLabels.end.pos.copy(_dv(endAt[0], endAt[1], 0.03));
-  if(drift.others.length){
-    const o = drift.others[0], q = o.run.path[o.run.path.length-1];
+  const taken = [endAt];
+  drift.others.slice(0, OTHER_LINES.length).forEach((o, i)=>{
+    const q = o.run.path[o.run.path.length-1], L = i ? driftLabels.other2 : driftLabels.other;
     let p = at(q, unit(q), 0.45);
-    if(Math.hypot((p[1]-endAt[1])*cl, p[0]-endAt[0]) < 0.6){
+    // apart from the labels already placed: across the line from q, then further along it
+    for(let k=0; k<3 && taken.some(a=>Math.hypot((p[1]-a[1])*cl, p[0]-a[0]) < 0.6); k++){
       const side = Math.sign((q.lon-last.lon)*cl*u[1] - (q.lat-last.lat)*u[0]) || 1;   // the side of the line q is on
-      p = [p[0] - side*u[0]*0.45, p[1] + side*u[1]*0.45/cl];
+      p = [p[0] - side*u[0]*0.45*(k+1), p[1] + side*u[1]*0.45*(k+1)/cl];
     }
-    driftLabels.other.el.textContent = `${o.words.short} ${sign}${q.h} h`;
-    driftLabels.other.pos.copy(_dv(p[0], p[1], 0.03));
-  }
+    taken.push(p);
+    L.el.textContent = `${o.words.short} ${sign}${q.h} h`;
+    L.pos.copy(_dv(p[0], p[1], 0.03));
+  });
 }
 // ease the camera in over the drift, keeping its heading; the view's centre lands on the sea surface
 function faceDrift(){
@@ -284,9 +290,9 @@ function renderDriftPanel(){
   const fate = run.end==='ashore' ? `It reaches the coast after ${run.endH} h, near ${fmt.latLon1(last.lat, last.lon)}.`
              : run.end==='edge' ? `It leaves the map after ${run.endH} h.`
              : `It ${back ? 'started' : 'ends'} near <b>${fmt.latLon2(last.lat, last.lon)}</b>.`;
-  const others = drift.others.map(o=>{
+  const others = drift.others.slice(0, OTHER_LINES.length).map((o, i)=>{
     const q = o.run.path[o.run.path.length-1], gap = haversineKm([last.lat, last.lon], [q.lat, q.lon]);
-    return `<p class="meta">The ${fmt.esc(o.words.short)} drift (dashed) from the same point ends <b>${fmt.int(gap)} km</b> from the `+
+    return `<p class="meta">The ${fmt.esc(o.words.short)} drift (${OTHER_LINES[i].word}) from the same point ends <b>${fmt.int(gap)} km</b> from the `+
       `${fmt.esc(M.short)} one${o.run.end==='ashore' ? `, ashore after ${o.run.endH} h` : ''}: the two models’ currents differ by that much here.</p>`;
   }).join('');
   body.innerHTML = short +

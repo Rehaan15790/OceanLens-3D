@@ -92,8 +92,8 @@ redistributing it outside this project.
 
 ### Copernicus Marine global analysis and forecast
 
-`data/forecast-latest.json` (written by `data-pipeline/build_forecast.py`, the run issued on 4 November 2026 as
-committed) is derived from it. Generated using E.U. Copernicus Marine Service Information: Global Ocean Physics
+`data/forecast-latest.json` (written by `data-pipeline/build_forecast.py`; `meta.case.issued` names the run it
+holds) is derived from it. Generated using E.U. Copernicus Marine Service Information: Global Ocean Physics
 Analysis and Forecast (GLOBAL_ANALYSISFORECAST_PHY_001_024), doi:10.48670/moi-00016. Used under the Copernicus
 Marine Service commitments and licence; read anonymously over HTTPS.
 

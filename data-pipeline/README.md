@@ -220,7 +220,7 @@ parsing, quality codes and units, and rebuilds the file from the cache when it i
 ## Today's forecast (`build_forecast.py`)
 
     python data-pipeline/build_forecast.py --fetch           # ../data/forecast-latest.json, the latest run
-    python data-pipeline/build_forecast.py --run 20261104    # a given run, from the cache
+    python data-pipeline/build_forecast.py --run YYYYMMDD    # a given run, from the cache
 
 writes a case of its own: the latest run of Copernicus Marine's global analysis and forecast
 (`GLOBAL_ANALYSISFORECAST_PHY_001_024`, 1/12°, daily means), the day before the run and the next 9 days, on the app
@@ -229,7 +229,10 @@ reads each day's native NetCDF-4 files in HTTPS byte ranges (only the map and th
 GLORYS route does), and grids them with `model_from_dataset`. The sea floor comes from the main snapshot. There is no
 storm track and no float: `meta.case` says it is a forecast, and the app (`CASE` in `data-real.js`) leaves the track,
 floats and tour out. The server offers it beside Amphan; `serve.py --reload` serves each day's new file without a
-restart (`docs/DEPLOY.md` has a daily timer). `test_build_forecast.py` tests how the run and its days are chosen.
+restart (`docs/DEPLOY.md` has a daily timer). Each day's object-store listing is a cache file of its own, so a daily
+run sees the new run (a single listing per month would keep finding the first run it saw). The committed file is the run
+of the day it was committed: it goes stale unless the timer rebuilds it. `test_build_forecast.py` tests how the run and its
+days are chosen.
 
 ## INCOIS LAS: IGORA (`build_las.py`)
 
