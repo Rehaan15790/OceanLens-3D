@@ -66,20 +66,22 @@
     return G;
   }
   const none = ()=>new Array(gridPts.length).fill(null);
+  // May 2020's satellite data: another case served in Amphan's place (a forecast) does not list them
+  const available = ()=>typeof CASE==='undefined' || CASE.extras;
   const note = what=>()=>{
     if(dataMode!=='real') return `${what} exists for the real Amphan case only.`;
     if(!sat()) return `${what} needs the satellite data (data/amphan-2020-extras.json), which this page does not hold.`;
     return '';
   };
   OceanLens.registerProduct('sstsat', {
-    label:'Satellite SST', unit:'°C', palette:'temperature', range:[26, 33], model:{synth:false},
+    label:'Satellite SST', unit:'°C', palette:'temperature', range:[26, 33], model:{synth:false}, available,
     about:'Sea-surface temperature measured from space: NOAA OISST v2.1, a daily blend of AVHRR satellite and in-situ '+
           'SST on a 0.25° grid, extracted from the INCOIS Live Access Server. Compare it with the models’ Temperature at 0 m.',
     grid:t=>dataMode==='real' && sat() ? toMap(sat().days[t], v=>v.reduce((a, b)=>a + b, 0)/v.length) : none(),
     keyNote:()=>note('Satellite SST')() || 'NOAA OISST v2.1 daily mean, from the INCOIS Live Access Server.'
   });
   OceanLens.registerProduct('front', {
-    label:'SST fronts', unit:'°C/100 km', palette:'heat', range:[0, 1.5], model:{synth:false},
+    label:'SST fronts', unit:'°C/100 km', palette:'heat', range:[0, 1.5], model:{synth:false}, available,
     about:'How fast satellite SST changes across the sea surface: bright bands are fronts, where warm and cool water meet and '+
           'fish often gather. A simplified Belkin and O’Reilly (2009) method: one 3 × 3 median pass, then the Sobel gradient. '+
           'INCOIS fishing-zone advisories pair fronts with satellite chlorophyll, which the LAS does not hold for May 2020.',

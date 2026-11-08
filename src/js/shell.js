@@ -111,14 +111,17 @@ const shell = (()=>{
   on('smallScreenContinue', ()=>closeDialog());
   on('enterBtn', ()=>{ smallScreenCheck(); window.addEventListener('resize', smallScreenCheck); });
 
-  // citations come with the data (meta.citations, written by the pipeline), from every model's snapshot; the extras'
-  // (drifting buoys, satellite SST) when the About card first opens, so start-up does not read the extras
+  // citations come with the data (meta.citations, written by the pipeline), from every model's snapshot, the moorings
+  // and satellite products; the extras' (drifting buoys, satellite SST) when the About card first opens, so start-up
+  // does not read the extras
   function fillCitations(withExtras){
     const e = withExtras && typeof EXTRAS==='function' ? EXTRAS() : null;
-    const list = REAL_MODELS.flatMap(m=>m.data().meta.citations || []).concat(e && e.meta.citations || []);
+    const list = REAL_MODELS.flatMap(m=>m.data().meta.citations || []).concat(e && e.meta.citations || [],
+      PRODUCTS ? PRODUCTS.meta.citations : [], MOORINGS ? [MOORINGS.meta.citation] : []);
     document.querySelectorAll('[data-cite]').forEach(el=>{
       const c = list.find(x=>x.id===el.dataset.cite);
       if(c || !el.textContent) el.textContent = c ? c.text : '';
+      el.hidden = !el.textContent;                 // a source this case does not use (the forecast's, in Amphan's page)
     });
   }
   fillCitations(false);

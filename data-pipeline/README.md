@@ -13,6 +13,7 @@ python data-pipeline/build_snapshot.py --check --temperature-only --model-at-obs
 python data-pipeline/build_snapshot.py --fetch --allow-host tds.hycom.org   # download what the cache lacks, from HYCOM only
 python data-pipeline/build_snapshot.py --temperature-only --model-at-obs    # the committed configuration
 python data-pipeline/build_snapshot.py --model glorys --temperature-only    # data/amphan-2020-glorys.json (GLORYS)
+python data-pipeline/build_snapshot.py --model-netcdf FILE --engine xarray --out OTHER.json   # read FILE through xarray
 python -m unittest discover -s data-pipeline -v          # tests (no network, no cache needed)
 ```
 
@@ -147,8 +148,8 @@ Argo profiles are matched to the file's times. `--model-at-obs` works with HYCOM
 
 The whole file is read into memory, so a model file for `--model-netcdf` should be a subset of the map, not a
 global field (the GLORYS route above reads global files in ranges instead). The tests check that a CF file gives the
-same snapshot fields as NetCDF-3 and as NetCDF-4 (`test_nc4.ModelThroughNetcdf4`). No real INCOIS LAS export has
-been tried.
+same snapshot fields as NetCDF-3 and as NetCDF-4 (`test_nc4.ModelThroughNetcdf4`). The INCOIS LAS has its own route,
+`build_las.py` (below).
 
 ## The extras: drift currents, drifting buoys and satellite SST (`build_extras.py`)
 
@@ -209,3 +210,73 @@ coverage came closest to 90 %. The buoys' drogues hang at 15 m; the currents are
 - `nc4_fixtures.py` writes small NetCDF-4 files in both layouts for the tests. It shares `nc4.py`'s reading of the
   HDF5 specification, which is why the tests also read a real GLORYS file and check it against the Zarr store.
 - `blosc.py` decodes Blosc frames with LZ4 and byte shuffle (the Copernicus ARCO Zarr chunks), for that check.
+
+## Satellite products (`build_products.py`)
+
+    python data-pipeline/build_products.py [--fetch]         # ../data/products-2020-05.json
+
+writes the satellite fields behind the fishing-zone indicator and the climate view (`src/js/products.js`), on the
+app grid and the 8 analysis days:
+
+- **SST** from OSTIA (Copernicus Marine `SST_GLO_SST_L4_REP_OBSERVATIONS_010_011`, reprocessed L4, 0.05° daily):
+  each 0.5° cell the mean of the pixels inside it.
+- **Climatology:** the mean of the same calendar day over 1991–2020 (30 days per analysis day).
+- **Series:** every year 1982–2025, the mean over the 8 days in a Bay of Bengal box (8–21°N, 80.5–92°E) and an
+  Arabian Sea box (8–22°N, 61–77°E).
+- **Chlorophyll-a** from Copernicus-GlobColour (`OCEANCOLOUR_GLO_BGC_L4_MY_009_104`, gap-free multi-sensor 4 km
+  daily): each cell the geometric mean of its pixels (where at least a quarter are defined).
+
+The fronts the fishing-zone indicator pairs with chlorophyll are the app's SST fronts map (NOAA OISST from the INCOIS
+LAS, in the extras; `src/js/plugins/satellite.js`), so this file has none of its own.
+
+The native NetCDF-4 files (16 MB a day for OSTIA, 94 MB for GlobColour, global) are read in HTTPS byte ranges by
+`nc4.py`, only the parts over the map, through the same cache and manifest as the snapshot: 352 OSTIA days and 8
+GlobColour days, about 800 MB of cache under `cache/ostia/` and `cache/globcolour/`, 3 minutes on a fast link. The
+same cache gives a byte-identical file (137 kB). `test_build_products.py` tests the cell statistics and the packing, and rebuilds the committed file when the cache is there. `facts_reference.py product_facts` recomputes
+every number the app quotes from it (the fishing-zone counts with the fronts of `satellite_maps`).
+
+## RAMA moorings (`build_moorings.py`)
+
+    python data-pipeline/build_moorings.py [--fetch]         # ../data/moorings-2020-05.json
+
+writes the RAMA moorings inside the map, 4–25 May 2020: NOAA PMEL's GTMBA daily means (`pmelTaoDyT`, `pmelTaoDyS`,
+`pmelTaoDyCur`), read through NOAA CoastWatch's ERDDAP over HTTPS (PMEL's own ERDDAP redirects there over plain
+HTTP, which the fetcher refuses). Temperature and salinity at the sensor depths, currents (m/s) from the current
+meters; quality codes 1, 2 and 3 kept (highest, default, adjusted). Four moorings have data: 12°N 90°E, 15°N 90°E,
+15°N 65°E and 8°N 67°E (11 kB). The app turns each mooring's analysis days into profiles (`src/js/moorings.js`);
+`facts_reference.py mooring_facts` recomputes its comparison with the models. `test_build_moorings.py` tests the
+parsing, quality codes and units, and rebuilds the file from the cache when it is there.
+
+## Today's forecast (`build_forecast.py`)
+
+    python data-pipeline/build_forecast.py --fetch           # ../data/forecast-latest.json, the latest run
+    python data-pipeline/build_forecast.py --run YYYYMMDD    # a given run, from the cache
+
+writes a case of its own: the latest run of Copernicus Marine's global analysis and forecast
+(`GLOBAL_ANALYSISFORECAST_PHY_001_024`, 1/12°, daily means), the day before the run and the next 9 days, on the app
+grid. The script lists the object store for the newest run with temperature, salinity and currents for every day,
+reads each day's native NetCDF-4 files in HTTPS byte ranges (only the map and the levels the app depths use, as the
+GLORYS route does), and grids them with `model_from_dataset`. The sea floor comes from the main snapshot. There is no
+storm track and no float: `meta.case` says it is a forecast, and the app (`CASE` in `data-real.js`) leaves the track,
+floats and tour out. The server offers it beside Amphan; `serve.py --reload` serves each day's new file without a
+restart (`docs/DEPLOY.md` has a daily timer). Each day's object-store listing is a cache file of its own, so a daily
+run sees the new run (a single listing per month would keep finding the first run it saw). The committed file is the run
+of the day it was committed: it goes stale unless the timer rebuilds it. `test_build_forecast.py` tests how the run and its
+days are chosen.
+
+## INCOIS LAS: IGORA (`build_las.py`)
+
+    python data-pipeline/build_las.py [--fetch]              # ../data/amphan-2020-igora.json
+
+asks the INCOIS Live Access Server (`las.incois.gov.in`) for IGORA, the INCOIS Global Ocean ReAnalysis: one NetCDF
+extract per variable (temperature, salinity, u, v) over the map, May 2020 monthly mean, 0–1250 m, through the LAS
+product server's `Data_Extract_netCDF` operation (the request is a LAS XML document; the server answers with a
+redirect to its output file, which is then fetched over HTTPS). The currents sit on IGORA's U cells and are moved to
+its T cells; then `model_from_dataset` grids everything as for the other models. The snapshot copies the GLORYS
+snapshot's floats, track and relief, and repeats the monthly mean at the 8 analysis times; `build.py` embeds that one
+field once (`meta.timesStored`). Four extracts, 26 seconds.
+
+The LAS sends its certificate without the GlobalSign intermediate that links it to a trusted root (browsers fetch it
+themselves; Python does not). `GLOBALSIGN_INTERMEDIATE` in the script is that intermediate, as GlobalSign publishes
+it (kept as text: the repository ignores `*.pem`); the script checks its SHA-256 fingerprint and adds it to the trusted set for these downloads only, so certificate
+checking stays on. The LAS's OPeNDAP endpoint did not answer when this was written (4 November 2026).

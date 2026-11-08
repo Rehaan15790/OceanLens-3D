@@ -1,7 +1,7 @@
 /* ---- guided tour: the steps and their captions ----
    Captions are built from the runtime facts (facts.js) and formatters (fmt.js), so no data-derived number is
    typed here. Each is at most 35 words and keeps its qualifiers ("in HYCOM", "mostly", "consistency check"); M()
-   names the model on screen (HYCOM or GLORYS);
+   names the model on screen (HYCOM, GLORYS or IGORA; a monthly mean such as IGORA has no before and after);
    detail lives in the panel the step opens. Literal numbers are definitions (26 °C, 50 kJ/cm², 300 m,
    1000 m) or grid constants. Until facts exist, real-mode steps show a caption without numbers.
    tour.js reads title, caption and time as plain values: they are getters for the current data mode. */
@@ -63,7 +63,7 @@ const TOUR_STEP_DEFS = [
    title:{real:'Heat before Amphan', synth:'Cyclone heat potential (synthetic)'},
    caption:{
      real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, ${fmt.countWord(Math.round(f.track.leadDays[t]))} days before ` +
-       `Amphan's first best-track position. In ${M().short}, heat under its future path averaged ` +
+       `Amphan's first best-track position. In ${M().short}${M().monthly ? ' (May mean)' : ''}, heat under its future path averaged ` +
        `${fmt.int(f.path.heatBefore)} kJ/cm², well above the 50 kJ/cm² mark. Right panel: before and after.`,
      plain:'Heat stored above 26 °C before Amphan formed. The white contour marks 50 kJ/cm²; the right panel ' +
        'compares heat under the path before and after the storm.',
@@ -73,11 +73,16 @@ const TOUR_STEP_DEFS = [
   {id:'section', variable:'temp', mode:TOUR_DEFAULT_VIEW, time:f=>f ? f.path.afterIndex : 6, section:'track',
    title:{real:'Amphan’s cold wake', synth:'A vertical section'},
    caption:{
-     real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, ${fmt.countWord(tourDaysAfterLandfall(f, t))} days after ` +
+     real:(f,fmt,t)=>M().monthly
+       ? `${M().short} is a May monthly mean, so it has no before and after: switch to a daily model to see Amphan's ` +
+         `cold wake. This section along the genesis-to-landfall line shows the month's mean.`
+       : `${fmt.dayMonth(f.analysis.times[t])}, ${fmt.countWord(tourDaysAfterLandfall(f, t))} days after ` +
        `landfall, on the genesis-to-landfall line. In ${M().short} the surface is about ${fmt.dp(f.section.track.cooling,1)} °C ` +
        `cooler than on ${fmt.dayMonth(f.analysis.times[f.path.beforeIndex])}, while D26 stays near ` +
        `${fmt.int(fmt.round(f.section.track.d26After,5))} m: a cold wake.`,
-     plain:()=>`After landfall, on the genesis-to-landfall line: in ${M().short} the surface along the path has cooled ` +
+     plain:()=>M().monthly
+       ? `${M().short} is a May monthly mean, so it has no before and after: switch to a daily model to see Amphan's cold wake.`
+       : `After landfall, on the genesis-to-landfall line: in ${M().short} the surface along the path has cooled ` +
        'while D26 stays at a similar depth, a cold wake.',
      synth:'A section along the sample track, surface to sea floor. In the right panel, solid is D26 and dashed D20. ' +
        'Drag across the sea, or press S, to cut your own.'}},
@@ -86,12 +91,10 @@ const TOUR_STEP_DEFS = [
    title:{real:()=>`Argo against ${M().short}`, synth:'Floats against the model (synthetic)'},
    caption:{
      real:(f,fmt,t)=>`${fmt.dayMonth(f.analysis.times[t])}, Amphan over the Bay. Solid: Argo; dashed: ${M().short} ` +
-       `${f.comparison.matchedInTime ? 'matched in place and time' : 'at the nearest analysis'}. Below 300 m the RMS ` +
+       `${M().monthly ? 'May mean' : f.comparison.matchedInTime ? 'matched in place and time' : 'at the nearest analysis'}. Below 300 m the RMS ` +
        `difference is ${fmt.dp(fmt.roundDown(f.comparison.deepRmse.min,0.05),2)}–` +
-       `${fmt.dp(fmt.roundUp(f.comparison.deepRmse.max,0.05),2)} °C. ${M().short} assimilates Argo: a consistency check, ` +
-       `not independent validation.`,
-     plain:()=>`Argo profiles (solid) against ${M().short} (dashed) while Amphan was over the Bay. ${M().short} ` +
-       'assimilates Argo, so this is a consistency check, not independent validation.',
+       `${fmt.dp(fmt.roundUp(f.comparison.deepRmse.max,0.05),2)} °C. ${assimilationWords(true)}`,
+     plain:()=>`Argo profiles (solid) against ${M().short} (dashed) while Amphan was over the Bay. ${assimilationWords(false)}`,
      synth:'Synthetic floats sample a slightly different ocean from the model, with noise and gaps. Solid: observed; ' +
        'dashed: model. One float has a bad salinity sample that the QC check flags.'}},
 
@@ -100,10 +103,11 @@ const TOUR_STEP_DEFS = [
    caption:{
      real:(f,fmt,t)=>{
        const d = tourDriftCheck();
-       if(!d) throw new Error('no drift validation in this page');
+       if(!d && !DRIFT_VALIDATION()) throw new Error('no drift validation in this page');
        return `Search and rescue: a drift from a real NOAA buoy on ${fmt.dayMonth(f.analysis.times[t])}. White: the ` +
-         `${M().short} forecast; amber: where the buoy went. Over ${d.n} releases ${M().short} missed by a median ` +
-         `${fmt.int(d.median)} km after 72 h.`;
+         `${M().short} forecast; amber: where the buoy went. ` + (d
+           ? `Over ${d.n} releases ${M().short} missed by a median ${fmt.int(d.median)} km after 72 h.`
+           : `${M().short}${M().monthly ? ', a monthly mean,' : ''} was not checked against the buoys.`);
      },
      plain:()=>`Search and rescue: the drift tool (T) lets ${M().short}'s surface currents carry an object for 72 h, with ` +
        'a search ellipse for each day; amber is where a real buoy went.',

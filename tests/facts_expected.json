@@ -1259,6 +1259,151 @@
   "tol": 0.005,
   "value": 0.692
  },
+ "real.moorings[0].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 8
+ },
+ "real.moorings[0].change.depth": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1.0
+ },
+ "real.moorings[0].change.model": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -1.2466
+ },
+ "real.moorings[0].change.observed": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -2.12
+ },
+ "real.moorings[0].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 96
+ },
+ "real.moorings[0].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "12n90e"
+ },
+ "real.moorings[0].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.1031
+ },
+ "real.moorings[0].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.7031
+ },
+ "real.moorings[1].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 6
+ },
+ "real.moorings[1].change.depth": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 5.0
+ },
+ "real.moorings[1].change.model": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.2378
+ },
+ "real.moorings[1].change.observed": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.25
+ },
+ "real.moorings[1].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 49
+ },
+ "real.moorings[1].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "15n65e"
+ },
+ "real.moorings[1].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 1.1631
+ },
+ "real.moorings[1].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 1.4796
+ },
+ "real.moorings[2].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 7
+ },
+ "real.moorings[2].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 7
+ },
+ "real.moorings[2].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "15n90e"
+ },
+ "real.moorings[2].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.0366
+ },
+ "real.moorings[2].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.1241
+ },
+ "real.moorings[3].analyses": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 8
+ },
+ "real.moorings[3].change.depth": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1.0
+ },
+ "real.moorings[3].change.model": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -0.3981
+ },
+ "real.moorings[3].change.observed": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -0.52
+ },
+ "real.moorings[3].n": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 64
+ },
+ "real.moorings[3].station": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": "8n67e"
+ },
+ "real.moorings[3].tempBias": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.4835
+ },
+ "real.moorings[3].tempRmse": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.8276
+ },
  "real.path.afterIndex": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0,
@@ -1278,6 +1423,226 @@
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.05,
   "value": 85.07
+ },
+ "real.products.anomaly[0].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.9185
+ },
+ "real.products.anomaly[0].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.7358
+ },
+ "real.products.anomaly[1].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.9761
+ },
+ "real.products.anomaly[1].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.9631
+ },
+ "real.products.anomaly[2].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.9932
+ },
+ "real.products.anomaly[2].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 1.1995
+ },
+ "real.products.anomaly[3].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.9005
+ },
+ "real.products.anomaly[3].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 1.0533
+ },
+ "real.products.anomaly[4].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.9107
+ },
+ "real.products.anomaly[4].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.7711
+ },
+ "real.products.anomaly[5].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.7747
+ },
+ "real.products.anomaly[5].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -0.2761
+ },
+ "real.products.anomaly[6].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.6874
+ },
+ "real.products.anomaly[6].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": -0.0687
+ },
+ "real.products.anomaly[7].arabian": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.7936
+ },
+ "real.products.anomaly[7].bay": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.002,
+  "value": 0.2448
+ },
+ "real.products.fishing[0].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 18
+ },
+ "real.products.fishing[0].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.fishing[1].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 15
+ },
+ "real.products.fishing[1].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.fishing[2].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 20
+ },
+ "real.products.fishing[2].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.fishing[3].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 16
+ },
+ "real.products.fishing[3].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.fishing[4].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 27
+ },
+ "real.products.fishing[4].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.fishing[5].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 41
+ },
+ "real.products.fishing[5].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.fishing[6].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 83
+ },
+ "real.products.fishing[6].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.fishing[7].both": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 40
+ },
+ "real.products.fishing[7].known": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 1369
+ },
+ "real.products.series.arabian.case": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 30.652
+ },
+ "real.products.series.arabian.caseAnomaly": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 0.869
+ },
+ "real.products.series.arabian.caseRank": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 2
+ },
+ "real.products.series.arabian.normal": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 29.783
+ },
+ "real.products.series.arabian.trendPerDecade": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 0.3546
+ },
+ "real.products.series.arabian.years": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 44
+ },
+ "real.products.series.bay.case": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 30.495
+ },
+ "real.products.series.bay.caseAnomaly": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 0.5778
+ },
+ "real.products.series.bay.caseRank": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 8
+ },
+ "real.products.series.bay.normal": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 29.9172
+ },
+ "real.products.series.bay.trendPerDecade": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0.001,
+  "value": 0.2555
+ },
+ "real.products.series.bay.years": {
+  "how": "data-pipeline/facts_reference.py",
+  "tol": 0,
+  "value": 44
  },
  "real.section.track.columns": {
   "how": "data-pipeline/facts_reference.py",

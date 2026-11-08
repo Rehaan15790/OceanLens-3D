@@ -6,21 +6,27 @@
    Everything else reads the ocean, the instruments, the track and every mode-dependent
    string through dataSource(), so switching source is one variable (dataMode).
    ============================================================ */
+// for a forecast case: whether day t is before the run (an analysis) or how many days ahead it is
+function forecastDay(t){
+  if(!CASE.forecast || !Number.isFinite(CASE.issued)) return '';
+  const d = Math.round((Date.parse(META.times[t].slice(0, 10) + 'T00:00Z') - CASE.issued)/864e5);
+  return d < 0 ? ' (analysis)' : d === 0 ? ' (day of issue)' : ` (+${d} ${d===1 ? 'day' : 'days'})`;
+}
 const SOURCES = {
   real: {
     temp: (lat, lon, depth, t)=>realAt(0, lat, lon, depth, t),
     sal:  (lat, lon, depth, t)=>realAt(1, lat, lon, depth, t),
     uv:   (lat, lon, depth, t)=>({u:realAt(2, lat, lon, depth, t), v:realAt(3, lat, lon, depth, t)}),
     chl:  ()=>NaN,                      // both models are physics only: no chlorophyll
-    instruments: t=>realProfiles.filter(p=>p.snap===t),
+    instruments: t=>realProfiles.filter(p=>p.snap===t).concat(mooringsAt(t)),   // Argo floats, then RAMA moorings
     fixes: ()=>REAL_TRACK,
     hasGliders: false,
 
     // ---- copy table (ux edits the strings in 3.1b) ----
     ctx: {badge:'Real data',
-          text: t=>`Cyclone Amphan · ${MODEL().product} ${fmt.analysisTime(META.times[t])} · ${t+1} of ${NT}`},
+          text: t=>`${CASE.name} · ${MODEL().product} ${fmt.analysisTime(META.times[t])}${forecastDay(t)} · ${t+1} of ${NT}`},
     time: {now: t=>fmt.analysisTime(META.times[t]), tick: t=>fmt.dayMonth(META.times[t])},
-    track: {name:'Cyclone Amphan', badge:'IBTrACS v04r01', mapLabel:'Amphan (IBTrACS)',
+    track: {get name(){ return CASE.name; }, badge:'IBTrACS v04r01', mapLabel:'Amphan (IBTrACS)',   // CASE: data-real.js, loaded later
             landfallLabel: fix=>`Landfall ${fmt.fixTime(fix.t)}`,
             nowLabel: (wind, agency)=>`Amphan · ${wind} kt (${agency})`,
             empty:'No IBTrACS fixes for Amphan fall inside the map.'},
@@ -30,16 +36,18 @@ const SOURCES = {
           sub: (t, nArgo)=>`${fmt.analysisTime(META.times[t])} · ${nArgo} Argo profiles`,
           get foot(){ const F = facts().real;
             const M = MODEL();
-            return (F.comparison && F.comparison.matchedInTime
+            return (M.monthly
+              ? `Each profile is compared with the ${M.short} monthly mean of its month, interpolated `
+              : F.comparison && F.comparison.matchedInTime
               ? `The model is matched to each profile’s time and place (nearest 3-hourly ${M.short} output) and interpolated `
               : `Each profile is compared with the ${M.product} nearest in time (within 1.5 days), interpolated `) +
-              `to its depths, as in GODAE Class 4 verification. ${M.short} assimilates Argo, so this is a consistency check, ` +
-              'not independent validation.'; }},
+              `to its depths, as in GODAE Class 4 verification. ${assimilationWords(false)}`; }},
     profile: {kind: inst=>inst.bgc ? 'BGC-Argo float' : 'Argo float',
               none:(id, t)=>`${id} has no profile within 1.5 days of ${fmt.dayMonth(META.times[t])}.`},
     vars: {get chlNote(){ return `From BGC-Argo floats only. ${MODEL().short} has no chlorophyll, so the map has no model field: click a float to see its profile.`; },
            get chlKey(){ return `${MODEL().short} has no chlorophyll; only BGC-Argo floats carry it.`; }},
-    export: {get caveat(){ return `Data: ${MODEL().data} · Argo GDAC incl. BGC-Argo · IBTrACS v04r01 · ETOPO1. Not for operational use.`; },
+    export: {get caveat(){ return CASE.tour ? `Data: ${MODEL().data} · Argo GDAC incl. BGC-Argo · IBTrACS v04r01 · ETOPO1. Not for operational use.`
+                                             : `Data: ${MODEL().data} · ETOPO1. Not for operational use.`; },
              file: (t, variable, view)=>`oceanlens3d_real_${META.times[t].slice(0, 10)}_${variable}_${view}.png`}
   },
   synth: {
@@ -97,6 +105,7 @@ function setDataMode(mode){
   if(mode===dataMode || !SOURCES[mode]) return;
   if(isTourRunning()) stopTour({restore:false});
   dataMode = mode;
+  if(!varInMode(state.variable)) state.variable = 'temp';   // satellite products are real data only
   applyModeDefaults();
   resetRange();
   if(ISO_META[state.variable]) state.isoVal = ISO_META[state.variable].def;

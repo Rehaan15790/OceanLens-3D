@@ -88,7 +88,9 @@ OceanLens.registerVariable('mld', {
 It gets a variable button, a colour bar, the colour settings (palette, min/max, linear or log) and every view its
 `dims` allows. Two optional texts explain it: `about` (a string or a function) is shown under "What the map shows"
 for a 2D variable, and `keyNote` (likewise) is added to the colour key's note; `src/js/plugins/satellite.js` uses
-both. 3D variables with `iso:{step, dp, def}` also get "Depth of a value" and "Isosurface (3D)".
+both. `modes: ['real']` lists the variable in real-data mode only, `available()` hides it while it returns false (the
+satellite maps in a forecast case), and `ticks: [0, 1, 2]` puts the key's labels at those values (`src/js/products.js`).
+3D variables with `iso:{step, dp, def}` also get "Depth of a value" and "Isosurface (3D)".
 
 To serve the same variable over WMS and WCS, put it in the dataset. A CF NetCDF file given to
 `server/serve.py --netcdf` exposes every variable on its latitude/longitude grid. Standard names map onto the app's

@@ -31,7 +31,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, 'src')
 SHIPPED = os.path.join(ROOT, 'OceanLens3D.html')
 DEFAULT_OUT = os.path.join(ROOT, 'dist', 'OceanLens3D.html')
-BUDGET = 7_500_000                  # bytes; two models, the extras and the drift check make the page about 7 MB
+BUDGET = 7_500_000                  # bytes; three models, the extras, the drift check, moorings and satellite products
 BANNER = '<!-- Built by build.py from src/. Edit the sources, not this file. -->\n'
 # the page's content security policy; script-src and style-src get a hash for every inline script and style that runs,
 # so neither allows 'unsafe-inline' (nothing here uses eval, inline handlers, javascript: URLs or style="" markup)
@@ -72,7 +72,13 @@ def model_only(snap, name):
         meta['provenance'] = {'model': m['provenance']['model']}
         model_id = m.get('model', {}).get('short', '').lower()
         meta['citations'] = [c for c in m.get('citations', []) if c.get('id') == model_id]
-        return {'schema': snap['schema'], 'meta': meta, 'model': snap['model'], 'mask': snap['mask']}
+        model = snap['model']
+        # one field repeated at every time (a monthly mean standing for each analysis day, IGORA): embedded once
+        q, nt = base64.b64decode(model), len(m['times'])
+        if nt > 1 and len(q) % nt == 0 and all(q[k * (len(q) // nt):(k + 1) * (len(q) // nt)] == q[:len(q) // nt]
+                                               for k in range(1, nt)):
+            model, meta['timesStored'] = base64.b64encode(q[:len(q) // nt]).decode('ascii'), 1
+        return {'schema': snap['schema'], 'meta': meta, 'model': model, 'mask': snap['mask']}
     except (KeyError, TypeError, AttributeError) as e:
         raise BuildError(f'{name} cannot be embedded as a model: {type(e).__name__}: {e}')
 

@@ -5,14 +5,14 @@ A walkthrough of the code, the tools behind it and how each part works. For pres
 
 ## The tech stack
 
-The whole project uses only two third-party libraries: **three.js** in the browser and **numpy** in Python. Everything else is written by hand on the browser's and Python's built-in features. That is why the app ships as one offline file.
+The whole project uses only two third-party libraries: **three.js** in the browser and **numpy** in Python. **xarray** is optional: `--engine xarray` reads model files through it in the pipeline and the server, with the same result as the project's own readers. Everything else is written by hand on the browser's and Python's built-in features. That is why the app ships as one offline file.
 
 ### Languages and libraries
 
 | Piece | What we used | Why |
 | --- | --- | --- |
 | 3D graphics | **three.js r128** (MIT), inlined into the page | A thin layer over WebGL: scenes, cameras, meshes, textures, lights. Pinned to one version so the file never changes under us |
-| App code | **Plain JavaScript**, 41 classic script files (about 6,900 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
+| App code | **Plain JavaScript**, 44 classic script files (about 7,400 lines) sharing one global scope | No npm, no bundler, no framework: nothing to install, and the build stays a simple concatenation |
 | Styling | **Plain CSS**, 9 files with design tokens in `tokens.css` | Dark theme, consistent spacing and colours, no CSS framework |
 | Charts in the panels | **HTML canvas 2D**, drawn by hand in `charts.js` | Profile, section and track charts without a chart library |
 | Build, server, pipeline, tests | **Python 3** (3.11/3.12) standard library | Runs anywhere Python does |
@@ -30,6 +30,13 @@ The whole project uses only two third-party libraries: **three.js** in the brows
 | BGC-Argo chlorophyll and oxygen | Ifremer ERDDAP, `ArgoFloats-synthetic-BGC` | ERDDAP tabledap CSV |
 | Sea floor and coast | ETOPO1 on NOAA's `upwell.pfeg.noaa.gov` ERDDAP | ERDDAP griddap CSV |
 | Cyclone track | IBTrACS v04r01 from NOAA NCEI | CSV download |
+| Third model: IGORA (INCOIS) | INCOIS Live Access Server, `las.incois.gov.in`, product server `Data_Extract_netCDF` (`build_las.py`) | LAS XML request, NetCDF-3 out |
+| Today's forecast (a served case) | Copernicus Marine `GLOBAL_ANALYSISFORECAST_PHY_001_024`, latest daily run, same object store (`build_forecast.py`) | Native NetCDF-4 in HTTPS byte ranges |
+| Satellite SST (anomaly, 1982–2025 series) | Copernicus Marine OSTIA reprocessed L4, `s3.waw3-1.cloudferro.com` (`build_products.py`) | Native NetCDF-4 in HTTPS byte ranges |
+| Satellite chlorophyll | Copernicus-GlobColour gap-free L4 daily, same object store | Native NetCDF-4 in HTTPS byte ranges |
+| RAMA moorings | NOAA PMEL GTMBA daily means via NOAA CoastWatch's ERDDAP (`build_moorings.py`) | ERDDAP tabledap CSV |
+| Drift currents, drifting buoys (the drift check) | HYCOM and GLORYS surface currents as above; NOAA Global Drifter Program hourly product on AOML's ERDDAP, `drifter_hourly_qc` (`build_extras.py`) | As above; ERDDAP tabledap CSV |
+| Satellite SST and SST fronts | NOAA OISST v2.1 from the INCOIS Live Access Server, product server `Data_Extract_netCDF` (`build_extras.py`) | LAS XML request, NetCDF-3 out |
 
 ### File formats
 
@@ -56,7 +63,9 @@ Every JavaScript file lives in `src/js/` and has one job, stated in a comment at
 | Data | `data-source.js` | One interface over the two data modes, so the rest of the app doesn't care which is active |
 | | `ocean.js` | The science: equation of state, model values at observation points, misfit statistics, heat potential |
 | | `data-synthetic.js` | Generates the synthetic ocean, floats and gliders from formulas |
-| | `data-real.js` | Decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
+| | `moorings.js` | The RAMA moorings: one profile per mooring and analysis day through the mooring plugin, joined to the real source's instruments |
+| | `products.js` | Satellite products, registered through the plugin API: chlorophyll, the fishing-zone indicator (with the SST fronts of `plugins/satellite.js`), the SST anomaly, and the panel card with the climate series |
+| | `data-real.js` | The case in the page (`CASE`: Amphan, or a forecast the server put in its place: the header, context line, track, floats and tour follow it); decodes the model fields (HYCOM, and GLORYS the first time it is switched to), Argo profiles and Amphan track from the snapshots; the model registry and its words |
 | | `facts.js` | Computes every number shown in captions and panels, once |
 | 3D | `render.js` | The only file that creates three.js materials: colour conversion, palette ramps, draw order, fog, test hooks |
 | | `scene.js` | Renderer, background, lights, fog and the frame loop |
@@ -204,7 +213,7 @@ The heat map runs this for every grid column at the current time (`tchpGrid`). T
 
 ### Comparing floats with the model
 
-1. **`modelAtObs`** gets the model at the float's own depths. With HYCOM on screen, real profiles carry HYCOM sampled at their own place and time (nearest 3-hourly output), stored by the pipeline; with GLORYS (daily means), and for imports, the nearest analysis is interpolated.
+1. **`modelAtObs`** gets the model at the float's own depths. With HYCOM on screen, real profiles carry HYCOM sampled at their own place and time (nearest 3-hourly output), stored by the pipeline; with GLORYS (daily means), and for imports, the nearest analysis is interpolated. GLORYS gives potential temperature and floats measure in-situ temperature, so `modelAsMeasured` first turns the model into in-situ temperature at the level's pressure: `potentialTemp` is the UNESCO (1983) Runge–Kutta integration of the Bryden (1973) adiabatic lapse rate, run from the surface down (check value θ = 36.89073 °C at S = 40, T = 40 °C, 10 000 dbar). The Python recomputation integrates the same lapse rate in 64 small steps instead.
 2. **`misfit`** pairs each good observed level with the model: difference = observed − model. Flagged levels are skipped.
 3. **`summarize`** turns the differences into **bias** (mean difference) and **RMSE** (root-mean-square difference), with the count of levels used.
 4. **Rating:** temperature RMSE under 0.5 °C is good, up to 1.0 °C fair, above that poor; salinity uses 0.15 and 0.30 PSU.
@@ -226,7 +235,7 @@ This follows GODAE Class 4 verification, the standard way forecast centres compa
 - **Ends:** a member stops when it reaches land (ETOPO1 above 0 m, a cross) or leaves the map.
 - **Buoys:** the NOAA drifters with a position at the analysis on screen are drawn while the tool is in use; a drift released from one also takes the buoy's own hourly track for the same hours.
 
-With two models in the page, the central drift is also run with the other model from the same point and time. `data-pipeline/drift_reference.py` is the same model in numpy: `facts_reference.drift_path` uses it, the tests compare it with the app hour by hour, and `drift_validation.py` runs it against the buoys (see `data-pipeline/README.md`).
+With more models in the page, the central drift is also run with each other model (dashed, then dotted) from the same point and time; IGORA's monthly mean gives the same currents every day. `data-pipeline/drift_reference.py` is the same model in numpy: `facts_reference.drift_path` uses it, the tests compare it with the app hour by hour, and `drift_validation.py` runs it against the buoys (see `data-pipeline/README.md`).
 
 ### Satellite SST and SST fronts
 
@@ -285,7 +294,7 @@ Three Python scripts do the work the browser can't: fetch and pack the data, ass
 - stamps the version from `VERSION`;
 - adds a strict **Content Security Policy** with a SHA-256 hash of every inline script and style, so the page refuses to run any code it didn't ship with.
 
-It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 7.5 MB budget (the page is about 7 MB with both models and the extras). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
+It refuses to build if a file is missing from the manifest or listed twice, the JSON is invalid, or the result exceeds a 7.5 MB budget (the page is about 7.4 MB with three models, the extras, moorings and satellite products; IGORA's one monthly field is embedded once). The same sources always produce the same bytes. `python build.py --check` confirms the shipped file matches the sources.
 
 ### `data-pipeline/build_snapshot.py`: making the data
 
@@ -311,13 +320,14 @@ One file built on Python's `ThreadingHTTPServer` (one thread per connection) plu
 | Route | Implementation notes |
 | --- | --- |
 | `/` | The built app; `?dataset=<id>` swaps in another snapshot |
-| `/api/v1/…` | JSON (or binary 16-bit) fields, columns, profiles, track |
+| `/api/v1/…` | JSON (or binary 16-bit) fields, columns, profiles, track; `/model` puts a NetCDF model on the page's grid and times (the pipeline's `model_from_dataset`), for the Model switch |
 | `/wms` | Samples the field at every pixel, colours it with the same palettes, and writes the PNG by hand with `zlib` |
 | `/wcs` | Subsets by lat, lon, depth and time, returned as CF NetCDF-3 (via `ncio.py`) or CSV |
 | `/opendap/…` | DAP2: DDS and DAS descriptions, ASCII and binary `.dods` hyperslabs |
 | `/healthz` | Status for monitoring |
+| (`--reload N`) | Every N seconds, snapshot files that changed or appeared are loaded, so a daily forecast is served without a restart |
 
-**Safety built in:** it binds to 127.0.0.1 by default, checks the `Host` header against DNS-rebinding attacks, caps connections at 256 and heavy map or coverage requests at 4 at a time, limits image and subset sizes, and returns JSON errors instead of crashing.
+**Safety built in:** optional API keys (compared in constant time, hidden in the log) and a token-bucket rate limit per client; it binds to 127.0.0.1 by default, checks the `Host` header against DNS-rebinding attacks, caps connections at 256 and heavy map or coverage requests at 4 at a time, limits image and subset sizes, and returns JSON errors instead of crashing.
 
 ## Testing
 
@@ -335,11 +345,11 @@ The tests click and type in a real browser, exactly as a user would, against the
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| unit | 18 + 135 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for both models; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
-| server | 42 | REST, WMS, WCS, OPeNDAP answers and errors; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
-| smoke | 58 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, timeline, the colour key, export |
-| extend | 18 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog |
-| tour | 7 | All nine steps in both modes; captions of 35 words or fewer, under both models; timing races |
+| unit | 22 + 160 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for each of the three models; the satellite maps and the drift tool against their recomputations; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
+| server | 52 | REST, WMS, WCS, OPeNDAP answers and errors; server models, API keys, rate limits and reloads; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
+| smoke | 60 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, drifts from the sea and from buoys, satellite maps and products, moorings, timeline, the colour key, export |
+| extend | 21 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog, server models and the forecast case |
+| tour | 8 | All nine steps in both modes; captions of 35 words or fewer under every model; a monthly mean claims no cold wake; timing races |
 | robust | 6 | No WebGL, a lost graphics context and recovery, no memory growth over 20 rebuilds |
 | security | 39 | Hostile file contents stay text, damaged files and crafted NetCDF-4 end with a message instead of hanging, the Content Security Policy is enforced and never violated |
 | render | 9 | Pixel checks: a slice matches its colour bar, streaks stand out, floats aren't cut by the sea surface, the seabed is closed |

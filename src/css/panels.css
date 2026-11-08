@@ -80,3 +80,5 @@
 .drift-opts{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:0 0 var(--s-3);}
 .drift-opts .segmented button+button{margin-left:-1px;}
 .drift-opts .segmented button:not(:first-child):not(:last-child){border-radius:0;}
+.product-card{margin:0 0 var(--s-3);}
+.series-chart{display:block;width:100%;}

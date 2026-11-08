@@ -4,8 +4,8 @@
    currents carry it forward (or back in time, to ask where something found there came from) for up to 72 h. One drift
    with no spread draws the line. 200 more, released within about a kilometre and given a random walk for the eddies
    the model cannot hold, show how far apart the same start can end; the ellipse holding 90 % of those still afloat is
-   the search area at each day. With two models in the page the other model's drift from the same point is drawn
-   too, dashed. A drift released from a buoy also draws where the buoy really went (amber).
+   the search area at each day. With more models in the page, each other model's drift from the same point is drawn
+   too (dashed, then dotted, each labelled). A drift released from a buoy also draws where the buoy really went (amber).
    Real data use each model's surface currents from the extras (HYCOM every 6 h, GLORYS daily means), and the
    random walk's K for each model is the one at which 90 % of real buoys ended inside the ellipse
    (data-pipeline/drift_validation.py). Current only: there is no wind, so no leeway and no Stokes drift.
@@ -201,10 +201,14 @@ const driftLabels = {
   start: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:driftVisible}),
   end: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:driftVisible}),
   other: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:()=>driftVisible() && drift.others.length > 0}),
+  other2: makeLabel('', 'drift', new THREE.Vector3(), {visibleIf:()=>driftVisible() && drift.others.length > 1}),
   buoy: makeLabel('', 'drift buoy', new THREE.Vector3(), {visibleIf:()=>driftVisible() && !!drift.buoyPath && drift.buoyPath.length > 1})
 };
 const BUOY_HEX = 0xffcf5c;   // real buoys and their paths: amber, the colour of real things moving on the map (the storm)
 let driftBuoyMarks = [];      // the buoys drawn now (buildDrift), for clicks
+// how each other model's drift is drawn and named: dashed, then dotted (the dash length in scene units)
+const OTHER_LINES = [{dash:0.06, word:'dashed'}, {dash:0.02, word:'dotted'}];
+const otherDrifts = ()=>drift.others.slice(0, OTHER_LINES.length);
 const _dv = (lat, lon, lift = 0)=>{ const [x, z] = toXZ(lat, lon); return new THREE.Vector3(x, DRIFT_Y + lift, z); };
 // a flat ribbon along a path (a 1 px line is lost on the bright end of the palette); dash: on/off length, or null
 function driftRibbon(path, half, lift, dash){
@@ -259,7 +263,7 @@ function buildDrift(){
   if(afloat.length) points(afloat, 'circle', 6, [1, 1, 1]).renderOrder = Render.ORDER.particles;
   if(ashore.length) points(ashore, 'cross', 9, [1, 1, 1]).renderOrder = Render.ORDER.particles;
   // the central drift as a white ribbon with a dark edge, the other model's dashed, the buoy's real path in amber
-  const lines = [[run.path, null, 0xffffff], ...drift.others.map(o=>[o.run.path, 0.06, 0xffffff])];
+  const lines = [[run.path, null, 0xffffff], ...otherDrifts().map((o, i)=>[o.run.path, OTHER_LINES[i].dash, 0xffffff])];
   if(drift.buoyPath && drift.buoyPath.length > 1) lines.push([drift.buoyPath, null, BUOY_HEX]);
   // over the dots (particles), under the markers, so the paths read through the cloud
   lines.forEach(([path, dash, hex])=>{
@@ -291,10 +295,10 @@ function buildDrift(){
   driftLabels.start.el.textContent = drift.dir > 0 ? 'Release' : 'Found here';
   driftLabels.start.pos.copy(_dv(startAt[0], startAt[1], 0.03));
   place(driftLabels.end, `${driftModelName()} ${sign}${last.h} h`, last, 0.45);
-  if(drift.others.length){
-    const o = drift.others[0];
-    place(driftLabels.other, `${o.words.short} ${sign}${o.run.path[o.run.path.length-1].h} h`, o.run.path[o.run.path.length-1], 0.45);
-  }
+  otherDrifts().forEach((o, i)=>{
+    const q = o.run.path[o.run.path.length-1];
+    place(i ? driftLabels.other2 : driftLabels.other, `${o.words.short} ${sign}${q.h} h`, q, 0.45);
+  });
   if(drift.buoyPath && drift.buoyPath.length > 1){
     const q = drift.buoyPath[drift.buoyPath.length-1];
     place(driftLabels.buoy, `Buoy ${sign}${q.h} h`, q, 0.45);
@@ -378,7 +382,7 @@ function renderDriftPanel(){
              : run.end==='edge' ? `It leaves the map after ${run.endH} h.`
              : `It ${back ? 'started' : 'ends'} near <b>${fmt.latLon2(last.lat, last.lon)}</b>.`;
   const mine = driftCheck(realModel);
-  const others = drift.others.map(o=>{
+  const others = otherDrifts().map((o, i)=>{
     const q = o.run.path[o.run.path.length-1], gap = haversineKm([last.lat, last.lon], [q.lat, q.lon]);
     const theirs = driftCheck(o.words.short.toLowerCase());
     let vs = '';
@@ -387,13 +391,13 @@ function renderDriftPanel(){
       vs = ` Against real buoys this month the ${fmt.esc(a <= b ? M.short : o.words.short)} drift came closer `+
            `(a median ${fmt.int(Math.min(a, b))} km from the buoy after 72 h, against ${fmt.int(Math.max(a, b))} km).`;
     }
-    return `<p class="meta">The ${fmt.esc(o.words.short)} drift (dashed) from the same point ends <b>${fmt.int(gap)} km</b> from the `+
+    return `<p class="meta">The ${fmt.esc(o.words.short)} drift (${OTHER_LINES[i].word}) from the same point ends <b>${fmt.int(gap)} km</b> from the `+
       `${fmt.esc(M.short)} one${o.run.end==='ashore' ? `, ashore after ${o.run.endH} h` : ''}.${vs}</p>`;
   }).join('');
   let buoy = '';
   if(bp && bp.length > 1){
     const q = bp[bp.length-1], c = run.path.find(p=>p.h===q.h) || last, m = run.marks.find(x=>x.h===q.h);
-    const vsOthers = drift.others.map(o=>{ const r = o.run.path.find(p=>p.h===q.h) || o.run.path[o.run.path.length-1];
+    const vsOthers = otherDrifts().map(o=>{ const r = o.run.path.find(p=>p.h===q.h) || o.run.path[o.run.path.length-1];
       return ` and ${fmt.int(haversineKm([q.lat, q.lon], [r.lat, r.lon]))} km from the ${fmt.esc(o.words.short)} one`; }).join('');
     buoy = `<p class="meta">Where the buoy really went (amber): ${back ? `${q.h} h earlier it was` : `after ${q.h} h it was`} `+
       `<b>${fmt.int(haversineKm([q.lat, q.lon], [c.lat, c.lon]))} km</b> from the ${fmt.esc(M.short)} line${vsOthers}`+
@@ -409,9 +413,11 @@ function renderDriftPanel(){
     `<tr><th>${back ? 'Before' : 'After'}</th><th>Line from ${back ? 'find' : 'release'}</th><th>90 % area</th><th>Ashore</th>`+
     `${bp ? '<th>Buoy: off the line, in the ellipse?</th>' : ''}</tr>${rows}</table>`;
   const every = drift.cur.every, days = Math.round(every/24);
-  const curText = M ? `${fmt.esc(M.short)} surface currents ${drift.cur.surf ? (every===24 ? 'as daily means' : `every ${every} hours`)
-                                                           : `at its ${fmt.esc(M.products)}, ${days} days apart`}`
+  const curText = M ? (M.monthly ? `${fmt.esc(M.short)} surface currents from its ${fmt.esc(M.products)}, the same every day`
+                     : `${fmt.esc(M.short)} surface currents ${drift.cur.surf ? (every===24 ? 'as daily means' : `every ${every} hours`)
+                                                           : `at its ${fmt.esc(M.products)}, ${days} days apart`}`)
                     : `The demo’s made-up currents, ${days} days apart`;
+  const timeText = M && M.monthly ? '' : ', linear in time between them';
   const kText = mine ? `K = ${drift.K} m²/s, the tested value at which the share of real buoys inside the 90 % ellipse came closest to 90 %`
                      : `K = ${drift.K} m²/s, an assumed value`;
   let check = '';
@@ -425,7 +431,7 @@ function renderDriftPanel(){
       `below the surface currents used here.</p>`;
   }
   foot.innerHTML =
-    `<p>${curText}, linear in time between them, in ${DRIFT.stepH} h steps. The line is one drift with no spread. The dots are `+
+    `<p>${curText}${timeText}, in ${DRIFT.stepH} h steps. The line is one drift with no spread. The dots are `+
     `${DRIFT.n} more, released within about ${DRIFT.r0Km} km and given a random walk for eddies the model cannot hold `+
     `(${kText}); crosses reached the coast. Each ellipse holds 90 % of those still afloat that day.</p>` + check +
     `<p>Only the current moves them: there is no wind, so no leeway (a life raft or a person in the water also moves with `+

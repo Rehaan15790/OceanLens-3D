@@ -109,7 +109,7 @@ function resetRange(){
   applyViewRange();
 }
 function setVariable(v){
-  if(!VAR_META[v]) return;
+  if(!VAR_META[v] || !varInMode(v)) return;
   state.variable = v;
   if(ISO_MODES.includes(state.mode) && !ISO_META[v]) state.mode = 'surface';
   resetRange();
@@ -195,7 +195,7 @@ function setShowAllImported(on){ setOverlay('showAllImported', on); }
 // state -> every control (pressed, hidden, values, aria); requestUpdate() runs it
 function syncControls(){
   const tchp = is2D(state.variable), src = dataSource();
-  ui.varPills.querySelectorAll('.pill').forEach(b=>setPressed(b, b.dataset.v===state.variable));
+  ui.varPills.querySelectorAll('.pill').forEach(b=>{ setPressed(b, b.dataset.v===state.variable); b.hidden = !varInMode(b.dataset.v); });
   ui.modePills.querySelectorAll('.pill').forEach(b=>{
     setPressed(b, b.dataset.m===state.mode);
     b.disabled = ISO_MODES.includes(b.dataset.m) && !ISO_META[state.variable];
@@ -233,11 +233,18 @@ function syncControls(){
   ui.rowGlider.title = gliders ? '' : 'No glider data in this data set';
   updateColorbarUI();
   ui.dataToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.mode===dataMode));
-  ui.modelGrp.hidden = dataMode!=='real' || REAL_MODELS.length < 2;
+  ui.modelGrp.hidden = dataMode!=='real' || ui.modelToggle.children.length < 2;
   ui.modelToggle.querySelectorAll('button').forEach(b=>setPressed(b, b.dataset.model===realModel));
   ui.modelNote.textContent = MODEL().note + '.';
   ui.secTrackBtn.textContent = src.section.trackPreset;
   ui.secTrackBtn.disabled = currentTrack().length===0;
+  // another case (a forecast) has no storm track, no floats and no tour: their buttons go
+  const noTrack = currentTrack().length===0, show = (id, on)=>{ const e = document.getElementById(id); if(e) e.hidden = !on; };
+  show('openTrackBtn', !noTrack); show('trackDetailsBtn', !noTrack && state.variable==='tchp'); show('rowTrack', !noTrack);
+  show('startTourBtn', CASE.tour); ui.presentBtn.hidden = !CASE.tour;
+  const floats = dataMode!=='real' || realProfiles.length > 0;
+  show('worstFloatBtn', floats);
+  [ui.swArgo, ui.swMisfit].forEach(b=>{ const li = b.closest('li'); if(li) li.hidden = !floats; });
   syncTimeline();
 }
 

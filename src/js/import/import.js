@@ -100,9 +100,11 @@ function importParsed(parsed, opts = {}){
 
 /* ---- server mode ---- */
 const serverMode = {live:false, datasets:[], current:null, load:loadServerDataset};
+// a server that needs an API key: open the page as .../?key=<key>; every API call then carries it in a header
+const SERVER_KEY = /^https?:$/.test(location.protocol) ? new URLSearchParams(location.search).get('key') : null;
 // GET a server API path as JSON; throws the server's own error message
 async function serverJSON(path){
-  const r = await fetch(path, {headers:{Accept:'application/json'}});
+  const r = await fetch(path, {headers:Object.assign({Accept:'application/json'}, SERVER_KEY ? {'X-API-Key':SERVER_KEY} : {})});
   const j = await r.json().catch(()=>null);
   if(!r.ok) throw new Error(j && j.error ? j.error.message : `The server answered ${r.status}.`);
   return j;
@@ -117,6 +119,9 @@ async function startServerMode(){
   const def = j.datasets.find(d=>d.default) || j.datasets.find(d=>d.source==='snapshot');
   Object.assign(serverMode, {live:true, datasets:j.datasets,
     current: want && j.datasets.some(d=>d.id===want) ? want : def ? def.id : null});
+  // model files the server can put on this page's grid and times join the Model switch (data-real.js)
+  j.datasets.filter(d=>d.links && typeof d.links.model==='string').forEach(addServerModel);
+  requestUpdate('full');
   pluginEmit('server', {server:serverMode});
 }
 // another snapshot reloads the page with it embedded (serve.py ?dataset=); profiles load into this page
@@ -124,11 +129,14 @@ async function loadServerDataset(id){
   const d = serverMode.datasets.find(x=>x.id===id);
   if(!d) throw new Error(`The server has no dataset ${id}.`);
   if(d.source==='snapshot' && id!==serverMode.current){
-    location.assign('?dataset=' + encodeURIComponent(id));
+    location.assign('?dataset=' + encodeURIComponent(id) + (SERVER_KEY ? '&key=' + encodeURIComponent(SERVER_KEY) : ''));
     return {id, navigating:true, profiles:0, warnings:[]};
   }
   if(id===serverMode.current) return {id, current:true, profiles:0, warnings:[]};
-  if(!(d.profiles > 0)) return {id, profiles:0, warnings:['This dataset has no profiles; its fields are served through the REST API, WMS, WCS and OPeNDAP, not drawn in 3D.']};
+  if(!(d.profiles > 0)) return {id, profiles:0, warnings:[d.links && d.links.model
+    ? 'This dataset has no profiles. Its model fields are under Model, in the left panel.'
+    : 'This dataset has no profiles; its fields are served through the REST API, WMS, WCS and OPeNDAP' +
+      (d.model_note ? ` (not drawn in 3D: ${d.model_note})` : ', not drawn in 3D') + '.']};
   const bbox = [LON0, LAT0, LON1, LAT1].join(',');
   const j = await serverJSON(`api/v1/datasets/${encodeURIComponent(id)}/profiles?bbox=${bbox}`);
   const r = addDataset({id:'srv-' + id, name:d.title || id, source:'server', format:'json', type:'other', profiles:(j && j.profiles) || []});

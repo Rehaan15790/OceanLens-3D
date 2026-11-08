@@ -9,8 +9,8 @@
 ![OceanLens 3D: sea-surface temperature over the Arabian Sea and the Bay of Bengal, with Argo floats and Cyclone Amphan's track](docs/images/temperature-surface.png)
 
 OceanLens 3D puts ocean model fields, Argo float profiles and a cyclone track into one 3D scene that you can slice,
-probe and compare. It covers the Arabian Sea and the Bay of Bengal (6–22°N, 61–92°E, 0–1000 m), with two models to
-switch between: HYCOM and Copernicus Marine GLORYS.
+probe and compare. It covers the Arabian Sea and the Bay of Bengal (6–22°N, 61–92°E, 0–1000 m), with three models to
+switch between: HYCOM, Copernicus Marine GLORYS and INCOIS's IGORA reanalysis from the INCOIS Live Access Server.
 
 It was built by **Team ByteForge** for Smart India Hackathon 2026, problem statement 26067 (problem owner: INCOIS).
 It is a student prototype and is not affiliated with or endorsed by INCOIS or the Ministry of Earth Sciences.
@@ -33,22 +33,38 @@ It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, on a
 - **Vertical sections:** drag a line across the sea, or pick a preset such as Amphan's track.
 - **Surface drift for search and rescue, checked against real buoys:** click the sea (`T`), or one of the NOAA
   drifting buoys shown in amber, to release an object. Each model's surface currents (HYCOM every 6 h, GLORYS daily)
-  carry it up to 72 h forward, or back in time, with a 90 % search ellipse for each day; a drift from a buoy also
-  draws where the buoy really went. Over 116 three-day releases from 10 buoys, GLORYS ended a median 28 km from the
-  buoy after 72 h and HYCOM 47 km (a buoy assumed to stay put: 46 km).
+  carry it up to 72 h forward, or back in time, with a 90 % search ellipse for each day; each other model's drift from
+  the same point is drawn too (dashed, then dotted), and a drift from a buoy also draws where the buoy really went.
+  Over 116 three-day releases from 10 buoys, GLORYS ended a median 28 km from the buoy after 72 h and HYCOM 47 km (a
+  buoy assumed to stay put: 46 km).
 - **Satellite SST and SST fronts from the INCOIS LAS:** NOAA OISST daily SST, extracted as NetCDF from the INCOIS
-  Live Access Server, as a map (`6`) and as SST fronts (`7`), the temperature half of a fishing-zone advisory; the
-  comparison panel checks the model's surface against it.
-- **Two models:** HYCOM and the Copernicus Marine GLORYS12V1 reanalysis, the product the problem statement lists,
-  switched with one click (or `M`). The fields, comparisons and every number in the tour follow the model.
+  Live Access Server, as a map (`6`) and as SST fronts (`7`); the comparison panel checks the model's surface against it.
+- **Today's ocean forecast (served):** `build_forecast.py` puts the latest Copernicus Marine global forecast (the day
+  before the run and the next 9 days) on the same map; the data server offers it as a case beside Amphan, under
+  Data source, and `--reload` picks up each day's new run. Temperature, salinity, currents, heat potential, sections
+  and the drift tool all work on it.
+- **Three models:** HYCOM, the Copernicus Marine GLORYS12V1 reanalysis and INCOIS's own IGORA reanalysis, the two
+  sources the problem statement lists (Copernicus Marine and the INCOIS LAS), switched with one click (or `M`). IGORA
+  is the May 2020 monthly mean, exported from the INCOIS Live Access Server by the pipeline. The fields, comparisons
+  and every number in the tour follow the model.
 - **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
-  with bias, RMSE and a density-inversion QC check.
+  with bias, RMSE and a density-inversion QC check. Four real RAMA moorings (NOAA PMEL) in the Bay of Bengal and the
+  Arabian Sea are in the scene too: at 12°N 90°E the surface cooled 2.1 °C as Amphan passed (13 to 19 May), against
+  1.2 °C in HYCOM and 1.0 °C in GLORYS.
 - **Cyclone analysis:** heat potential under Amphan's path before and after the storm, with IMD and JTWC winds.
+- **Fishing-zone indicator:** the SST fronts map (NOAA OISST from the INCOIS LAS) and satellite chlorophyll
+  (Copernicus-GlobColour, gap-free) on each day, and the cells that show both, the two signs behind potential fishing
+  zone advisories. A teaching version of the idea, not an advisory.
+- **Climate monitoring:** the satellite SST anomaly against the 1991–2020 normal of the same day, and every year's
+  May mean since 1982 with its trend: about +0.26 °C per decade in the Bay of Bengal and +0.35 °C in the Arabian
+  Sea. The Bay was about 1 °C above normal before Amphan and below normal in its wake.
 - **Bring your own data:** drop Argo (core, B and S files), glider, ERDDAP, CF NetCDF-3 or NetCDF-4, or CSV files on
   the view. They are read in the browser, by the project's own NetCDF readers, and never uploaded.
 - **Built for sharing:** a colour-bar editor, a timeline with playback, PNG export and a guided tour.
-- **A data server and a plugin API** for institutions: REST, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2, plus
-  `window.OceanLens` for new instruments, variables, products and file formats.
+- **A data server and a plugin API** for institutions: REST, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2, optional API
+  keys and rate limits, plus `window.OceanLens` for new instruments, variables, products and file formats. A NetCDF
+  model file given to the server that covers the map and the case's times joins the page's Model switch and is drawn
+  in 3D, streamed from the server.
 
 <table>
   <tr>
@@ -100,7 +116,8 @@ There are two data modes, switched in the header.
 - **Also in the page** (`data/amphan-2020-extras.json`, built by `data-pipeline/build_extras.py`): each model's surface
   currents for every day (HYCOM every 6 h, GLORYS daily means), the hourly positions of 12 NOAA Global Drifter Program
   buoys, and NOAA OISST satellite SST from the INCOIS Live Access Server. `data/drift-validation.json` holds the drift
-  tool's check against the buoys (`data-pipeline/drift_validation.py`).
+  tool's check against the buoys (`data-pipeline/drift_validation.py`). `data/products-2020-05.json` holds OSTIA SST,
+  its 1991–2020 normal and GlobColour chlorophyll; `data/moorings-2020-05.json` four RAMA moorings.
 - **Synthetic demo:** analytic fields with synthetic floats and gliders, labelled as such. It is not a real ocean
   state.
 
@@ -112,7 +129,8 @@ and citation.
 
 The app is plain JavaScript on three.js r128, with no framework and no npm. A Python standard-library script inlines
 the code, three.js and the data snapshot into the single HTML file, with a strict Content Security Policy. The data
-pipeline, the server and the test harness are Python with numpy. The browser tests drive the built file in headless
+pipeline, the server and the test harness are Python with numpy; xarray is an optional NetCDF backend (`--engine
+xarray`). The browser tests drive the built file in headless
 Chromium through our own DevTools-protocol client.
 
 Every number the app quotes is computed from the data at run time. An independent Python script recomputes the same
@@ -171,23 +189,30 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
 
 ## Limitations and next steps
 
-- **One built-in case, no live data.** The real data is a hindcast of one past cyclone. There are no forecasts, and
-  the pipeline is tied to the Amphan domain, its 11 depths and 4 model variables.
-- **The 3D view draws only the snapshots in the page.** Model files given to the server reach other clients through
-  REST, WMS, WCS and OPeNDAP, but are not drawn in 3D.
+- **One built-in case.** The single file holds a hindcast of one past cyclone. A server can also show the latest
+  Copernicus forecast, but the forecast case has no floats, storm track, waves, storm surge or sea level yet, and
+  every case is tied to the same map, 11 depths and 4 model variables.
+- **The 3D view is tied to the case's grid and times.** A model file given to the server is drawn in 3D only when it
+  covers the whole map and has a time within 12 h of each of the 8 analyses; it is then put on the 0.5° grid and 11
+  levels. Other files reach clients through REST, WMS, WCS and OPeNDAP only.
 - **GLORYS has daily means,** so floats are compared with the nearest of the 8 days; HYCOM is matched to each float's
-  own time. GLORYS gives potential temperature, about 0.1 °C cooler than in-situ at 1000 m.
+  own time. GLORYS gives potential temperature; the comparison turns it into in-situ temperature at each float
+  level's pressure (UNESCO 1983), so both sides are the same quantity.
 - **NetCDF-4 compressed with szip or zstd** is not read; convert it (for example `nccopy -k classic`) or export CSV.
-- **The ADCP and HF radar plugins are tested on synthetic records only.**
-- **Not yet connected:** the INCOIS Live Access Server's model products (only its satellite SST is used) and
-  Copernicus Marine's other products (biogeochemistry, forecasts); scheduled Argo, BGC-Argo and glider ingestion;
-  authentication and rate limits, which belong in the institution's reverse proxy.
+- **The ADCP and HF radar plugins are tested on synthetic records only** (RAMA had no ADCP data in the map in May
+  2020; the moorings' near-surface current meters are shown as current speed).
+- **Not yet connected:** Copernicus Marine's other products (biogeochemistry); scheduled Argo, BGC-Argo and glider
+  ingestion. The server's API keys and rate limits are simple (shared keys, one limit per client address); TLS and
+  user accounts belong in the institution's reverse proxy. IGORA is a monthly mean, so it has no before and after.
 - **The drift tool moves objects with the surface current only.** There is no wind, so no leeway (a life raft or a
   person in the water also moves with the wind) and no Stokes drift. Against drogued buoys in May 2020, HYCOM did no
   better than assuming the buoy stays put (47 against 46 km after 72 h); GLORYS did better (28 km). The buoys'
-  drogues hang at 15 m, below the currents used. It is a teaching aid, not a search plan (INCOIS runs SARAT for that).
-- **Fishing zones need chlorophyll too:** the SST-front map is the temperature half of an advisory; the LAS has no
-  ocean-colour chlorophyll for May 2020 (OCM-2 ends on 1 May). Climate monitoring is not implemented.
+  drogues hang at 15 m, below the currents used. IGORA's monthly-mean currents were not checked against the buoys.
+  It is a teaching aid, not a search plan (INCOIS runs SARAT for that).
+- **The fishing-zone indicator is simplified:** two thresholds on 0.5° cells (an SST front of at least 0.75 °C per
+  100 km on the OISST fronts map, chlorophyll of at least 0.3 mg/m³), from gap-free satellite fields in which clouds
+  are interpolated. It has not been checked against catches or against INCOIS's own advisories.
+- **Climate monitoring covers sea-surface temperature only,** for the 8 analysis days of May each year, in two boxes.
 
 ## Data sources and citations
 
@@ -195,7 +220,8 @@ HYCOM GOFS 3.1 (HYCOM Consortium), GLORYS12V1 (E.U. Copernicus Marine Service In
 GLOBAL_MULTIYEAR_PHY_001_030, doi:10.48670/moi-00021), Argo (Argo GDAC, doi:10.17882/42182), ETOPO1 (NOAA NCEI, doi:10.7289/V5C8276M) and
 IBTrACS v04r01 (NOAA NCEI, doi:10.25921/82ty-9e16; winds from IMD and JTWC), NOAA Global Drifter Program hourly data
 (Elipot et al. 2022, doi:10.25921/x46c-3620) and NOAA OISST v2.1 (Huang et al. 2021, doi:10.1175/JCLI-D-20-0166.1),
-extracted from the INCOIS Live Access Server. The sample files come from the Argo GDAC
+extracted from the INCOIS Live Access Server, RAMA moorings (NOAA PMEL GTMBA, McPhaden et al. 2009), and Copernicus
+Marine OSTIA SST and GlobColour chlorophyll. The sample files come from the Argo GDAC
 (its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE experiment, 2016). The full
 acknowledgements and citations are in `THIRD_PARTY_NOTICES.md`, `samples/README.md` and the app's About panel.
 

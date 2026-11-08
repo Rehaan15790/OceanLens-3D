@@ -186,10 +186,83 @@ def read_bytes(data, raw=False):
     return out
 
 
-def read(path, raw=False):
-    """read_bytes of a file."""
+def read(path, raw=False, engine='native'):
+    """read_bytes of a file; engine='xarray' reads it through xarray instead (read_xarray)."""
+    if engine == 'xarray':
+        return read_xarray(path)
+    if engine != 'native':
+        raise ValueError(f"engine must be 'native' or 'xarray', not {engine!r}")
     with open(path, 'rb') as f:
         return read_bytes(f.read(), raw)
+
+
+def _importable(mod):
+    import importlib.util
+    return importlib.util.find_spec(mod) is not None
+
+
+def _xarray_var(v):
+    """One xarray variable as read() gives it: data unpacked, the valid range applied, packing attributes kept."""
+    attrs = dict(v.attrs)
+    for k in ('_FillValue', 'missing_value', 'scale_factor', 'add_offset'):
+        if k in v.encoding and k not in attrs:
+            attrs[k] = v.encoding[k]
+    a = np.asarray(v.values)
+    if a.dtype.kind in 'SUO':                          # char and string data: str arrays, as read() gives
+        a = np.char.rstrip(np.vectorize(lambda x: x.decode('utf-8', 'replace') if isinstance(x, bytes) else str(x),
+                                        otypes=[str])(a) if a.size else a.astype(str), '\x00 ')
+    elif a.dtype.kind in 'fiu':
+        lo, hi = attrs.get('valid_min'), attrs.get('valid_max')
+        if 'valid_range' in attrs:
+            lo, hi = np.asarray(attrs['valid_range']).ravel()[:2]
+        if lo is not None or hi is not None:
+            a = a.astype('f8' if a.dtype.itemsize > 4 else 'f4')
+            sc, off = attrs.get('scale_factor', 1), attrs.get('add_offset', 0)
+            stored = (a - off) / sc                    # the range is in stored units, as in read()
+            with np.errstate(invalid='ignore'):
+                bad = (stored < lo - 1e-9 * abs(lo)) if lo is not None else np.zeros(a.shape, bool)
+                if hi is not None:
+                    bad |= stored > hi + 1e-9 * abs(hi)
+            a = np.where(bad, np.nan, a)
+    return {'dims': tuple(str(d) for d in v.dims), 'attrs': attrs, 'data': a}
+
+
+def read_xarray(path):
+    """The same dict as read(), through the xarray backend: NetCDF-3 via scipy, NetCDF-4 via h5netcdf or netCDF4,
+    whichever is installed (pip install xarray scipy h5netcdf). Optional: the project's own readers need none of them.
+    As read() does: fill and missing values, then valid_min / valid_max / valid_range, become NaN and scale_factor /
+    add_offset apply (xarray's mask_and_scale, plus the valid range here); times stay numbers in their CF units
+    (decode_times=False) for cf_times; the packing attributes stay in attrs. ImportError when xarray is missing."""
+    try:
+        import xarray as xr
+    except ImportError as e:
+        raise ImportError('the xarray engine needs xarray: pip install xarray scipy h5netcdf') from e
+    kw = dict(decode_times=False, mask_and_scale=True, decode_coords=False)
+    with open(path, 'rb') as f:
+        hdf5 = f.read(4) == b'\x89HDF'
+    if hdf5 and hasattr(xr, 'open_groups'):      # NetCDF-4: every group, as read() does ('group/name')
+        engine = next((e for e, mod in (('netcdf4', 'netCDF4'), ('h5netcdf', 'h5netcdf')) if _importable(mod)), None)
+        groups = xr.open_groups(path, engine=engine, **kw)
+    else:                                          # NetCDF-3 has no groups
+        groups = {'/': xr.open_dataset(path, cache=False, **kw)}
+    out = {'dims': {}, 'unlimited': None, 'attrs': {}, 'vars': {}}
+    try:
+        for gpath, ds in groups.items():
+            prefix = gpath.strip('/') + '/' if gpath.strip('/') else ''
+            if not prefix:
+                unlimited = sorted(ds.encoding.get('unlimited_dims') or [])
+                out['unlimited'] = unlimited[0] if unlimited else None
+                out['attrs'] = {str(k): v for k, v in ds.attrs.items()}
+            for k, v in ds.sizes.items():
+                out['dims'].setdefault(str(k), int(v))
+            for name, v in ds.variables.items():
+                if prefix and name in ds.coords and str(name) in out['vars']:
+                    continue                           # a parent's coordinate, repeated in the subgroup
+                out['vars'][prefix + str(name)] = _xarray_var(v)
+    finally:
+        for ds in groups.values():
+            ds.close()
+    return out
 
 
 def _unpack(a, t, attrs):

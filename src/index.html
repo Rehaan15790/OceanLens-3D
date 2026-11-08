@@ -302,6 +302,7 @@
           <button type="button" id="worstFloatBtn" data-needs-shell hidden class="btn btn-block">Compare the worst-fitting float</button>
         </div>
         <p class="hint">Click a float on the map to compare it with the model. Drag to orbit, scroll to zoom.</p>
+        <div id="productCard" class="product-card" hidden></div>
         <div id="valPanel"></div>
       </section>
 
@@ -465,7 +466,12 @@
         days, centred on the same times. Read from the native 1/12° NetCDF-4 files, only the parts over this map, and
         averaged into the same 0.5° cells, interpolated linearly between its levels to the same 11 depths. Potential
         temperature (HYCOM and Argo give in-situ temperature, about 0.1 °C warmer at 1000 m), salinity and currents.
-        Switch between the models under Model, or with <kbd>M</kbd>.</dd>
+        Compared with a float, GLORYS is first turned into in-situ temperature at the float's pressure (UNESCO 1983),
+        so both sides are the same quantity. Switch between the models under Model, or with <kbd>M</kbd>.</dd>
+      <dt>Model: IGORA</dt>
+      <dd>IGORA, the INCOIS Global Ocean ReAnalysis, exported from the INCOIS Live Access Server: the May 2020 monthly
+        mean of temperature, salinity and currents, averaged into the same 0.5° cells. One monthly mean stands for every
+        analysis day, so it shows the month, not Amphan's day-to-day changes.</dd>
       <dt>Argo</dt>
       <dd><span data-fact="argo.profiles" data-fmt="int"></span> profiles from
         <span data-fact="argo.floats" data-fmt="int"></span> floats, from the Argo GDAC via Ifremer ERDDAP. Delayed-mode
@@ -478,6 +484,18 @@
       <dt>Cyclone</dt>
       <dd>Six-hourly positions and winds from IBTrACS v04r01: IMD (RSMC New Delhi, 3-minute winds) and JTWC (1-minute
         winds), shown side by side.</dd>
+      <dt>Moorings</dt>
+      <dd>Four RAMA moorings (NOAA PMEL; 12°N 90°E, 15°N 90°E, 15°N 65°E, 8°N 67°E): daily means of temperature and
+        salinity at their sensor depths, and currents near the surface, with quality codes 1 to 3 kept.</dd>
+      <dt>Drifting buoys</dt>
+      <dd><span data-fact="drifters.drifters" data-fmt="int"></span> NOAA Global Drifter Program buoys inside the map,
+        their hourly quality-controlled positions every 6 h. The drift tool is checked against them: from each buoy's
+        position at an analysis, the model's line after 72 h, against where the buoy really was.</dd>
+      <dt>Satellite products</dt>
+      <dd>Sea-surface temperature from OSTIA (Copernicus Marine, 0.05° daily) and chlorophyll from
+        Copernicus-GlobColour (gap-free, 4 km daily), averaged into the same 0.5° cells: the SST fronts, the
+        fishing-zone indicator and the SST anomaly against the 1991–2020 normal of the same days, with every year's
+        mean since 1982.</dd>
       <dt>Coast and sea floor</dt>
       <dd>ETOPO1, sampled every 0.1° (now superseded by ETOPO 2022).</dd>
       <dt>Currents for the drift tool</dt>
@@ -493,10 +511,11 @@
 
     <h3>Read with care</h3>
     <ul class="about-bullets">
-      <li>Both models assimilate Argo profiles, so the model–Argo comparison is a consistency check, not independent
-        validation. The two models differ from each other, which shows how uncertain a single model is.</li>
+      <li>HYCOM and GLORYS assimilate Argo profiles (IGORA very likely does too), so the model–Argo comparison is a
+        consistency check, not independent validation. The models differ from each other, which shows how uncertain a
+        single model is.</li>
       <li>HYCOM is matched to each float at its own time (3-hourly output); GLORYS, which has daily means, at the
-        nearest of the 8 days.</li>
+        nearest of the 8 days; IGORA is one May 2020 monthly mean, so it shows no change from day to day.</li>
       <li>The model is shown on 11 levels and 0.5° cells; features smaller than that are smoothed out.</li>
       <li>Heat potential uses EOS-80 density and c<sub>p</sub> = 4000 J kg⁻¹ K⁻¹; some operational products use
         4178, about 4.5 % higher.</li>
@@ -540,11 +559,16 @@
       <li data-cite="bgc_argo"></li>
       <li data-cite="hycom"></li>
       <li data-cite="glorys"></li>
+      <li data-cite="glo12"></li>
+      <li data-cite="igora"></li>
       <li data-cite="ibtracs"></li>
       <li data-cite="etopo1"></li>
       <li data-cite="gdp">NOAA Global Drifter Program hourly drifter data (Elipot et al. 2022), via NOAA AOML ERDDAP.</li>
       <li data-cite="oisst">NOAA OISST v2.1 (Huang et al. 2021), from the INCOIS Live Access Server.</li>
-      <li>Methods: UNESCO EOS-80 equation of state; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test; Liu and Weisberg (2011) for the drift skill score; Belkin and O’Reilly (2009) for SST fronts.</li>
+      <li data-cite="rama"></li>
+      <li data-cite="ostia"></li>
+      <li data-cite="globcolour"></li>
+      <li>Methods: UNESCO EOS-80 equation of state; UNESCO (1983) potential temperature; Mackenzie (1981) sound speed; Leipper and Volgenau (1972) and Goni et al. (2009) for heat potential and D26; Argo quality-control manual for the density-inversion test; Liu and Weisberg (2011) for the drift skill score; Belkin and O’Reilly (2009) for SST fronts.</li>
       <li>three.js r128, MIT licence (full text in THIRD_PARTY_NOTICES.md).</li>
     </ul>
 
@@ -615,8 +639,11 @@
 
 <script type="application/json" id="snapshot" src="../data/amphan-2020.json"></script>
 <script type="application/json" id="snapshot-glorys" src="../data/amphan-2020-glorys.json" data-embed="model"></script>
+<script type="application/json" id="snapshot-igora" src="../data/amphan-2020-igora.json" data-embed="model"></script>
 <script type="application/json" id="snapshot-extras" src="../data/amphan-2020-extras.json"></script>
 <script type="application/json" id="drift-validation" src="../data/drift-validation.json"></script>
+<script type="application/json" id="snapshot-products" src="../data/products-2020-05.json"></script>
+<script type="application/json" id="snapshot-moorings" src="../data/moorings-2020-05.json"></script>
 <!-- Script manifest (architect): build.py inlines each file below, in this order, as its own script element.
      They are classic scripts sharing one global scope. Code that runs while a file loads may use only what the files
      above it define; functions called later (events, updates) may use any of them. main.js comes last and boots the
@@ -635,6 +662,8 @@
 <script src="js/ocean.js"></script>
 <script src="js/data-synthetic.js"></script>
 <script src="js/data-real.js"></script>
+<script src="js/products.js"></script>
+<script src="js/moorings.js"></script>
 <script src="js/facts.js"></script>
 <script src="js/render.js"></script>
 <script src="js/scene.js"></script>

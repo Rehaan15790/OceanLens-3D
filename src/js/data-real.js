@@ -5,10 +5,16 @@
 // one snapshot's model on the app's own 0.5° grid and levels, laid out [time][variable][level][lat][lon]
 function decodeModel(d){
   const m = d.meta, q = b64Int16(d.model);
-  const per = m.depths.length*m.nlat*m.nlon, f = new Float32Array(q.length);
+  const per = m.depths.length*m.nlat*m.nlon, one = new Float32Array(q.length);
   for(let n=0;n<q.length;n++){
     const [off, sc] = m.quant[m.vars[Math.floor(n/per) % m.vars.length]];
-    f[n] = off + q[n]*sc;
+    one[n] = off + q[n]*sc;
+  }
+  // build.py embeds a field repeated at every time once (meta.timesStored 1, IGORA's monthly mean): repeat it here
+  let f = one;
+  if(m.timesStored===1 && m.times.length > 1){
+    f = new Float32Array(one.length*m.times.length);
+    for(let t=0;t<m.times.length;t++) f.set(one, t*one.length);
   }
   // mask.wet: one bit per cell, [level][lat][lon], most significant bit first; 1 = the cell holds model
   // water. Cells without it carry values filled from their neighbours.
@@ -20,34 +26,70 @@ function decodeModel(d){
   }
   return {meta:m, f, per, layer:m.nlat*m.nlon, wet};
 }
-// the words the app uses for a model; meta.model names it, and a snapshot without meta.model is HYCOM
+// the case the main snapshot holds: Cyclone Amphan (a snapshot without meta.case), or another the pipeline wrote, such as
+// a forecast (build_forecast.py): its name, its label on the Real data button, and whether the Amphan tour applies
+const CASE = (()=>{
+  const c = REAL_DATA.meta.case;
+  if(!c) return {kind:'cyclone', name:'Cyclone Amphan', button:'Amphan 2020', storm:'Amphan', tour:true, extras:true};
+  const forecast = c.kind==='forecast', issued = forecast && c.issued ? Date.parse(c.issued + 'T00:00Z') : NaN;
+  return {kind:String(c.kind || 'case'), name:String(c.name || REAL_DATA.meta.title || 'Real data'),
+          button:forecast && Number.isFinite(issued) ? `forecast ${fmt.dayMonth(new Date(issued).toISOString())}` : String(c.name || 'case'),
+          storm:null, tour:false, extras:false, forecast, issued};
+})();
+// the Real data button names the case
+document.querySelectorAll('#dataToggle button[data-mode="real"]').forEach(b=>{ b.textContent = `Real data: ${CASE.button}`; });
+
+// the words the app uses for a model; meta.model names it, and a snapshot without meta.model is HYCOM.
+// temperature: 'in-situ' or 'potential' (meta.model.temperature when the snapshot says); argo: 'yes' when the model's
+// documentation says it assimilates Argo, else 'likely'; monthly: one monthly mean stands for every analysis day
 const MODEL_WORDS = {
   HYCOM: {product:'HYCOM analysis', products:'analyses', label:'HYCOM', kind:'analysis',
-          data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)'},
+          data:'HYCOM GOFS 3.1', note:'HYCOM + NCODA analysis (GOFS 3.1)', temperature:'in-situ', argo:'yes'},
   GLORYS:{product:'GLORYS daily mean', products:'daily means', label:'GLORYS', kind:'reanalysis',
-          data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means'},
+          data:'Copernicus Marine GLORYS12V1', note:'Copernicus Marine GLORYS12V1 reanalysis, daily means',
+          temperature:'potential', argo:'yes'},
+  IGORA: {product:'IGORA May 2020 mean', products:'monthly mean', label:'IGORA', kind:'reanalysis',
+          data:'INCOIS IGORA reanalysis (INCOIS LAS)', temperature:'potential', argo:'likely', monthly:true,
+          note:'INCOIS Global Ocean ReAnalysis from the INCOIS Live Access Server: the May 2020 monthly mean, the same at every analysis day'},
+  Forecast:{product:'daily mean', products:'daily means', label:'Forecast', kind:'forecast',
+          data:'Copernicus Marine global analysis and forecast', note:'Copernicus Marine global ocean analysis and forecast (1/12°), daily means',
+          temperature:'potential', argo:'yes'},
 };
 function modelWords(meta){
-  const short = (meta.model && meta.model.short) || 'HYCOM';
-  return Object.assign({short}, MODEL_WORDS[short] || {product:`${short} model output`, products:'model times',
-    label:short, kind:'model', data:short, note:short});
+  const mm = meta.model || {}, short = mm.short || 'HYCOM';
+  const w = Object.assign({short}, MODEL_WORDS[short] || {product:`${short} model output`, products:'model times',
+    label:short, kind:'model', data:short, note:short, temperature:'in-situ', argo:'likely'});
+  if(mm.temperature==='potential' || mm.temperature==='in-situ') w.temperature = mm.temperature;
+  if(mm.monthly) w.monthly = true;
+  return w;
 }
-// the real-data models in the page, main snapshot first; the second is decoded the first time it is shown
+// the comparison with floats is a consistency check: said as firmly as the model's documentation allows
+function assimilationWords(short){
+  const M = MODEL();
+  return M.argo==='yes' ? `${M.short} assimilates Argo${short ? ':' : ', so this is'} a consistency check, not independent validation.`
+    : `${M.short} likely assimilates Argo${short ? ':' : ', so read this as'} a consistency check, not independent validation.`;
+}
+// another model must sit on the main snapshot's grid, levels and times to be drawn and compared on it
+function sameGridAsMain(m){
+  const M = REAL_DATA.meta;
+  return !!m && ['lat0', 'lon0', 'step', 'nlat', 'nlon'].every(k=>m[k]===M[k]) && Array.isArray(m.depths) &&
+    m.depths.join()===M.depths.join() && m.times.join()===M.times.join() && m.vars.join()===M.vars.join();
+}
+// the real-data models in the page, main snapshot first; the others are decoded the first time they are shown.
+// A data server can add more (addServerModel, called from import.js).
 const REAL_MODELS = (()=>{
   const list = [{id:modelWords(REAL_DATA.meta).short.toLowerCase(), words:modelWords(REAL_DATA.meta),
                  atObs:!!(REAL_DATA.argo && REAL_DATA.argo.model), decoded:null, data:()=>REAL_DATA}];
-  const el = document.getElementById('snapshot-glorys');
-  if(el){
+  ['snapshot-glorys', 'snapshot-igora'].forEach(sid=>{
+    const el = document.getElementById(sid);
+    if(!el) return;
     let d = null;
     const data = ()=>d || (d = JSON.parse(el.textContent));
     const words = modelWords(data().meta), id = words.short.toLowerCase();
-    // the second model must sit on the main snapshot's grid, levels and times, or it is left out (and said why)
-    const m = data().meta, M = REAL_DATA.meta;
-    const same = ['lat0', 'lon0', 'step', 'nlat', 'nlon'].every(k=>m[k]===M[k]) &&
-      m.depths.join()===M.depths.join() && m.times.join()===M.times.join() && m.vars.join()===M.vars.join();
-    if(!same) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`);
+    // a main snapshot of another case (a forecast) has other times: the second model is left out, as expected there
+    if(!sameGridAsMain(data().meta)){ if(!REAL_DATA.meta.case) console.warn(`the ${words.short} snapshot is on another grid or other times; it is left out`); }
     else if(!list.some(x=>x.id===id)) list.push({id, words, atObs:false, decoded:null, data});
-  }
+  });
   return list;
 })();
 let realModel = REAL_MODELS[0].id;
@@ -59,15 +101,39 @@ REAL_MODELS[0].decoded = Object.assign({}, REAL);
 function activeModel(){ return REAL_MODELS.find(x=>x.id===realModel) || REAL_MODELS[0]; }
 function MODEL(){ return activeModel().words; }
 // the Model switch in the left panel: one button per model (setRealModel is in data-source.js)
-REAL_MODELS.forEach(m=>{
+function modelButton(id, label, title, onClick){
   const b = document.createElement('button');
   b.type = 'button';
-  b.dataset.model = m.id;
-  b.textContent = m.words.label;
-  b.title = m.words.note;
-  b.addEventListener('click', ()=>setRealModel(m.id));
+  b.dataset.model = id;
+  b.textContent = label;
+  b.title = title;
+  b.addEventListener('click', onClick);
   ui.modelToggle.appendChild(b);
-});
+  return b;
+}
+REAL_MODELS.forEach(m=>modelButton(m.id, m.words.label, m.words.note, ()=>setRealModel(m.id)));
+// A model a data server offers (serve.py /api/v1/datasets/<id>/model, a NetCDF file put on the page's grid and times):
+// a button now; its fields load on the first click, then it is a model like the others. id must be new.
+function addServerModel(d){
+  const id = 'srv-' + d.id, label = String(d.title || d.id).slice(0, 18);
+  if(REAL_MODELS.some(m=>m.id===id)) return null;
+  let loading = null;
+  const b = modelButton(id, label, `${d.title || d.id}, from the data server (loads when chosen)`, ()=>{
+    if(REAL_MODELS.some(m=>m.id===id)) return setRealModel(id);
+    if(loading) return;
+    b.disabled = true; b.textContent = 'Loading…';
+    loading = serverJSON(d.links.model).then(j=>{
+      if(!j || j.schema!==1 || !sameGridAsMain(j.meta)) throw new Error(`${label} is not on this page's grid and times.`);
+      const words = Object.assign(modelWords(j.meta), {label, note:`${d.title || d.id}, from the data server`,
+        product:`${label} model output`, products:'model outputs', data:d.title || d.id});
+      REAL_MODELS.push({id, words, atObs:false, decoded:null, data:()=>j, server:true});
+      setRealModel(id);
+    }).catch(err=>{
+      ui.modelNote.textContent = err.message;
+    }).finally(()=>{ b.disabled = false; b.textContent = label; loading = null; });
+  });
+  return b;
+}
 // bilinear in latitude/longitude, linear between model levels; R is a decodeModel() result (realAt: the model on screen)
 function realAtIn(R, vi, lat, lon, depth, t){
   const m = R.meta, f = R.f;
@@ -128,7 +194,7 @@ function modelGapHours(inst){
 // the last fix at sea and the first over land (IBTrACS is six-hourly; landfall fell in between).
 // usa = JTWC 1-minute wind (kt), nd = IMD 3-minute wind (kt), grade = IMD grade (D … SuCS).
 const REAL_TRACK = (()=>{
-  const all = REAL_DATA.track.fixes.map(([t, lat, lon, usa, nd, grade])=>({t, lat, lon, usa, nd, grade}));
+  const all = (REAL_DATA.track && REAL_DATA.track.fixes || []).map(([t, lat, lon, usa, nd, grade])=>({t, lat, lon, usa, nd, grade}));
   const T = [], mix = (x, y, u)=> x==null || y==null ? (x ?? y) : Math.round(lerp(x, y, u));
   for(const f of all){
     if(f.lat>=LAT0 && f.lat<=LAT1 && f.lon>=LON0 && f.lon<=LON1 && !isLand(f.lat, f.lon)){ T.push(f); continue; }
@@ -161,8 +227,10 @@ function lazyJson(id){
     return d;
   };
 }
-const EXTRAS = lazyJson('snapshot-extras');
-const DRIFT_VALIDATION = lazyJson('drift-validation');
+// the May 2020 add-ons belong to the Amphan case: another case served in its place (a forecast) leaves them out
+const amphanOnly = f=>()=>CASE.extras ? f() : null;
+const EXTRAS = amphanOnly(lazyJson('snapshot-extras'));
+const DRIFT_VALIDATION = amphanOnly(lazyJson('drift-validation'));
 // a model's surface currents from the extras on the app grid: {clock (ms), f [time][u, v][lat][lon], grid}; null without
 const surfCache = {};
 function surfCurrents(id){

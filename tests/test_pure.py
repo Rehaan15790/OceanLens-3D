@@ -18,6 +18,27 @@ class PureFunctions(AppTestCase):
                 self.assertAlmostEqual(self.js(f"{fn('seawaterDensity')}({s}, {t})"), rho, places=4)
         self.assertAlmostEqual(self.js(f"{fn('sigmaT')}(35, 25)"), 23.343, places=3)
 
+    def test_unesco_potential_temperature(self):
+        # UNESCO (1983) check values: lapse rate 3.255976e-4 degC/dbar and theta 36.89073 degC at S 40, T 40, P 10000
+        self.assertAlmostEqual(self.js(f"{fn('adiabaticLapse')}(40, 40, 10000)"), 3.255976e-4, places=10)
+        self.assertAlmostEqual(self.js(f"{fn('potentialTemp')}(40, 40, 10000, 0)"), 36.89073, places=5)
+        # in-situ from potential is the same routine run downwards, so it undoes it
+        back = self.js(f"{fn('inSituTemp')}(35, {fn('potentialTemp')}(35, 8, {fn('pressureDbar')}(1000, 15), 0), 1000, 15)")
+        self.assertAlmostEqual(back, 8, places=4)
+        self.assertEqual(self.js(f"{fn('inSituTemp')}(35, 28, 0)"), 28)
+
+    def test_glorys_is_compared_as_in_situ(self):
+        if 'glorys' not in (self.js('__ol.models || []') or []):
+            self.skipTest('this build has no GLORYS model')
+        gap = f"{fn('modelAsMeasured')}('temp', 15, 88, 1000, 3) - modelAt('temp', 15, 88, 1000, 3)"
+        try:
+            self.js("__ol.actions.setRealModel('glorys')")
+            self.assertTrue(0.05 < self.js(gap) < 0.15, 'GLORYS potential temperature turned into in-situ at 1000 m')
+            self.assertEqual(self.js(f"{fn('modelAsMeasured')}('sal', 15, 88, 1000, 3) - modelAt('sal', 15, 88, 1000, 3)"), 0)
+        finally:
+            self.js("__ol.actions.setRealModel(__ol.models[0])")
+        self.assertEqual(self.js(gap), 0, 'HYCOM gives in-situ temperature already')
+
     def test_mackenzie_sound_speed(self):
         self.assertAlmostEqual(self.js(f"{fn('soundSpeed')}(25, 35, 1000)"), 1550.744, places=2)
 

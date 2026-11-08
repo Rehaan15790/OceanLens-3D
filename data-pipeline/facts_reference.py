@@ -51,6 +51,7 @@ class Snapshot:
         mod = A.get('model')
         self.mT = dec(mod['T'], 'temp') if mod else None
         self.mS = dec(mod['S'], 'sal') if mod else None
+        self.potential = m.get('model', {}).get('temperature') == 'potential'
         self.times = [datetime.strptime(t, '%Y-%m-%dT%H:%MZ').replace(tzinfo=timezone.utc) for t in m['times']]
 
     # ---- the app's samplers, re-implemented ----
@@ -111,6 +112,122 @@ def drift_path(s, lat, lon, t0, hours, direction, extras=None, model=None):
     return path, {0: None, 1: 'ashore', 2: 'edge'}[int(end[0])]
 
 
+def mooring_facts(s, path=None):
+    """The RAMA moorings against the model, as moorings.js mooringFacts: per mooring, the analyses it has (a daily mean
+    on the analysis day), temperature bias and RMSE (observed - model, at every level with a temperature that the
+    density-inversion test does not flag), and its shallowest temperature from 13 to 19 May, observed and in the
+    model (in-situ, so GLORYS is converted)."""
+    path = path or os.path.join(HERE, '..', 'data', 'moorings-2020-05.json')
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding='utf-8') as f:
+        d = json.load(f)
+    days = [t.strftime('%Y-%m-%d') for t in s.times]
+
+    def model_t(lat, lon, z, t):
+        th = s.at(0, lat, lon, z, t)
+        return float(in_situ(s.at(1, lat, lon, z, t), th, pressure_dbar(z, lat))) if s.potential else th
+    out = []
+    for m in d['moorings']:
+        dep = m['depth']
+        z = sorted(set(dep['temp']) | set(dep['sal']) | set(dep['cur']))
+        tops, diffs = {}, []
+        n_an = 0
+        for t, day in enumerate(days):
+            if day not in m['days']:
+                continue
+            i = m['days'].index(day)
+
+            def col(arr, ds):
+                return np.array([np.nan if zz not in ds or arr[ds.index(zz)] is None else arr[ds.index(zz)] for zz in z], float)
+            T, S = col(m['temp'][i], dep['temp']), col(m['sal'][i], dep['sal'])
+            U, V = col(m['u'][i], dep['cur']), col(m['v'][i], dep['cur'])
+            if not (np.isfinite(T) | np.isfinite(S) | np.isfinite(np.hypot(U, V))).any():
+                continue
+            n_an += 1
+            D = np.where(np.isfinite(T) & np.isfinite(S), rho_eos80(S, T) - 1000, np.nan)
+            flag = inversion_flags(D)
+            for k, zz in enumerate(z):
+                if np.isfinite(T[k]) and not flag[k]:
+                    diffs.append(T[k] - model_t(m['lat'], m['lon'], zz, t))
+            k0 = next((k for k in range(len(z)) if np.isfinite(T[k])), None)
+            if k0 is not None:
+                tops[t] = (z[k0], T[k0])
+        a, b = tops.get(days.index('2020-05-13')), tops.get(days.index('2020-05-19'))
+        change = None
+        if a and b and a[0] == b[0]:
+            zz = a[0]
+            change = {'depth': zz, 'observed': round(b[1] - a[1], 4),
+                      'model': round(model_t(m['lat'], m['lon'], zz, days.index('2020-05-19'))
+                                     - model_t(m['lat'], m['lon'], zz, days.index('2020-05-13')), 4)}
+        dd = np.array(diffs)
+        out.append({'station': m['station'], 'analyses': n_an,
+                    'tempBias': round(float(dd.mean()), 4) if dd.size else None,
+                    'tempRmse': round(float(np.sqrt((dd ** 2).mean())), 4) if dd.size else None,
+                    'n': int(dd.size), 'change': change})
+    return out
+
+
+FRONT_MIN, CHL_MIN = 0.75, 0.3       # products.js: an SST front (deg C per 100 km) and chlorophyll-rich water (mg/m3)
+
+
+def product_facts(s, path=None, extras_path=None):
+    """The satellite product numbers, as products.js productFacts: per analysis, the sea nodes (not land by ETOPO)
+    showing both fishing signs (a front on the SST fronts map of satellite_maps, from the extras, and chlorophyll from
+    the products file) and the nodes where both are known; the mean SST anomaly of each box's nodes; for each
+    box's yearly series, the least-squares trend per decade, the 1991-2020 mean, 2020 against it and its rank."""
+    path = path or os.path.join(HERE, '..', 'data', 'products-2020-05.json')
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding='utf-8') as f:
+        d = json.load(f)
+    m = d['meta']
+    shape = (len(m['times']), m['nlat'], m['nlon'])
+
+    def dec(key):
+        off, sc = m['quant'][key]
+        q = np.frombuffer(base64.b64decode(d[key]), '<i2').astype(float).reshape(shape)
+        return np.where(q == m['missing'], np.nan, off + q * sc)
+    sst, clim, chl = dec('sst'), dec('clim'), dec('chl')
+    extras_path = extras_path or os.path.join(HERE, '..', 'data', 'amphan-2020-extras.json')
+    extras = None
+    if os.path.exists(extras_path):
+        with open(extras_path, encoding='utf-8') as f:
+            extras = json.load(f)
+    front = np.full(shape, np.nan)
+    for t in range(shape[0]):
+        if extras and extras['sat']['sst']['times'] == m['times']:
+            for (i, j), (_, fr) in satellite_maps(s, extras, t).items():
+                if fr is not None:
+                    front[t, i, j] = fr
+    land = np.array([[s.cell_median(i, j) > 0 for j in range(m['nlon'])] for i in range(m['nlat'])])
+    lats = m['lat0'] + m['step'] * np.arange(m['nlat'])
+    lons = m['lon0'] + m['step'] * np.arange(m['nlon'])
+    S = d['series']
+    out = {'fishing': [], 'anomaly': [], 'series': {}}
+    for t in range(shape[0]):
+        known = np.isfinite(front[t]) & np.isfinite(chl[t]) & ~land
+        both = known & (front[t] >= FRONT_MIN) & (chl[t] >= CHL_MIN)
+        out['fishing'].append({'both': int(both.sum()), 'known': int(known.sum())})
+        row = {}
+        for name, box in S['boxes'].items():
+            inside = ((lats[:, None] >= box['lat'][0] - 1e-9) & (lats[:, None] <= box['lat'][1] + 1e-9) &
+                      (lons[None, :] >= box['lon'][0] - 1e-9) & (lons[None, :] <= box['lon'][1] + 1e-9))
+            a = (sst[t] - clim[t])[inside]
+            a = a[np.isfinite(a)]
+            row[name] = round(float(a.mean()), 4) if a.size else None
+        out['anomaly'].append(row)
+    yrs = np.array(S['years'], float)
+    for name in S['boxes']:
+        y = np.array(S[name], float)
+        normal = float(y[(yrs >= 1991) & (yrs <= 2020)].mean())
+        i20 = S['years'].index(2020)
+        out['series'][name] = {'trendPerDecade': round(10 * float(np.polyfit(yrs, y, 1)[0]), 4), 'normal': round(normal, 4),
+                               'case': float(y[i20]), 'caseAnomaly': round(float(y[i20] - normal), 4),
+                               'caseRank': int((y > y[i20]).sum()) + 1, 'years': len(y)}
+    return out
+
+
 def rho_eos80(S, T):
     """UNESCO EOS-80 density at one atmosphere (kg/m3), as ocean.js seawaterDensity."""
     rw = (999.842594 + 6.793952e-2 * T - 9.095290e-3 * T ** 2 + 1.001685e-4 * T ** 3 - 1.120083e-6 * T ** 4
@@ -118,6 +235,32 @@ def rho_eos80(S, T):
     A = 0.824493 - 4.0899e-3 * T + 7.6438e-5 * T ** 2 - 8.2467e-7 * T ** 3 + 5.3875e-9 * T ** 4
     B = -5.72466e-3 + 1.0227e-4 * T - 1.6546e-6 * T ** 2
     return rw + A * S + B * S ** 1.5 + 4.8314e-4 * S * S
+
+
+def pressure_dbar(z, lat):
+    """Pressure (dbar) at depth z (m), Saunders (1981), as ocean.js pressureDbar."""
+    c1 = (5.92 + 5.25 * math.sin(math.radians(lat)) ** 2) * 1e-3
+    return ((1 - c1) - np.sqrt((1 - c1) ** 2 - 8.84e-6 * np.asarray(z, float))) / 4.42e-6
+
+
+def lapse_rate(S, T, P):
+    """Adiabatic lapse rate (deg C / dbar), Bryden (1973)."""
+    ds = S - 35
+    return ((((-2.1687e-16 * T + 1.8676e-14) * T - 4.6206e-13) * P
+             + ((2.7759e-12 * T - 1.1351e-10) * ds + ((-5.4481e-14 * T + 8.733e-12) * T - 6.7795e-10) * T
+                + 1.8741e-8)) * P
+            + (-4.2393e-8 * T + 1.8932e-6) * ds + ((6.6228e-10 * T - 6.836e-8) * T + 8.5258e-6) * T + 3.5803e-5)
+
+
+def in_situ(S, theta, P, steps=64):
+    """In-situ temperature at pressure P of water with potential temperature theta (0 dbar reference): dT/dP = lapse
+    rate, integrated from the surface in `steps` midpoint steps (the app uses UNESCO 1983's one-step Runge-Kutta)."""
+    T, P = np.array(theta, float), np.asarray(P, float)
+    h = P / steps
+    for n in range(steps):
+        p = n * h
+        T = T + h * lapse_rate(S, T + 0.5 * h * lapse_rate(S, T, p), p + 0.5 * h)
+    return T
 
 
 def tchp(depths, Tc, Sc, bottom, cp=4000.0):
@@ -329,6 +472,8 @@ def comparison_and_rest(s, F):
             else:
                 mt = np.interp(s.levels, D, s.column(0, p['la'], p['lo'], t))
                 ms = np.interp(s.levels, D, s.column(1, p['la'], p['lo'], t))
+                if s.potential:            # potential temperature (GLORYS): in-situ at each level, as a float measures
+                    mt = in_situ(ms, mt, pressure_dbar(s.levels, p['la']))
             dT = (s.T[n] - mt)[ok & np.isfinite(mt)]
             zT = s.levels[ok & np.isfinite(mt)]
             recs['temp'] += list(zip(zT, dT))
@@ -352,6 +497,8 @@ def comparison_and_rest(s, F):
     F['comparison'] = {'matchedInTime': matched, 'bands': comp, 'worst': worst,
                        'deepRmse': {'median': round(float(np.median(deep)), 3), 'min': min(deep), 'max': max(deep)}
                        if deep else None}
+    F['products'] = product_facts(s)
+    F['moorings'] = mooring_facts(s)
     F['view'] = {'exaggerationPerSlider': round(KM_PER_DEG * 1000 / SCALE_XZ * DEPTH_SCALE, 2),
                  'deepCompression': round(1 / DEEP_COMPRESSION, 2)}
     return F
@@ -361,7 +508,9 @@ def comparison_and_rest(s, F):
 TOL = {'lat': 0.001, 'lon': 0.001, 'heatBefore': 0.05, 'heatAfter': 0.05, 'sstP25': 0.005, 't1000Mean': 0.005,
        'd26P10': 0.2, 'd26P90': 0.2, 'salMedian': 0.005, 'v': 0.005, 'sstBefore': 0.01, 'sstAfter': 0.01,
        'cooling': 0.01, 'd26Before': 0.2, 'd26After': 0.2, 'bias': 0.005, 'rmse': 0.005, 'median': 0.005,
-       'min': 0.005, 'max': 0.005, 'leadDays': 0.01, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01}
+       'min': 0.005, 'max': 0.005, 'leadDays': 0.01, 'km': 0.1, 'stillKm': 0.01, 'trendPerDecade': 0.001,
+       'normal': 0.001, 'case': 0.001, 'caseAnomaly': 0.001, 'tempBias': 0.002, 'tempRmse': 0.002,
+       'observed': 0.002, 'model': 0.002, 'exaggerationPerSlider': 0.1, 'deepCompression': 0.01, 'bay': 0.002, 'arabian': 0.002}
 
 
 def expected(F):
@@ -378,34 +527,10 @@ def expected(F):
         elif x is not None and not isinstance(x, bool):
             out['real' + path] = {'value': x, 'tol': TOL.get(leaf, 0) if not isinstance(x, str) else 0,
                                   'how': 'data-pipeline/facts_reference.py'}
-    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'view'):
-        walk(F[k], '.' + k, k)
+    for k in ('argo', 'track', 'path', 'bay', 'arabian', 'currents', 'section', 'comparison', 'products', 'moorings', 'view'):
+        if F.get(k) is not None:
+            walk(F[k], '.' + k, k)
     return out
-
-
-if __name__ == '__main__':
-    import argparse
-    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    ap.add_argument('data', nargs='?', default=os.path.join(HERE, '..', 'data', 'amphan-2020.json'))
-    ap.add_argument('--expected', help='write the flat expected-values file for tests/test_facts.py here')
-    ap.add_argument('--check', action='store_true', help='with --expected, compare instead of writing')
-    args = ap.parse_args()
-    F = facts(args.data)
-    if args.expected:
-        text = json.dumps(expected(F), indent=1, sort_keys=True)
-        if args.check:
-            try:
-                with open(args.expected, encoding='utf-8') as f:
-                    same = f.read() == text
-            except OSError:
-                same = False
-            print(f"check {'ok' if same else 'failed'}: {args.expected} {'matches' if same else 'differs from'} the data")
-            sys.exit(0 if same else 1)
-        with open(args.expected, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(text)
-        print(f'wrote {len(expected(F))} expected facts to {args.expected}')
-    else:
-        print(json.dumps(F, indent=1))
 
 
 def satellite_maps(snap, extras, t):
@@ -448,3 +573,28 @@ def satellite_maps(snap, extras, t):
             fv = [G[a, b] for a in ci for b in cj if np.isfinite(G[a, b])]
             out[(i, j)] = (float(np.mean(sv)) if sv else None, float(max(fv)) if fv else None)
     return out
+
+
+if __name__ == '__main__':
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('data', nargs='?', default=os.path.join(HERE, '..', 'data', 'amphan-2020.json'))
+    ap.add_argument('--expected', help='write the flat expected-values file for tests/test_facts.py here')
+    ap.add_argument('--check', action='store_true', help='with --expected, compare instead of writing')
+    args = ap.parse_args()
+    F = facts(args.data)
+    if args.expected:
+        text = json.dumps(expected(F), indent=1, sort_keys=True)
+        if args.check:
+            try:
+                with open(args.expected, encoding='utf-8') as f:
+                    same = f.read() == text
+            except OSError:
+                same = False
+            print(f"check {'ok' if same else 'failed'}: {args.expected} {'matches' if same else 'differs from'} the data")
+            sys.exit(0 if same else 1)
+        with open(args.expected, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(text)
+        print(f'wrote {len(expected(F))} expected facts to {args.expected}')
+    else:
+        print(json.dumps(F, indent=1))
