@@ -164,13 +164,16 @@ python server/serve.py --api-keys-file /etc/oceanlens/keys.txt --rate-limit 120 
 ```
 
 Partners then send `Authorization: Bearer <key>` (or `key=<key>` from WMS and OPeNDAP clients); the page opens as
-`https://host/oceanlens/?key=<key>`. `--trust-forwarded` is only for a server behind the proxy: it rate-limits by the
-address the proxy adds to `X-Forwarded-For`. With nginx:
+`https://host/oceanlens/?key=<key>`. A key in a URL ends up in the proxy's access log and the browser's history, so
+prefer the header and keep that log private. `--trust-forwarded` is only for a server behind the proxy: it
+rate-limits by the last address in `X-Forwarded-For`, so the proxy must set that header to the client's address
+(without it every user shares one limit). With nginx:
 
 ```
 location /oceanlens/ {
     proxy_pass http://127.0.0.1:8080/;
     proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
     add_header Strict-Transport-Security "max-age=31536000" always;
 }
 ```
@@ -195,7 +198,8 @@ Notes:
 - `--engine xarray` reads the `--netcdf` files through xarray (NetCDF-3 via scipy, NetCDF-4 via netCDF4 or h5netcdf)
   instead of the project's own readers, for sites that standardise on xarray; the result is the same.
 - Health check: `GET /healthz` returns `{"status": "ok", ...}`.
-- The server reads its datasets at start-up. Restart it after changing files.
+- The server reads its datasets at start-up. With `--reload SECONDS` it also loads snapshot files that change or
+  appear (a daily forecast); restart it after changing `--netcdf` files.
 - It refuses requests above 2048 × 2048 pixels (WMS) or 5 million cells (WCS). It serves only GET, HEAD and OPTIONS,
   and only fixed routes, so it never serves files from disk by path.
 - The single file keeps working with no server at all. The server adds data access; the page does not depend on it.

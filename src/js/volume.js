@@ -168,7 +168,8 @@ function updateField2dView(){
 function layerMask(depth){ return gridPts.map((p,idx)=> gridLand[idx] || depth > gridSeabed[idx] ? 0 : 1); }
 // the samples of the last recolouring, per level: the 3D isosurface reuses them
 let layerField = null;
-const fieldKey = v => dataMode+'|'+v+'|'+state.time;
+// datasetRev: a model switch or an import is a new field (the 3D isosurface keys on this too)
+const fieldKey = v => dataMode+'|'+v+'|'+state.time+'|'+datasetRev;
 const isMapOnly = v => v==='tchp' || (VAR_META[v] && VAR_META[v].dims===2);
 // sample the variable at every node of every level and recolour the layers: the slow part of a full update
 function updateLayerColors(){

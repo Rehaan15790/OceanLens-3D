@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>OceanLens 3D · ocean model and Argo viewer</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Interactive 3D view of two ocean models, HYCOM and Copernicus Marine GLORYS, and Argo float profiles for Cyclone Amphan, May 2020. A student prototype for Smart India Hackathon 2026, problem statement 26067.">
+<meta name="description" content="Interactive 3D view of three ocean models, HYCOM, Copernicus Marine GLORYS and INCOIS IGORA, and Argo float profiles for Cyclone Amphan, May 2020. A student prototype for Smart India Hackathon 2026, problem statement 26067.">
 <meta name="color-scheme" content="dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23151b21'/%3E%3Cpath d='M2.5 9.5c1.8-2 3.7 2 5.5 0s3.7 2 5.5 0' stroke='%235aa9e6' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="css/tokens.css">
@@ -27,7 +27,7 @@
   <div class="splash-inner">
     <p class="splash-eyebrow">Smart India Hackathon 2026 · Problem statement 26067</p>
     <h1 id="splashTitle">OceanLens 3D</h1>
-    <p id="splashLede" class="splash-lede">Two ocean models, HYCOM and Copernicus Marine GLORYS, with Argo floats, NOAA
+    <p id="splashLede" class="splash-lede">Three ocean models, INCOIS's IGORA among them, with Argo floats, RAMA moorings,
       drifting buoys and satellite SST for Cyclone Amphan (May 2020) in one 3D view, each model checked against them.</p>
     <div class="splash-actions">
       <!-- boot-guard (platform) will disable both with "Loading data…" until the app is ready -->
@@ -423,7 +423,7 @@
       <tr><th scope="row"><kbd>U</kbd> <kbd>L</kbd> <kbd>D</kbd> <kbd>I</kbd> <kbd>O</kbd></th><td>Surface, all depth levels, depth slice, depth of a value, isosurface (3D)</td></tr>
       <tr><th scope="row"><kbd>[</kbd> <kbd>]</kbd></th><td>Depth slice up or down</td></tr>
       <tr><th scope="row"><kbd>Space</kbd></th><td>Play or pause the analyses</td></tr>
-      <tr><th scope="row"><kbd>M</kbd></th><td>Switch the model, HYCOM or GLORYS (real data)</td></tr>
+      <tr><th scope="row"><kbd>M</kbd></th><td>Switch the model: HYCOM, GLORYS or IGORA (real data)</td></tr>
       <tr><th scope="row"><kbd>S</kbd></th><td>Draw a vertical section (drag across the sea)</td></tr>
       <tr><th scope="row"><kbd>T</kbd></th><td>Release a surface drift (click the sea)</td></tr>
       <tr><th scope="row"><kbd>P</kbd></th><td>Start or end the guided tour</td></tr>
@@ -524,7 +524,7 @@
         <span data-fact="view.deepCompression" data-fmt="int"></span> times.</li>
       <li>Current labels mark where these currents usually flow; they are not drawn from this data.</li>
       <li>Current streaks move at an illustrative speed, not a physical one.</li>
-      <li>Neither model has chlorophyll or oxygen. In real mode those come only from BGC-Argo floats, so there is no
+      <li>No model here has chlorophyll or oxygen. In real mode those come only from BGC-Argo floats, so there is no
         model column to compare them with.</li>
       <li>No glider data is included for this period.</li>
       <li>The drift tool moves objects with the surface current only: no wind (leeway) and no waves (Stokes drift). It was

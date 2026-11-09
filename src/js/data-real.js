@@ -182,6 +182,8 @@ const realProfiles = (()=>{
 
 // how far a real profile is from the model analysis it is compared with (up to 1.5 days)
 function analysisGap(inst){
+  const M = MODEL();
+  if(M.monthly) return `compared with the ${M.product}`;   // one mean for the month: no time to be before or after
   const h = Math.round((Date.parse(REAL.meta.times[inst.snap]) - Date.parse(inst.time))/3.6e6);
   return h===0 ? 'same time as the analysis' : `${Math.abs(h)} h ${h>0 ? 'before' : 'after'} the analysis`;
 }

@@ -192,8 +192,9 @@ function openProfile(x){
   if(inst.imported){
     const gap = inst.gapH, far = Math.abs(gap) > 36;
     ui.profMeta.innerHTML = where + `${fmt.esc(inst.datasetName)} · ${far ? fmt.analysisTime(inst.time) : fmt.floatTime(inst.time)}<br>` +
-      `${far ? 'Compared with the nearest analysis, ' : 'Model: the analysis '}${fmt.dp(Math.abs(gap)/24, 1)} days ` +
-      `${gap >= 0 ? 'before' : 'after'} the profile<br>${sampling}`;
+      (dataMode==='real' && MODEL().monthly ? `Compared with the ${fmt.esc(MODEL().product)}`
+        : `${far ? 'Compared with the nearest analysis, ' : 'Model: the analysis '}${fmt.dp(Math.abs(gap)/24, 1)} days ` +
+          `${gap >= 0 ? 'before' : 'after'} the profile`) + `<br>${sampling}`;
   } else if(userData.type==='argo'){
     ui.profMeta.innerHTML = where + (inst.real
       ? `Cycle ${fmt.esc(inst.cycle)} · ${fmt.floatTime(inst.time)} · ${fmt.esc(modelGap(inst))}<br>`+
@@ -302,17 +303,22 @@ function renderTrack(){
     const F = facts().real, ri = (r, who)=>r ? `${fmt.esc(r.from)}→${fmt.esc(r.to)} kt (${who})` : '';
     const before = F.path.beforeIndex, after = F.path.afterIndex, heatB = F.path.heatBefore, heatA = F.path.heatAfter;
     const qb = heat(before), qa = heat(after);
+    const M = MODEL(), monthly = !!M.monthly;   // one monthly mean: the same field before and after the storm
     const pj = {usa:F.track.peakJtwc.kt, t:F.track.peakJtwc.time}, pi = {nd:F.track.peakImd.kt, t:F.track.peakImd.time};
     const last = F.track.landfall;
     ui.trackMeta.innerHTML =
       `First fix ${fmt.fixTime(F.track.firstFix)}; landfall ${fmt.fixTime(last.time)} near ${fmt.latLon1(last.lat, last.lon)}<br>`+
       `Peak ${pi.nd!=null ? `${fmt.esc(pi.nd)} kt (IMD, ${fmt.fixTime(pi.t)}) · ` : ''}${fmt.esc(pj.usa)} kt (JTWC, ${fmt.fixTime(pj.t)})<br>`+
       (F.track && F.track.ri24Jtwc ? `Fastest 24-hour intensification: ${[ri(F.track.ri24Imd,'IMD'), ri(F.track.ri24Jtwc,'JTWC')].filter(Boolean).join(', ')}<br>` : '')+
-      `<span class="accent">Heat under the path, landfall excluded: ${fmt.int(heatB)} kJ/cm² on ${fmt.dayMonth(META.times[before])}, `+
-      `${fmt.int(heatA)} on ${fmt.dayMonth(META.times[after])}</span><br>`+
-      `<span class="chart-key"><i class="lg lg-bar"></i>${fmt.dayMonth(META.times[before])} <i class="lg lg-outline"></i>${fmt.dayMonth(META.times[after])} `+
+      (monthly
+        ? `<span class="accent">Heat under the path, landfall excluded: ${fmt.int(heatB)} kJ/cm² in the ${fmt.esc(M.product)}. `+
+          `One monthly mean is the same before and after the storm, so it shows no cold wake: choose a daily model under Model.</span><br>`+
+          `<span class="chart-key"><i class="lg lg-bar"></i>${fmt.esc(M.product)} `
+        : `<span class="accent">Heat under the path, landfall excluded: ${fmt.int(heatB)} kJ/cm² on ${fmt.dayMonth(META.times[before])}, `+
+          `${fmt.int(heatA)} on ${fmt.dayMonth(META.times[after])}</span><br>`+
+          `<span class="chart-key"><i class="lg lg-bar"></i>${fmt.dayMonth(META.times[before])} <i class="lg lg-outline"></i>${fmt.dayMonth(META.times[after])} `)+
       `<i class="lg lg-obs"></i>wind, IMD <i class="lg lg-model"></i>JTWC</span>`;
-    series = {qb, qa, before, after};
+    series = {qb, qa, before, after, monthly};
     vMax = Math.max(TCHP_THRESHOLD*1.6, ...qb.map(r=>r.q), ...qa.map(r=>r.q))*1.08;
   } else {
     const qs = heat(state.time);
@@ -341,7 +347,7 @@ function renderTrack(){
     if(real){
       const bw = slot*0.4, qb = series.qb[k].q, qa = series.qa[k].q;
       ctx.fillStyle = heatCol(qb); ctx.fillRect(x+slot*0.1, y(qb), bw, y(0)-y(qb));
-      ctx.strokeStyle = th.text; ctx.lineWidth = 1; ctx.strokeRect(x+slot*0.5+0.5, y(qa)+0.5, bw-1, y(0)-y(qa)-1);
+      if(!series.monthly){ ctx.strokeStyle = th.text; ctx.lineWidth = 1; ctx.strokeRect(x+slot*0.5+0.5, y(qa)+0.5, bw-1, y(0)-y(qa)-1); }
     } else {
       const bw = slot*0.62, q = series.qs[k].q;
       ctx.fillStyle = heatCol(q); ctx.fillRect(x+(slot-bw)/2, y(q), bw, y(0)-y(q));
@@ -371,14 +377,16 @@ function renderTrack(){
   }
 
   const hot = q => q>=TCHP_THRESHOLD ? ' class="hot"' : '';
+  const one = real && series.monthly;   // a monthly mean: one heat column, not a before/after pair
   ui.trackTable.innerHTML = real
     ? `<caption>Winds in kt; heat potential in kJ/cm²</caption>`+
       `<tr><th>Time (UTC)</th><th>Position</th><th>IMD</th><th>JTWC</th>`+
-      `<th>${fmt.dayMonth(META.times[series.before])}</th><th>${fmt.dayMonth(META.times[series.after])}</th></tr>`+
+      (one ? `<th>${fmt.esc(MODEL().product)}</th></tr>`
+           : `<th>${fmt.dayMonth(META.times[series.before])}</th><th>${fmt.dayMonth(META.times[series.after])}</th></tr>`)+
       T.map((p,k)=>`<tr><td>${fmt.fixTime(p.t)}${p.landfall?', landfall':''}</td><td>${fmt.latLon1(p.lat, p.lon)}</td>`+
         `<td class="wind">${p.nd==null?'—':fmt.esc(p.nd)}</td><td class="wind">${p.usa==null?'—':fmt.esc(p.usa)}</td>`+
-        (p.landfall ? `<td>coast</td><td>coast</td></tr>` :
-        `<td${hot(series.qb[k].q)}>${series.qb[k].q.toFixed(0)}</td><td>${series.qa[k].q.toFixed(0)}</td></tr>`)).join('')
+        (p.landfall ? `<td>coast</td>${one ? '' : '<td>coast</td>'}</tr>` :
+        `<td${hot(series.qb[k].q)}>${series.qb[k].q.toFixed(0)}</td>${one ? '' : `<td>${series.qa[k].q.toFixed(0)}</td>`}</tr>`)).join('')
     : `<tr><th>Hour</th><th>Position</th><th>Heat potential</th><th>D26</th></tr>`+
       T.map((p,k)=>`<tr><td>+${p.h} h</td><td>${fmt.latLon1(p.lat, p.lon)}</td>`+
         `<td${hot(series.qs[k].q)}>${series.qs[k].q.toFixed(0)}</td>`+

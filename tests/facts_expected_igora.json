@@ -1187,7 +1187,7 @@
  "real.currents.eiccMaxNorth[0].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.currents.eiccMaxNorth[1].lat": {
   "how": "data-pipeline/facts_reference.py",
@@ -1197,7 +1197,7 @@
  "real.currents.eiccMaxNorth[1].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.currents.eiccMaxNorth[2].lat": {
   "how": "data-pipeline/facts_reference.py",
@@ -1207,7 +1207,7 @@
  "real.currents.eiccMaxNorth[2].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.currents.eiccMaxNorth[3].lat": {
   "how": "data-pipeline/facts_reference.py",
@@ -1217,7 +1217,7 @@
  "real.currents.eiccMaxNorth[3].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.currents.eiccMaxNorth[4].lat": {
   "how": "data-pipeline/facts_reference.py",
@@ -1227,7 +1227,7 @@
  "real.currents.eiccMaxNorth[4].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.currents.eiccMaxNorth[5].lat": {
   "how": "data-pipeline/facts_reference.py",
@@ -1237,7 +1237,7 @@
  "real.currents.eiccMaxNorth[5].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.currents.eiccMaxNorth[6].lat": {
   "how": "data-pipeline/facts_reference.py",
@@ -1247,7 +1247,7 @@
  "real.currents.eiccMaxNorth[6].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.currents.eiccMaxNorth[7].lat": {
   "how": "data-pipeline/facts_reference.py",
@@ -1257,7 +1257,7 @@
  "real.currents.eiccMaxNorth[7].v": {
   "how": "data-pipeline/facts_reference.py",
   "tol": 0.005,
-  "value": 0.517
+  "value": 0.564
  },
  "real.moorings[0].analyses": {
   "how": "data-pipeline/facts_reference.py",

@@ -129,12 +129,20 @@ def las_get(F, key):
 
 
 def to_t_points(a, xu, yu, xt, yt):
-    """A field on the U cells (corners of the T cells on IGORA's B grid) -> the T cells, linear in x then y."""
-    out = np.empty(a.shape[:-2] + (len(yt), len(xt)))
-    for idx in np.ndindex(a.shape[:-2]):
-        rows = np.array([np.interp(xt, xu, r, left=np.nan, right=np.nan) for r in a[idx]])
-        out[idx] = np.array([np.interp(yt, yu, c, left=np.nan, right=np.nan) for c in rows.T]).T
-    return out
+    """A field on the U cells (corners of the T cells on IGORA's B grid) -> the T cells, linear in x then y. Land
+    corners (NaN) stay out of the mean: a coastal cell takes the weighted mean of its water corners, so it keeps its
+    currents and with them its place in the model's water (the wet mask needs all four variables). A cell with no
+    water corner, or outside the U axes, stays NaN."""
+    def lin(f):
+        out = np.empty(f.shape[:-2] + (len(yt), len(xt)))
+        for idx in np.ndindex(f.shape[:-2]):
+            rows = np.array([np.interp(xt, xu, r, left=np.nan, right=np.nan) for r in f[idx]])
+            out[idx] = np.array([np.interp(yt, yu, c, left=np.nan, right=np.nan) for c in rows.T]).T
+        return out
+    ok = np.isfinite(a)
+    w = lin(ok.astype('f8'))                          # the share of the interpolation weight that falls on water
+    with np.errstate(invalid='ignore', divide='ignore'):
+        return np.where(w > 0, lin(np.where(ok, a, 0.0)) / w, np.nan)
 
 
 def build(F, log=print):

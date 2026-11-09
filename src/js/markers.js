@@ -50,7 +50,7 @@ function buildMarkers(){
     push(marks, kind + (hex === MISFIT_CLASSES[2].color ? '|dark' : '|light'), item);   // poor floats get a light outline
     markerItems.push(item);
     if(t ? t.stem !== false : kind !== 'glider')
-      push(stems, kind, [new THREE.Vector3(x,0.05,z), new THREE.Vector3(x, -(inst.real ? inst.maxDepth : 1000)*DEPTH_SCALE*state.exagg, z)]);
+      push(stems, kind, [new THREE.Vector3(x,0.05,z), new THREE.Vector3(x, -displayDepth(inst.real ? inst.maxDepth : 1000)*DEPTH_SCALE*state.exagg, z)]);
     if(t && t.track) push(tracks, kind + '|' + inst.id, item);
   });
   // the darkest misfit class gets a light outline and a size step, so it never reads as a hole

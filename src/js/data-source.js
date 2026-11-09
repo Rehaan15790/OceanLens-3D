@@ -12,18 +12,24 @@ function forecastDay(t){
   const d = Math.round((Date.parse(META.times[t].slice(0, 10) + 'T00:00Z') - CASE.issued)/864e5);
   return d < 0 ? ' (analysis)' : d === 0 ? ' (day of issue)' : ` (+${d} ${d===1 ? 'day' : 'days'})`;
 }
+// whole days since a forecast case was issued, by the viewer's clock (0 for any other case): a committed forecast
+// shown weeks later must say so (build_forecast.py makes a fresh one)
+function forecastAgeDays(now = Date.now()){
+  return CASE.forecast && Number.isFinite(CASE.issued) ? Math.max(0, Math.floor((now - CASE.issued)/864e5)) : 0;
+}
+const STALE_FORECAST_DAYS = 2;
 const SOURCES = {
   real: {
     temp: (lat, lon, depth, t)=>realAt(0, lat, lon, depth, t),
     sal:  (lat, lon, depth, t)=>realAt(1, lat, lon, depth, t),
     uv:   (lat, lon, depth, t)=>({u:realAt(2, lat, lon, depth, t), v:realAt(3, lat, lon, depth, t)}),
-    chl:  ()=>NaN,                      // both models are physics only: no chlorophyll
+    chl:  ()=>NaN,                      // the models are physics only: no chlorophyll
     instruments: t=>realProfiles.filter(p=>p.snap===t).concat(mooringsAt(t)),   // Argo floats, then RAMA moorings
     fixes: ()=>REAL_TRACK,
     hasGliders: false,
 
     // ---- copy table (ux edits the strings in 3.1b) ----
-    ctx: {badge:'Real data',
+    ctx: {get badge(){ const d = forecastAgeDays(); return d > STALE_FORECAST_DAYS ? `Forecast run ${d} days old` : 'Real data'; },
           text: t=>`${CASE.name} · ${MODEL().product} ${fmt.analysisTime(META.times[t])}${forecastDay(t)} · ${t+1} of ${NT}`},
     time: {now: t=>fmt.analysisTime(META.times[t]), tick: t=>fmt.dayMonth(META.times[t])},
     track: {get name(){ return CASE.name; }, badge:'IBTrACS v04r01', mapLabel:'Amphan (IBTrACS)',   // CASE: data-real.js, loaded later

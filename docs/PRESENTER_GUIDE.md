@@ -46,7 +46,7 @@ Double-click `OceanLens3D.html`. That one file holds the app, three.js, the Amph
 
 | Mode | What it shows | Labelled as |
 | --- | --- | --- |
-| Real data: Amphan 2020 | Two models, switched under **Model** (or `M`): 8 HYCOM GOFS 3.1 analyses (12:00 UTC, three days apart) and the Copernicus Marine GLORYS12V1 daily means of the same days; 206 QC'd Argo profiles from 70 floats, BGC-Argo chlorophyll (36 profiles, 13 floats) and oxygen (24 profiles, 9 floats), ETOPO1 relief, the IBTrACS track | "Real data" badge, real dates |
+| Real data: Amphan 2020 | Three models, switched under **Model** (or `M`): 8 HYCOM GOFS 3.1 analyses (12:00 UTC, three days apart), the Copernicus Marine GLORYS12V1 daily means of the same days and INCOIS IGORA's May 2020 monthly mean (the same on every day); 206 QC'd Argo profiles from 70 floats, BGC-Argo chlorophyll (36 profiles, 13 floats) and oxygen (24 profiles, 9 floats), ETOPO1 relief, the IBTrACS track | "Real data" badge, real dates |
 | Synthetic demo | Analytic fields with synthetic floats and gliders, including a float with a deliberate bad salinity sample | Floats SYN-F01…, gliders SYN-G1…, "demo days" not dates |
 
 **Optional server mode:** `python server/serve.py` serves the same app at `http://127.0.0.1:8080/`. A **Data source** dropdown then appears at the top of the left panel, listing the server's datasets. Only show this if a judge asks about deployment.
@@ -162,9 +162,9 @@ day of issue or +N days. Temperature, salinity, currents, heat potential, D26, s
 Four moored buoys of the RAMA array (NOAA PMEL, with INCOIS among its partners) are white squares in the real scene,
 under the **CTD, moorings and other** switch: 12°N 90°E and 15°N 90°E in the Bay of Bengal, 15°N 65°E and 8°N 67°E
 in the Arabian Sea. Click one: its daily mean on the analysis day is drawn over the model column, with bias and RMSE,
-like a float. A good one: **12°N 90°E on 19 May**, after Amphan passed. Its surface cooled 2.1 °C from 13 May and the
-top 60 m mixed to one temperature; HYCOM cools it 1.2 °C and GLORYS 1.0 °C, so both models show about half the cold
-wake there. RAMA data are sent out in real time, so models may assimilate them too.
+like a float. A good one: **12°N 90°E on 19 May**, after Amphan passed about 400 km to its west. Its surface cooled
+2.1 °C from 13 May and the top 60 m mixed to one temperature; HYCOM cools it 1.2 °C and GLORYS 1.0 °C, so both
+models show about half that cooling there. RAMA data are sent out in real time, so models may assimilate them too.
 
 ### Satellite SST and SST fronts (fisheries)
 
@@ -192,7 +192,7 @@ These are the numbers the app computes; the tour captions show them live.
 | 17–18 May | Rapid intensification: IMD 55 → 120 kt, JTWC 70 → 140 kt in 24 h | Track panel table |
 | 18 May | Peak: IMD 130 kt (Super Cyclonic Storm), JTWC 145 kt | Track panel |
 | 20 May, 10:18 UTC | Landfall near 21.7°N, 88.3°E (IMD 86 kt, JTWC 95 kt) | Track on the map |
-| 22 May analysis | Heat under the path down to about **52 kJ/cm²**; the surface along the track about **2.3 °C cooler** (31.1 → 28.9 °C) while D26 stayed near 75 m: a **cold wake** | Section along the track |
+| 22 May analysis | Heat under the path down to about **52 kJ/cm²**; the surface along the track about **2.3 °C cooler** (31.1 → 28.9 °C) while D26 stayed near 75 m: a **cold wake** (the Bay cooled about 1.4 °C away from the track too, so not all of it is Amphan's) | Section along the track |
 
 **Track details:** click the track, or use **Show Amphan's track details** in the TCHP view. The panel charts heat under each fix (before vs after) and IMD and JTWC winds, with a table of every six-hourly fix.
 
@@ -274,11 +274,11 @@ It also loads **CF NetCDF-3 or NetCDF-4 model files** with `--netcdf`, so other 
 
 | Input | Does |
 | --- | --- |
-| `1` – `5` | Temperature, salinity, current speed, cyclone heat potential, chlorophyll |
+| `1` – `7` | Temperature, salinity, current speed, cyclone heat potential, chlorophyll, satellite SST, SST fronts |
 | `U` `L` `D` `I` `O` | Surface, all depth levels, depth slice, depth of a value, isosurface (3D) |
 | `[` `]` | Depth slice up / down |
 | `Space` | Play / pause the analyses |
-| `M` | Switch the model: HYCOM or GLORYS (real data) |
+| `M` | Switch the model: HYCOM, GLORYS or IGORA (real data) |
 | `S` | Draw a section (drag across the sea) |
 | `T` | Release a surface drift (click the sea) |
 | `P` | Start / end the guided tour |
@@ -334,7 +334,7 @@ flowchart LR
   SRV["<b>server/serve.py</b><br/>REST /api/v1<br/>WMS 1.3.0, WCS 2.0.1<br/>OPeNDAP DAP2<br/>+ CF NetCDF-3/4 models"]
   CLI["<b>Other clients</b><br/>GIS tools via WMS<br/>netCDF-C via OPeNDAP<br/>scripts via REST"]
   FILES["<b>Your files</b><br/>CSV, NetCDF-3, NetCDF-4<br/>read in the browser,<br/>never uploaded"]
-  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>388 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
+  TESTS["<b>Tests (tools/check.py)</b><br/>facts_reference.py rechecks every number<br/>394 tests: pipeline, server and the page<br/>headless Chromium, GitHub Actions CI"]
   SRC --> PIPE --> SNAP --> BUILD --> APP
   SNAP --> SRV --> CLI
   FILES --> APP
@@ -355,7 +355,7 @@ For an elevator pitch or the opening of a longer slot. Start with the app open o
 >
 > This is Cyclone Amphan, May 2020. Before it, HYCOM puts about 85 kilojoules per square centimetre of heat under its path. *(Press M.)* GLORYS says 109: two good models, a quarter apart. Every float is compared with each model at the same place and time.
 >
-> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 388 automated tests check the rest.
+> It is one HTML file that opens offline, plus a server that publishes the same data over WMS, WCS and OPeNDAP, and a plugin API for new sensors. An independent script recomputes every number on screen, and 394 automated tests check the rest.
 
 ## A 3-minute walkthrough
 
@@ -368,8 +368,8 @@ The core of the 7-minute script below. Start in **Real data** mode, temperature,
 | 0:40 | `I`, click **D26** | "How deep the 26 °C water goes: the heat a cyclone can feed on." |
 | 1:00 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path in HYCOM, far above the 50 mark. IMD winds went from 55 to 120 kt in 24 h." |
 | 1:25 | `M`, then `M` again | "Copernicus GLORYS, the reanalysis this problem statement lists, read from its own NetCDF-4 files: about 109 under the same path. The models differ by a quarter; that spread is the uncertainty." |
-| 1:50 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler: the cold wake." |
-| 2:15 | `1`, close the section, **Compare the worst-fitting float** | "Argo solid, HYCOM dashed, matched in place and time, with bias and RMSE. Both models assimilate Argo, so this is a consistency check." |
+| 1:50 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler, more than the rest of the Bay: the cold wake." |
+| 2:15 | `1`, close the section, **Compare the worst-fitting float** | "Argo solid, HYCOM dashed, matched in place and time, with bias and RMSE. HYCOM and GLORYS assimilate Argo, so this is a consistency check." |
 | 2:40 | Point at **Add data**, then stop | "Your own Argo, glider or CTD files open here, in the browser, NetCDF-4 included. The same data is served over WMS, WCS and OPeNDAP, and new sensors plug in through one API." |
 
 ## A 7-minute demo script
@@ -387,7 +387,7 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 | 2:40 | `3`, `D` at 0 m | "Currents: colour is speed, streaks and arrows show direction. The coastal current runs north." |
 | 3:10 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path in HYCOM, far above the 50 mark. Rapid intensification followed: IMD 55 to 120 kt in 24 h." |
 | 3:40 | `M`, then `M` again | "The Copernicus GLORYS reanalysis, the product this problem statement lists, read from Copernicus Marine's own NetCDF-4 files: about 109 under the same path. Two good models, a quarter apart: that is the uncertainty a forecaster should see." |
-| 4:00 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler and the heat is down to about 52: the cold wake." |
+| 4:00 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler, more than the rest of the Bay, and the heat is down to about 52: the cold wake." |
 | 4:50 | `1`, close the section, **Compare the worst-fitting float**, then `M` | "Argo solid, HYCOM dashed, matched in place and time, with bias, RMSE and a QC check. *(M)* The same float against GLORYS. Both assimilate Argo, so this is a consistency check." |
 | 5:40 | **Add data** → `samples/bgc-argo-SD2902275_072.nc` | "A BGC-Argo file exactly as the Argo data centre serves it, NetCDF-4, read in the browser and never uploaded. Delayed-mode values only, QC applied; it opens against the model, with chlorophyll and oxygen." |
 | 6:20 | *(optional)* Synthetic demo, then back | "A synthetic ocean with known behaviour, including a float with a bad salinity sample that QC flags." |
@@ -397,11 +397,11 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 
 ## Likely judge questions
 
-Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 21 are Met, 15 Partly met and 3 Not met.
+Answer honestly; the limits are documented, and owning them earns trust. Of the problem statement's 39 requirement rows in `REQUIREMENTS.md`, 23 are Met, 15 Partly met and 1 Not met.
 
 | Question | Answer |
 | --- | --- |
-| Is this live or forecast data? | No. It is a hindcast of Amphan (May 2020) from 8 HYCOM analyses and the GLORYS daily means of the same days. Live ingestion is on the roadmap. |
+| Is this live or forecast data? | The built-in case is a hindcast of Amphan (May 2020): 8 HYCOM analyses, the GLORYS daily means of the same days and IGORA's May mean. A served forecast case adds the latest Copernicus Marine forecast (rebuilt daily by `build_forecast.py`; the header badge says when a run is old), but without floats or a storm track. A live observation feed is on the roadmap. |
 | Why three models, and which is right? | None is "right": they are estimates of the same ocean (IGORA, INCOIS's, is a monthly mean, so compare it for the month, not the storm). GLORYS fits the floats better here (temperature RMSE 0.23 °C against 0.30 °C below 300 m), but both assimilate Argo, so that is consistency, not skill. Their 85 against 109 kJ/cm² under Amphan's path is the kind of spread a forecaster needs to see. |
 | Is the model validated against Argo? | It is compared, not independently validated: HYCOM and GLORYS assimilate Argo (IGORA very likely too), so it is a consistency check. The RAMA moorings and drifting buoys are the more independent checks. Over all 206 profiles, temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to 1000 m (table below). |
 | Which browsers, and how fast? | Chrome and Edge run the automated tests; Firefox was checked by hand; Safari is untested. On a desktop GPU it is ready in under half a second and far above 60 fps; with software rendering, 18–35 fps (`docs/TESTING.md`). |
@@ -416,7 +416,7 @@ Answer honestly; the limits are documented, and owning them earns trust. Of the 
 | Search and rescue? | Press `T` and click the sea or an amber buoy: the drift tool moves an object with each model's surface currents for up to 72 h, forward or back in time, with a 90 % search ellipse for each day. Checked against 116 releases from 10 NOAA buoys: GLORYS a median 28 km off after 72 h, HYCOM 47 km (staying put: 46 km). Current only, no wind: a teaching aid, not SARAT. |
 | Fisheries? | The Fishing-zone indicator: satellite SST fronts (`7`, NOAA OISST via the INCOIS LAS) and Copernicus-GlobColour chlorophyll on each day, and the cells showing both, the two signs behind PFZ advisories. A teaching version with fixed thresholds, not INCOIS's method, and not checked against catches. |
 | Climate? | SST anomaly: the day against its 1991–2020 normal, and every May since 1982: the Bay of Bengal warms about 0.26 °C per decade, the Arabian Sea 0.35 °C. |
-| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 388 automated tests run in a headless browser and on GitHub Actions. |
+| How do you know the numbers are right? | An independent Python recomputation checks every number the app shows; 394 automated tests run in a headless browser and on GitHub Actions. |
 | How would it scale? | The data server speaks REST, WMS, WCS and OPeNDAP, with API keys and rate limits, and streams model files on the case's grid into the 3D view; the plugin API adds sensors and ML products. Production would add scheduled ingestion, user accounts and a pipeline not tied to one case. |
 | Where is the data from? | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1, Argo GDAC (via Ifremer ERDDAP), ETOPO1 and IBTrACS v04r01. Full citations are in About the data. |
 | Is it affiliated with INCOIS? | No. It is a student prototype, not endorsed by INCOIS or MoES. |

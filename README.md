@@ -47,10 +47,11 @@ It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, on a
   sources the problem statement lists (Copernicus Marine and the INCOIS LAS), switched with one click (or `M`). IGORA
   is the May 2020 monthly mean, exported from the INCOIS Live Access Server by the pipeline. The fields, comparisons
   and every number in the tour follow the model.
-- **Model vs observations:** click any Argo float to compare its profile with the model, matched in place and time,
-  with bias, RMSE and a density-inversion QC check. Four real RAMA moorings (NOAA PMEL) in the Bay of Bengal and the
-  Arabian Sea are in the scene too: at 12°N 90°E the surface cooled 2.1 °C as Amphan passed (13 to 19 May), against
-  1.2 °C in HYCOM and 1.0 °C in GLORYS.
+- **Model vs observations:** click any Argo float to compare its profile with the model at the same place (HYCOM at
+  the float's own time, GLORYS on its day, IGORA as the May mean), with bias, RMSE and a density-inversion QC check.
+  Four real RAMA moorings (NOAA PMEL) in the Bay of Bengal and the Arabian Sea are in the scene too: at 12°N 90°E,
+  about 400 km east of Amphan's track, the surface cooled 2.1 °C from 13 to 19 May, against 1.2 °C in HYCOM and
+  1.0 °C in GLORYS.
 - **Cyclone analysis:** heat potential under Amphan's path before and after the storm, with IMD and JTWC winds.
 - **Fishing-zone indicator:** the SST fronts map (NOAA OISST from the INCOIS LAS) and satellite chlorophyll
   (Copernicus-GlobColour, gap-free) on each day, and the cells that show both, the two signs behind potential fishing
@@ -90,26 +91,30 @@ The built-in case replays what a cyclone desk would have seen before and after A
 2. **How sure is that?** Press `M` for GLORYS: about 109 kJ/cm² under the same path. Both are far above the 50 mark,
    but they differ by a quarter, which is the spread a forecaster should keep in mind.
 3. **Does the model agree with the floats?** Click the floats near the track: each opens its profile against the
-   model column at the same place and time, with bias, RMSE and a QC check. Switch the model with the profile open
-   to compare the same float with both.
-4. **What did the storm leave behind?** A section along the track after landfall shows the cold wake: the surface
-   about 2.3 °C cooler in HYCOM (1.6 °C in GLORYS) and the heat potential down to about 52 kJ/cm² (60 in GLORYS).
+   model column at the same place, with bias, RMSE and a QC check. Switch the model with the profile open to compare
+   the same float with each.
+4. **What did the storm leave behind?** A section along the track after landfall shows the cold wake: from 13 to
+   22 May the surface became about 2.3 °C cooler in HYCOM (1.6 °C in GLORYS) and the heat potential fell to about
+   52 kJ/cm² (60 in GLORYS). The Bay also cooled away from the track (about 1.4 °C in HYCOM, 0.6 °C in GLORYS more
+   than 400 km from it), so not all of that change is Amphan's.
 5. **Where would a lost boat drift?** Press `T` and click an amber buoy: each model's drift, and where the buoy
    really went. From the buoy at 11.2°N, 62.0°E on 16 May, GLORYS ended 10 km from it after 72 h and HYCOM 67 km.
 6. **Brief the team.** Export the view as a PNG, or send the single HTML file, which opens offline.
 
-This is a hindcast: OceanLens has no forecasts or live data yet (see Limitations).
+The built-in case is a hindcast. A served forecast case adds the latest Copernicus Marine forecast, without floats or
+a storm track; there is no live observation feed (see Limitations).
 
 ## The data
 
 There are two data modes, switched in the header.
 
-- **Real data: Cyclone Amphan, May 2020 (a hindcast).** Two models on the same 8 days: eight HYCOM GOFS 3.1
-  analyses, and the Copernicus Marine GLORYS12V1 daily means centred on the same times, read straight from Copernicus
-  Marine's native NetCDF-4 files. With them, 206 quality-controlled Argo profiles from 70 floats. BGC-Argo floats add
+- **Real data: Cyclone Amphan, May 2020 (a hindcast).** Three models on the same 8 days: eight HYCOM GOFS 3.1
+  analyses; the Copernicus Marine GLORYS12V1 daily means centred on the same times, read straight from Copernicus
+  Marine's native NetCDF-4 files; and INCOIS's IGORA reanalysis from the INCOIS LAS, whose May 2020 monthly mean
+  stands for every day. With them, 206 quality-controlled Argo profiles from 70 floats. BGC-Argo floats add
   chlorophyll (36 profiles from 13 floats) and oxygen (24 profiles from 9). The scene also has ETOPO1 relief and the
-  IBTrACS track. Both models assimilate Argo, so the model–Argo comparison is a consistency check, not independent
-  validation. Over all 206 profiles the HYCOM temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to
+  IBTrACS track. HYCOM and GLORYS assimilate Argo (IGORA very likely too), so the model–Argo comparison is a
+  consistency check, not independent validation. Over all 206 profiles the HYCOM temperature RMSE is 1.07 °C in the top 100 m and 0.30 °C from 300 to
   1000 m (the table is in `docs/PRESENTER_GUIDE.md`).
 - **The models disagree, as models do:** under Amphan's future path on 13 May, HYCOM holds 85 kJ/cm² of cyclone heat
   potential and GLORYS 109. Below 300 m GLORYS is closer to the floats (RMSE 0.21–0.28 °C against 0.26–0.37 °C).

@@ -163,7 +163,7 @@ The ocean is drawn as a stack of flat coloured sheets, one per model level, insi
 
 ## Data layer
 
-The data is two JSON blocks built into the page: the main snapshot (HYCOM, the floats, the track and the relief, about 2.3 MB) and the GLORYS model fields (about 2 MB; `build.py` keeps only the model part of `data/amphan-2020-glorys.json`). The app never asks it directly; everything goes through one function, `getVal(variable, lat, lon, depth, time)`, so the real and synthetic oceans are interchangeable.
+The data is JSON blocks built into the page (`src/index.html` lists them): the main snapshot (HYCOM, the floats, the track and the relief, about 2.3 MB), the GLORYS model fields (about 2 MB) and IGORA's one monthly field (`build.py` keeps only the model part of `data/amphan-2020-glorys.json` and `data/amphan-2020-igora.json`), plus the extras (drift currents, buoys, satellite SST), the drift check, the satellite products and the RAMA moorings. The app never asks it directly; everything goes through one function, `getVal(variable, lat, lon, depth, time)`, so the real and synthetic oceans are interchangeable.
 
 ### The snapshot (`data/amphan-2020.json`)
 
@@ -345,10 +345,10 @@ The tests click and type in a real browser, exactly as a user would, against the
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| unit | 22 + 160 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for each of the three models; the satellite maps and the drift tool against their recomputations; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
-| server | 52 | REST, WMS, WCS, OPeNDAP answers and errors; server models, API keys, rate limits and reloads; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
-| smoke | 60 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, drifts from the sea and from buoys, satellite maps and products, moorings, timeline, the colour key, export |
-| extend | 21 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog, server models and the forecast case |
+| unit | 21 + 161 pipeline | Science functions in the real page; every on-screen number against the Python recomputation, for each of the three models; the satellite maps and the drift tool against their recomputations; the NetCDF-4 reader against a real GLORYS file and the Copernicus Zarr store; the NetCDF reader and writer; byte-identical snapshot rebuilds |
+| server | 53 | REST, WMS, WCS, OPeNDAP answers and errors; server models, API keys, rate limits and reloads; hostile requests (slow clients, oversized subsets, bad headers) get clean refusals |
+| smoke | 63 | The model switch by click and key; every variable × view by real mouse and keyboard in both data modes, sliders, sections, float clicks, drifts from the sea and from buoys, satellite maps and products, moorings, timeline, the colour key, export |
+| extend | 23 | The browser's NetCDF-4 reader against the pipeline's on every variable; plugins, every sample file imports with the right profile count, Argo NetCDF variants, the import dialog, server models and the forecast case |
 | tour | 8 | All nine steps in both modes; captions of 35 words or fewer under every model; a monthly mean claims no cold wake; timing races |
 | robust | 6 | No WebGL, a lost graphics context and recovery, no memory growth over 20 rebuilds |
 | security | 39 | Hostile file contents stay text, damaged files and crafted NetCDF-4 end with a message instead of hanging, the Content Security Policy is enforced and never violated |

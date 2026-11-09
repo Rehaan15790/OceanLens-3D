@@ -128,3 +128,13 @@ Served by NOAA AOML ERDDAP (drifter_hourly_qc) under Creative Commons Attributio
 extracted as NetCDF from the INCOIS Live Access Server (las.incois.gov.in). Huang, B. et al. (2021), Improvements of
 the Daily Optimum Interpolation Sea Surface Temperature (DOISST) Version 2.1, J. Climate 34, 2923–2939,
 doi:10.1175/JCLI-D-20-0166.1. A US government work in the public domain.
+
+### BoBBLE Seaglider samples (OceanGliders GDAC)
+
+`samples/glider-humpback504-2016-07-05.nc` and `samples/glider-marlin505-2016-07-06.csv` are near-real-time Seaglider
+data from BoBBLE (Bay of Bengal Boundary Layer Experiment, Ministry of Earth Sciences and the UK Natural Environment
+Research Council; Vinayachandran et al. 2018, Bull. Amer. Meteor. Soc. 99, 1569–1587, doi:10.1175/BAMS-D-16-0230.1),
+distributed by the OceanGliders GDAC (https://www.oceangliders.org) through Ifremer ERDDAP. The delayed-mode data set
+is Webber, B. et al. (2019), Ocean glider data from BoBBLE in July 2016, British Oceanographic Data Centre,
+doi:10.5285/996bf53d-5448-297a-e053-6c86abc0b996. The dataset licence asks users to cite the data and to contact the
+PI before commercial use. `samples/README.md` has the queries.

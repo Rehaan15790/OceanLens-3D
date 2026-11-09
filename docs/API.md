@@ -16,10 +16,15 @@ python server/serve.py --host 0.0.0.0 --cors '*' --public-url https://example.or
 | `--host`, `--port` | Interface and port. Default `127.0.0.1:8080` (this machine only). |
 | `--app FILE` | The single-file app served at `/`. Default `dist/OceanLens3D.html`, then `OceanLens3D.html`. |
 | `--data FILE ...` | Schema-1 snapshot JSON files. Default: the model snapshots in `data/` (files with model fields; the extras and the drift check are skipped). |
-| `--netcdf FILE ...` | CF NetCDF-3 model files on a rectilinear latitude/longitude grid, with optional depth and time axes. |
+| `--netcdf FILE ...` | CF NetCDF-3 or NetCDF-4 model files on a rectilinear latitude/longitude grid, with optional depth and time axes. |
+| `--engine native\|xarray` | How `--netcdf` files are read: the project's own readers (default) or xarray (`pip install xarray scipy h5netcdf`). |
 | `--cors ORIGIN` | Allow cross-origin requests from this origin (`'*'` for any). Repeatable. Off by default. |
 | `--public-url URL` | The base URL clients see, for capabilities documents behind a reverse proxy. |
 | `--quiet` | No request log. |
+| `--reload SECONDS` | Every SECONDS, load snapshot files that changed or appeared (a daily forecast). `0` (default): never. |
+| `--api-key KEY`, `--api-keys-file FILE` | Require a key on the data routes: `Authorization: Bearer <key>`, `X-API-Key`, or `key=` for WMS and OPeNDAP clients. Also `$OCEANLENS_API_KEYS`. |
+| `--rate-limit N` | At most N requests a minute per client (`0`: no limit). |
+| `--trust-forwarded` | Behind a reverse proxy: rate-limit by the last `X-Forwarded-For` address, which the proxy must set (`docs/DEPLOY.md`). |
 
 Examples below use `http://localhost:8080` and the dataset `amphan-2020`.
 

@@ -274,6 +274,20 @@ class ServerKeysTest(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
 
+    def test_rate_limit_behind_a_proxy(self):
+        """--trust-forwarded keys on the last X-Forwarded-For entry (the proxy's); without it the header is ignored."""
+        for trust in (True, False):
+            srv = serve.make_server('127.0.0.1', 0, [SNAP], app='', quiet=True, rate_limit=2, trust_forwarded=trust)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            try:
+                via = lambda fwd: self.get('/api/v1', {'X-Forwarded-For': fwd}, srv=srv)[0]
+                got = [via('10.0.0.1'), via('10.0.0.1'), via('10.0.0.2'), via('203.0.113.9, 10.0.0.1')]
+                # trusted: each client has its own bucket, and a client's own first entry cannot pick another one
+                self.assertEqual(got, [200, 200, 200, 429] if trust else [200, 200, 429, 429], f'trust_forwarded={trust}')
+            finally:
+                srv.shutdown()
+                srv.server_close()
+
     def test_token_bucket_refills(self):
         now = [0.0]
         r = serve.RateLimiter(60, clock=lambda: now[0])                 # one a second, bursts of 60

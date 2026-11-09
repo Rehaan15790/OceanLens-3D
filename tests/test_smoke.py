@@ -712,6 +712,42 @@ class RealMode(Controls, AppTestCase):
         self.b.key('Escape')
         self.assertNoProblems()
 
+    def test_single_sensor_mooring_shows_its_reading(self):
+        if not self.js("typeof MOORING_INSTS !== 'undefined' && MOORING_INSTS.length > 0"):
+            self.skipTest('this build has no mooring data')
+        r = self.js("""(()=>{ const i = MOORING_INSTS.find(m=>m.obs.T.filter(Number.isFinite).length===1);
+            if(!i) return null; __ol.actions.setTime(i.snap); __ol.actions.openProfile(i.userData);
+            return {id:i.id, plot:profilePlot}; })()""")
+        self.assertTrue(r, 'no single-sensor mooring profile in the data')
+        self.assertEqual(r['plot']['dots'], 1, f"{r['id']}: its one reading is not drawn")
+        self.js('__ol.actions.closePanels()')
+        self.assertNoProblems()
+
+    def test_section_lists_moorings_by_name(self):
+        if not self.js("typeof MOORING_INSTS !== 'undefined' && MOORING_INSTS.length > 0"):
+            self.skipTest('this build has no mooring data')
+        t = self.js("MOORING_INSTS.find(i=>i.meta.station==='15n90e').snap")
+        self.js(f"__ol.actions.setTime({t}); __ol.actions.showSectionPreset('bob15')")
+        foot = self.js("document.getElementById('sectionFoot').textContent")
+        self.assertIn('RAMA 15°N 90°E', foot)
+        self.assertIn('Mooring', foot)
+        self.assertNotIn('glider', foot.lower())
+        self.js('__ol.actions.clearSection()')
+        self.assertNoProblems()
+
+    def test_igora_monthly_mean_is_not_shown_as_a_day(self):
+        if 'igora' not in (self.js('__ol.models') or []):
+            self.skipTest('this build has no IGORA')
+        self.js("__ol.actions.setRealModel('igora'); __ol.actions.openPanel('track')")
+        meta = self.js("document.getElementById('trackMeta').textContent")
+        self.assertIn('no cold wake', meta)
+        heads = self.js("[...document.querySelectorAll('#trackTable th')].map(h=>h.textContent)")
+        self.assertEqual(heads[4:], ['IGORA May 2020 mean'], 'a monthly mean has no before/after pair of columns')
+        self.js('__ol.actions.openWorstFloat()')
+        self.assertIn('compared with the IGORA May 2020 mean', self.js("document.getElementById('profMeta').textContent"))
+        self.js('__ol.actions.closePanels(); __ol.actions.setRealModel(__ol.models[0])')
+        self.assertNoProblems()
+
 
 class SyntheticMode(Controls, AppTestCase):
     data_mode = 'synth'

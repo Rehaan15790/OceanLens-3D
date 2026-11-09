@@ -180,6 +180,26 @@ class ImportSamples(AppTestCase):
         self.assertNoProblems()
 
     @pending('import plumbing (architect import.js, science formats.js)', probe=IMPORT)
+    def test_deep_imported_profile_fits_its_chart(self):
+        """A GDAC float to about 2000 dbar: the chart spans its depth and the model column stops at 1000 m."""
+        path = REPO / 'samples' / 'argo-5907328_prof.nc'
+        b64 = base64.b64encode(path.read_bytes()).decode()
+        r = self.js(f"""(async()=>{{ const bin=atob('{b64}'), u8=new Uint8Array(bin.length);
+            for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+            const p = await OceanLens.readData({json.dumps(path.name)}, u8.buffer);
+            const r = OceanLens.importParsed(p, {{}});
+            __ol.actions.setShowAllImported(true);
+            const inst = instrumentsNow().filter(i=>i.imported).sort((a,b)=>b.maxDepth-a.maxDepth)[0];
+            __ol.actions.openProfile(inst.userData);
+            return {{id:r.id, deepest:inst.maxDepth, plot:profilePlot}}; }})()""", await_promise=True)
+        self.assertGreater(r['deepest'], 1500, 'the sample no longer reaches below 1500 m')
+        self.assertGreaterEqual(r['plot']['maxDepth'], min(r['deepest'], 2000), 'the profile runs off its chart')
+        self.assertEqual(r['plot']['modelTop'], 1000)
+        self.js('__ol.actions.closePanels()')
+        self.js(f"OceanLens.removeDataset({json.dumps(r['id'])})")
+        self.assertNoProblems()
+
+    @pending('import plumbing (architect import.js, science formats.js)', probe=IMPORT)
     def test_argo_netcdf_in_cdf2_and_cdf5(self):
         """netcdf3.js on the 64-bit-offset and 64-bit-data variants, through the Argo profile mapping."""
         import numpy as np
@@ -603,6 +623,24 @@ class LogScaleAndIsosurface(AppTestCase):
         self.js("__ol.actions.setMode('surface')")
         self.assertNoProblems()
 
+    def test_isosurface_3d_follows_the_model_switch(self):
+        if len(self.js('__ol.models') or []) < 2:
+            self.skipTest('this build has one model')
+        mesh = """(()=>{ const a = iso3dMesh.geometry.attributes.position.array; let s = 0;
+            for(let i=0;i<a.length;i++) s = (s*31 + Math.round(a[i]*1e3))|0; return [a.length, s]; })()"""
+        self.js("__ol.actions.setVariable('temp'); __ol.actions.setMode('iso3d'); __ol.actions.setIso(20)")
+        self.b.pump(0.3)
+        first = self.js(mesh)
+        other = [m for m in self.js('__ol.models') if m != self.js('__ol.realModel')][0]
+        self.js(f"__ol.actions.setRealModel('{other}')")
+        self.b.pump(0.3)
+        shown = self.js(mesh)
+        self.js('iso3dKey = null; updateIso3d()')        # what a fresh build gives for the model now on screen
+        self.assertEqual(shown, self.js(mesh), 'the 3D isosurface still shows the previous model')
+        self.assertNotEqual(shown, first, 'both models gave the same surface, so this test proves nothing')
+        self.js("__ol.actions.setRealModel(__ol.models[0]); __ol.actions.setMode('surface')")
+        self.assertNoProblems()
+
 
 class ColourAndLayerControls(AppTestCase):
     """The colour bar editor (palette, min/max, linear/log), the variable selector, layer opacity and vertical
@@ -765,6 +803,8 @@ class ServerForecastCase(AppTestCase):
         txt = lambda sel: self.js(f"document.querySelector({json.dumps(sel)}).textContent")
         shown = lambda sel: self.js(f"(()=>{{ const e = document.querySelector({json.dumps(sel)}); return !!e && !e.hidden && e.getClientRects().length > 0; }})()")
         self.assertEqual(txt('#dataToggle button[data-mode="real"]'), 'Real data: forecast 4 Nov')
+        self.assertEqual(self.js("forecastAgeDays(Date.parse('2026-11-05T12:00Z'))"), 1)
+        self.assertRegex(txt('#ctxBadge'), r'^Forecast run \d+ days old$')   # issued 4 Nov: old on any later test run
         self.js('__ol.actions.setTime(3)')
         ctx = txt('#ctxText')
         self.assertIn('Ocean forecast · daily mean', ctx)
@@ -784,6 +824,7 @@ class ServerForecastCase(AppTestCase):
         # the forecast's currents carry a drift
         self.assertTrue(self.js('__ol.actions.startDrift(15, 88)'))
         self.assertEqual(self.js('__ol.drift.run.path.at(-1).h'), 72)
+        self.assertIn('1 day apart', self.js("document.getElementById('driftFoot').textContent"))   # daily, not Amphan's 3 days
         self.assertNoProblems()
 
 

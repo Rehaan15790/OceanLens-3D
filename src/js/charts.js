@@ -179,15 +179,14 @@ function drawSectionPanel(){
   if(d26.length) meta.push(`D26 along the section: ${Math.round(Math.min(...d26))}–${Math.round(Math.max(...d26))} m`);
   if(landKm > 5) meta.push(`Crosses ${Math.round(landKm)} km of land.`);
   document.getElementById('sectionMeta').innerHTML = meta.join('<br>');
-  const argoNear = near.filter(o=>o.inst.kind==='argo'), glNear = near.length-argoNear.length;
-  const real = dataMode==='real';
+  // every nearby profile is a button; any kind but Argo (moorings, gliders, imports) is named, as its glyph is a circle
   document.getElementById('sectionFoot').innerHTML =
     (near.length
-      ? `<h3 class="grp-label">${real ? 'Argo profiles' : 'Profiles'} within 40 km</h3>` +
-        argoNear.map(o=>`<button type="button" class="misfit" data-k="${near.indexOf(o)}">${fmt.esc(o.inst.id)}` +
-          `<span>${Math.round(o.f*km)} km along</span></button>`).join('') +
-        (glNear ? `<p>${glNear} glider profile${glNear>1 ? 's' : ''} (circles on the plot).</p>` : '')
-      : `<p>${real ? 'No Argo profiles' : 'No floats or gliders'} within 40 km of this line.</p>`) +
+      ? `<h3 class="grp-label">Profiles within 40 km</h3>` +
+        near.map((o,k)=>`<button type="button" class="misfit" data-k="${k}">${fmt.esc(o.inst.id)}` +
+          `<span>${o.inst.kind==='argo' ? '' : fmt.esc(instrumentLabel(o.inst.kind)) + ' · '}${Math.round(o.f*km)} km along</span></button>`).join('') +
+        (near.some(o=>o.inst.kind!=='argo') ? `<p>Circles on the plot mark the profiles that are not Argo floats.</p>` : '')
+      : `<p>No observed profiles within 40 km of this line.</p>`) +
     `<p>The depth axis is stretched so the upper ocean is readable. The 3D volume is dimmed while a section is open.</p>`;
   document.querySelectorAll('#sectionFoot .misfit').forEach(b=>{
     b.addEventListener('click', ()=>openProfile(near[+b.dataset.k].inst.userData));
@@ -216,6 +215,8 @@ function misfitWord(tab, rmse){
   const b = MISFIT_BANDS[tab];
   return b ? (rmse < b[0] ? 'good' : rmse <= b[1] ? 'fair' : 'poor') : '';
 }
+// what the profile chart last drew: its depth span, where the model stops and its lone-level dots (the tests read it)
+let profilePlot = null;
 // the profile panel chart for profileState.inst and .tab (observed solid, model dashed), its legend and the
 // bias / RMSE line
 function drawProfileChart(){
@@ -231,13 +232,16 @@ function drawProfileChart(){
   const hasObs = obs.some(v=>Number.isFinite(v));
   const real = dataMode==='real', modelName = real ? MODEL().short : 'The model';
 
-  // the chart spans the observed profile (model levels stop at 1000 m): 1000 m for Argo, less for shallow casts
-  const maxDepth = inst.kind==='argo' || !(inst.maxDepth > 0) ? 1000 : Math.min(1000, Math.ceil(inst.maxDepth/100)*100);
-  const modelZ = DEPTHS.filter(z=>z<maxDepth).concat([maxDepth]);
+  // the chart spans the observed profile: 1000 m for Argo (the models stop there), less for shallow casts, and for an
+  // imported profile its own depth up to 2000 m (GDAC floats reach 2000 dbar); the model column stops at its last level
+  const own = inst.maxDepth > 0 ? Math.ceil(inst.maxDepth/100)*100 : 1000;
+  const maxDepth = Math.min(inst.imported ? 2000 : 1000, inst.kind==='argo' ? Math.max(1000, own) : own);
+  const modelTop = Math.min(maxDepth, DEPTHS[DEPTHS.length-1]);
+  const modelZ = DEPTHS.filter(z=>z<modelTop).concat([modelTop]);
   const modelV = modelZ.map(z=>modelAsMeasured(tab, lat, lon, z, t));   // potential temperature shown as in-situ
   const hasModel = modelV.every(v=>v!==null);   // false for chlorophyll in real mode (no model has it)
   const vals = hasModel ? modelV.slice() : [];
-  if(hasObs) obs.forEach(v=>{ if(Number.isFinite(v)) vals.push(v); });
+  if(hasObs) obs.forEach((v,k)=>{ if(Number.isFinite(v) && p.z[k] <= maxDepth) vals.push(v); });
   if(!vals.length) vals.push(0, 1);
   let vMin = Math.min(...vals), vMax = Math.max(...vals);
   const padV = (vMax-vMin)*0.06 || 0.1; vMin -= padV; vMax += padV;
@@ -249,7 +253,7 @@ function drawProfileChart(){
   const xOf = v => pad.l + (v-vMin)/(vMax-vMin)*plotW;
 
   ctx.lineWidth = 1; ctx.font = CHART_FONT;
-  const ticks = [0,25,50,100,200,300,500,750,1000].filter(z=>z<=maxDepth);
+  const ticks = [0,25,50,100,200,300,500,750,1000,1500].filter(z=>z<=maxDepth);
   if(ticks[ticks.length-1]!==maxDepth) ticks.push(maxDepth);
   ctx.textAlign = 'right';
   ticks.forEach(z=>{
@@ -277,23 +281,29 @@ function drawProfileChart(){
       if(!DEPTHS.includes(z)) return;
       ctx.beginPath(); ctx.arc(xOf(modelV[i]), yOf(z), 2.2, 0, 7); ctx.stroke();
     });
+    if(maxDepth > modelTop){
+      ctx.fillStyle = th.text2; ctx.textAlign = 'right';
+      ctx.fillText(`${modelName} stops at ${modelTop} m`, w-pad.r-4, yOf(modelTop)-5);
+    }
   }
 
+  let dots = 0;
   if(hasObs){
-    // observations: solid, broken at missing levels; flagged levels are ringed and skipped
-    ctx.strokeStyle = th.obs; ctx.lineWidth = 2;
-    ctx.beginPath();
-    let pen = false;
+    // observations: solid, broken at missing levels and below the chart; flagged levels are ringed and skipped.
+    // A level with no neighbour to join (a single-sensor mooring) gets a dot, or it would not show at all.
+    ctx.strokeStyle = th.obs; ctx.fillStyle = th.obs; ctx.lineWidth = 2;
+    const runs = [[]];
     p.z.forEach((z,k)=>{
-      if(!Number.isFinite(obs[k])){ pen = false; return; }
-      if(p.flag[k]) return;
-      const x = xOf(obs[k]), y = yOf(z);
-      if(pen) ctx.lineTo(x,y); else { ctx.moveTo(x,y); pen = true; }
+      if(!Number.isFinite(obs[k]) || z > maxDepth){ if(runs[runs.length-1].length) runs.push([]); return; }
+      if(!p.flag[k]) runs[runs.length-1].push([xOf(obs[k]), yOf(z)]);
     });
+    ctx.beginPath();
+    runs.forEach(r=>r.forEach(([x,y],i)=>{ if(i) ctx.lineTo(x,y); else ctx.moveTo(x,y); }));
     ctx.stroke();
+    runs.filter(r=>r.length===1).forEach(([[x,y]])=>{ ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); dots++; });
     ctx.strokeStyle = th.flag; ctx.lineWidth = 1.5;
     p.z.forEach((z,k)=>{
-      if(!p.flag[k] || !Number.isFinite(obs[k])) return;
+      if(!p.flag[k] || !Number.isFinite(obs[k]) || z > maxDepth) return;
       ctx.beginPath(); ctx.arc(xOf(obs[k]), yOf(z), 4.5, 0, 7); ctx.stroke();
     });
     if(!hasModel){ ctx.fillStyle = th.text2; ctx.textAlign = 'right'; ctx.fillText(`${modelName} has no ${PROFILE_NAMES[tab]}.`, w-pad.r-4, pad.t+plotH-8); }
@@ -302,6 +312,8 @@ function drawProfileChart(){
     ctx.fillText(`No ${PROFILE_NAMES[tab]} in this profile.`, pad.l+plotW/2, pad.t+plotH*0.5);
     if(!hasModel) ctx.fillText(`${modelName} has no ${PROFILE_NAMES[tab]}.`, pad.l+plotW/2, pad.t+plotH*0.5+16);
   }
+
+  profilePlot = {maxDepth, modelTop, dots};
 
   // the depth the value cards show
   const dSel = DEPTHS[profileState.depthIdx];
@@ -463,6 +475,7 @@ function renderKey(spec){
 function renderContext(){
   const ctx = dataSource().ctx;
   document.getElementById('contextLine').classList.toggle('synth', dataMode!=='real');
+  document.getElementById('contextLine').classList.toggle('stale', dataMode==='real' && forecastAgeDays() > STALE_FORECAST_DAYS);
   document.getElementById('ctxBadge').textContent = ctx.badge;
   document.getElementById('ctxText').textContent = ctx.text(state.time);
 }

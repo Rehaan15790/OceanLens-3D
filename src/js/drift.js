@@ -35,7 +35,8 @@ function driftCurrents(id){
   const m = REAL_MODELS.find(x=>x.id===id);
   if(!m.decoded) m.decoded = decodeModel(m.data());
   const R = id===realModel ? REAL : m.decoded;
-  return {clock:META.times.map(t=>Date.parse(t)), every:72,
+  const clock = META.times.map(t=>Date.parse(t));
+  return {clock, every:clock.length > 1 ? (clock[1]-clock[0])/3.6e6 : 72,   // Amphan's analyses 72 h apart, a forecast's days 24
           uv:(la, lo, d, t)=>({u:realAtIn(R, 2, la, lo, d, t), v:realAtIn(R, 3, la, lo, d, t)})};
 }
 // the drift clock of the active model (the tests use it)
@@ -412,11 +413,11 @@ function renderDriftPanel(){
     `<table class="val-table"><caption>The ${DRIFT.n} spread drifts</caption>`+
     `<tr><th>${back ? 'Before' : 'After'}</th><th>Line from ${back ? 'find' : 'release'}</th><th>90 % area</th><th>Ashore</th>`+
     `${bp ? '<th>Buoy: off the line, in the ellipse?</th>' : ''}</tr>${rows}</table>`;
-  const every = drift.cur.every, days = Math.round(every/24);
+  const every = drift.cur.every, days = Math.round(every/24), apart = `${days} ${days===1 ? 'day' : 'days'} apart`;
   const curText = M ? (M.monthly ? `${fmt.esc(M.short)} surface currents from its ${fmt.esc(M.products)}, the same every day`
                      : `${fmt.esc(M.short)} surface currents ${drift.cur.surf ? (every===24 ? 'as daily means' : `every ${every} hours`)
-                                                           : `at its ${fmt.esc(M.products)}, ${days} days apart`}`)
-                    : `The demo’s made-up currents, ${days} days apart`;
+                                                           : `at its ${fmt.esc(M.products)}, ${apart}`}`)
+                    : `The demo’s made-up currents, ${apart}`;
   const timeText = M && M.monthly ? '' : ', linear in time between them';
   const kText = mine ? `K = ${drift.K} m²/s, the tested value at which the share of real buoys inside the 90 % ellipse came closest to 90 %`
                      : `K = ${drift.K} m²/s, an assumed value`;

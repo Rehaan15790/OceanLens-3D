@@ -272,7 +272,8 @@ asks the INCOIS Live Access Server (`las.incois.gov.in`) for IGORA, the INCOIS G
 extract per variable (temperature, salinity, u, v) over the map, May 2020 monthly mean, 0–1250 m, through the LAS
 product server's `Data_Extract_netCDF` operation (the request is a LAS XML document; the server answers with a
 redirect to its output file, which is then fetched over HTTPS). The currents sit on IGORA's U cells and are moved to
-its T cells; then `model_from_dataset` grids everything as for the other models. The snapshot copies the GLORYS
+its T cells, each the mean of its water corners (land corners left out, so coastal cells keep their temperature
+and salinity); then `model_from_dataset` grids everything as for the other models. The snapshot copies the GLORYS
 snapshot's floats, track and relief, and repeats the monthly mean at the 8 analysis times; `build.py` embeds that one
 field once (`meta.timesStored`). Four extracts, 26 seconds.
 

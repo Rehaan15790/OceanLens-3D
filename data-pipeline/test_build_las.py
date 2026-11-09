@@ -40,8 +40,16 @@ class Grid(unittest.TestCase):
         out = L.to_t_points(a, xu, yu, xt, yt)
         np.testing.assert_allclose(out[0, 0], 0.1 * xt[None, :] + 0.2 * yt[:, None])
         a2 = a.copy()
-        a2[0, 0, 0, 0] = np.nan                                           # land at a corner stays out of its cells
+        a2[0, 0, 0, 0] = np.nan                       # land at a corner stays out of its cell's mean, not out of the map
+        moved, plain = L.to_t_points(a2, xu, yu, xt, yt), L.to_t_points(a, xu, yu, xt, yt)
+        self.assertAlmostEqual(moved[0, 0, 0, 0], np.mean([a[0, 0, 0, 1], a[0, 0, 1, 0], a[0, 0, 1, 1]]),
+                               msg='a coastal cell lost its currents, so the wet mask drops it')
+        away = np.ones(moved.shape, bool)
+        away[0, 0, 0, 0] = False
+        np.testing.assert_allclose(moved[away], plain[away])            # cells without that corner are unchanged
+        a2[0, 0, :2, :2] = np.nan                                         # all four corners on land: no water to average
         self.assertTrue(np.isnan(L.to_t_points(a2, xu, yu, xt, yt)[0, 0, 0, 0]))
+        self.assertTrue(np.isnan(L.to_t_points(a, xu, yu, np.array([79.0]), yt)).all())   # off the U axes
 
 
 class Committed(unittest.TestCase):
