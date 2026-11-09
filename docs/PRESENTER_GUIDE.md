@@ -367,7 +367,7 @@ The core of the 7-minute script below. Start in **Real data** mode, temperature,
 | 0:20 | Drag to orbit | "Arabian Sea and Bay of Bengal, surface to 1000 m." |
 | 0:40 | `I`, click **D26** | "How deep the 26 °C water goes: the heat a cyclone can feed on." |
 | 1:00 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path in HYCOM, far above the 50 mark. IMD winds went from 55 to 120 kt in 24 h." |
-| 1:25 | `M`, then `M` again | "Copernicus GLORYS, the reanalysis this problem statement lists, read from its own NetCDF-4 files: about 109 under the same path. The models differ by a quarter; that spread is the uncertainty." |
+| 1:25 | `M`, then `M` `M` (past IGORA, back to HYCOM) | "Copernicus GLORYS, the reanalysis this problem statement lists, read from its own NetCDF-4 files: about 109 under the same path. The models differ by a quarter; that spread is the uncertainty." |
 | 1:50 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler, more than the rest of the Bay: the cold wake." |
 | 2:15 | `1`, close the section, **Compare the worst-fitting float** | "Argo solid, HYCOM dashed, matched in place and time, with bias and RMSE. HYCOM and GLORYS assimilate Argo, so this is a consistency check." |
 | 2:40 | Point at **Add data**, then stop | "Your own Argo, glider or CTD files open here, in the browser, NetCDF-4 included. The same data is served over WMS, WCS and OPeNDAP, and new sensors plug in through one API." |
@@ -386,7 +386,7 @@ Start in **Real data** mode, temperature, Surface view, at the 4 May analysis. T
 | 2:20 | `2`, `U` | "Salinity: the Bay is much fresher than the Arabian Sea, from the rivers." |
 | 2:40 | `3`, `D` at 0 m | "Currents: colour is speed, streaks and arrows show direction. The coastal current runs north." |
 | 3:10 | `4`, timeline to 13 May, click the track | "Heat potential before Amphan: about 85 kJ/cm² under its path in HYCOM, far above the 50 mark. Rapid intensification followed: IMD 55 to 120 kt in 24 h." |
-| 3:40 | `M`, then `M` again | "The Copernicus GLORYS reanalysis, the product this problem statement lists, read from Copernicus Marine's own NetCDF-4 files: about 109 under the same path. Two good models, a quarter apart: that is the uncertainty a forecaster should see." |
+| 3:40 | `M`, then `M` `M` (past IGORA, back to HYCOM) | "The Copernicus GLORYS reanalysis, the product this problem statement lists, read from Copernicus Marine's own NetCDF-4 files: about 109 under the same path. Two good models, a quarter apart: that is the uncertainty a forecaster should see." |
 | 4:00 | Timeline to 22 May, **Section → Along Amphan's track** | "After landfall the surface along the track is about 2.3 °C cooler, more than the rest of the Bay, and the heat is down to about 52: the cold wake." |
 | 4:50 | `1`, close the section, **Compare the worst-fitting float**, then `M` | "Argo solid, HYCOM dashed, matched in place and time, with bias, RMSE and a QC check. *(M)* The same float against GLORYS. Both assimilate Argo, so this is a consistency check." |
 | 5:40 | **Add data** → `samples/bgc-argo-SD2902275_072.nc` | "A BGC-Argo file exactly as the Argo data centre serves it, NetCDF-4, read in the browser and never uploaded. Delayed-mode values only, QC applied; it opens against the model, with chlorophyll and oxygen." |
