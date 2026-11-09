@@ -373,6 +373,10 @@ class ServerTest(unittest.TestCase):
         self.assertIn('snapshot', a['links'])
         self.assertEqual(d['cf-model']['source'], 'netcdf')
         self.assertNotIn('snapshot', d['cf-model']['links'])
+        self.assertNotIn('model', a)                      # HYCOM's snapshot names no model
+        g = serve.load_snapshot(REPO / 'data' / 'amphan-2020-glorys.json')
+        self.assertEqual(g.summary()['model'], 'GLORYS')  # tells the snapshots of one case apart in the page's list
+        self.assertEqual(g.info['temp']['standard_name'], 'sea_water_potential_temperature')   # GLORYS gives theta
 
     def test_meta(self):
         m = self.json('/api/v1/datasets/amphan-2020/meta')
@@ -508,7 +512,7 @@ class ServerTest(unittest.TestCase):
         root = ET.fromstring(b)
         self.assertEqual(root.get('version'), '1.3.0')
         crs = {e.text for e in root.iterfind('.//wms:Capability/wms:Layer/wms:CRS', NS)}
-        self.assertTrue({'CRS:84', 'EPSG:4326'} <= crs)
+        self.assertTrue({'CRS:84', 'EPSG:4326', 'EPSG:3857'} <= crs)
         layer = next(l for l in root.iterfind('.//wms:Layer', NS) if l.findtext('wms:Name', None, NS) == 'amphan-2020.temp')
         dims = {d.get('name'): d.text.split(',') for d in layer.iterfind('wms:Dimension', NS)}
         self.assertEqual(len(dims['time']), len(self.meta['times']))
@@ -542,7 +546,15 @@ class ServerTest(unittest.TestCase):
         s, h, b = self.get(f'/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=amphan-2020.temp&STYLES=&CRS=EPSG:4326'
                            f'&BBOX={lat - .015},{lon - .015},{lat + .015},{lon + .015}&WIDTH=3&HEIGHT=3&FORMAT=image/png'
                            f'&TIME=2020-05-13T12:00:00Z')
-        self.assertTrue((read_png(b)[1, 1] == self.getmap('&TIME=2020-05-13T12:00:00Z', lon, lat)[1, 1]).all())
+        same = self.getmap('&TIME=2020-05-13T12:00:00Z', lon, lat)[1, 1]
+        self.assertTrue((read_png(b)[1, 1] == same).all())
+        # EPSG:3857 (web Mercator, what Leaflet and OpenLayers ask for) takes BBOX in metres
+        x, y = np.radians(lon) * 6378137, np.log(np.tan(np.pi / 4 + np.radians(lat) / 2)) * 6378137
+        s, h, b = self.get(f'/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=amphan-2020.temp&STYLES=&CRS=EPSG:3857'
+                           f'&BBOX={x - 1500},{y - 1500},{x + 1500},{y + 1500}&WIDTH=3&HEIGHT=3&FORMAT=image/png'
+                           f'&TIME=2020-05-13T12:00:00Z')
+        self.assertEqual(s, 200, b[:300])
+        self.assertTrue((read_png(b)[1, 1] == same).all())
 
     def test_wms_land_transparent(self):
         lon, lat = self.lonlat(*self.land)
@@ -569,7 +581,7 @@ class ServerTest(unittest.TestCase):
         self.assertEqual([r['time'] for r in json.loads(b)['features']], ['2020-05-16T12:00:00Z', '2020-05-17T12:00:00Z'])
 
     def test_wms_exceptions(self):
-        for query, code in [('LAYERS=nope.temp', 'LayerNotDefined'), ('LAYERS=amphan-2020.temp&CRS=EPSG:3857', 'InvalidCRS'),
+        for query, code in [('LAYERS=nope.temp', 'LayerNotDefined'), ('LAYERS=amphan-2020.temp&CRS=EPSG:32643', 'InvalidCRS'),
                             ('LAYERS=amphan-2020.temp&STYLES=rainbow', 'StyleNotDefined'),
                             ('LAYERS=amphan-2020.temp&FORMAT=image/gif', 'InvalidFormat')]:
             base = 'SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&BBOX=61,6,92,22&WIDTH=10&HEIGHT=10&FORMAT=image/png&CRS=CRS:84'

@@ -32,7 +32,8 @@ Examples below use `http://localhost:8080` and the dataset `amphan-2020`.
 
 - **Dataset ids** come from file names (`data/amphan-2020.json` is `amphan-2020`). A **layer** or **coverage** is
   `<dataset>.<variable>`, for example `amphan-2020.temp`, and the same name works in WMS and WCS.
-- **Variables**: `temp` (sea_water_temperature, degC), `sal` (sea_water_salinity, 1e-3, i.e. PSU), `u` and `v`
+- **Variables**: `temp` (sea_water_temperature, or sea_water_potential_temperature for GLORYS, IGORA and the
+  forecast, which give potential temperature; degC), `sal` (sea_water_salinity, 1e-3, i.e. PSU), `u` and `v`
   (eastward/northward_sea_water_velocity, m s-1) and `speed` (derived from u and v). NetCDF files keep their own
   variables; CF standard names map onto these keys where they match (e.g. `sea_water_potential_temperature` is `temp`).
 - **Time**: ISO 8601 UTC (`2020-05-16T12:00Z`), or an index into the dataset's times. The nearest time is used if it
@@ -64,7 +65,7 @@ Examples below use `http://localhost:8080` and the dataset `amphan-2020`.
 
 | Request | Returns |
 |---|---|
-| `GET /api/v1/datasets` | `{"datasets": [{id, title, source, default, times, depths, bbox, profiles, variables, links}]}`. `default` marks the dataset embedded in the page. |
+| `GET /api/v1/datasets` | `{"datasets": [{id, title, source, default, times, depths, bbox, profiles, variables, links}]}`. `default` marks the dataset embedded in the page. A snapshot that names its model also has `model` (`GLORYS`, `IGORA`, `Forecast`); the page uses it to tell the snapshots of one case apart. |
 | `GET /api/v1/datasets/{id}/meta` | The summary plus the grid (`lat`, `lon`), each variable's data range, and the dataset's sources, citations and provenance. |
 | `GET /api/v1/datasets/{id}/snapshot` | The schema-1 snapshot JSON, byte for byte (snapshot datasets only). |
 | `GET /api/v1/datasets/{id}/field?var=&time=&depth=` | One horizontal field: `{var, units, time, depth, lat, lon, values[lat][lon]}`, south to north. |
@@ -85,7 +86,7 @@ curl "http://localhost:8080/api/v1/datasets/amphan-2020/profiles?bbox=80,10,92,2
 
 ## OGC WMS 1.3.0 (`/wms`, or `/ows?SERVICE=WMS`)
 
-- **GetCapabilities** lists one layer per dataset variable, with `CRS:84` and `EPSG:4326`, a `time` dimension (every
+- **GetCapabilities** lists one layer per dataset variable, with `CRS:84`, `EPSG:4326` and `EPSG:3857`, a `time` dimension (every
   analysis time) and an `elevation` dimension (every model level), and one style per app palette.
 - **GetMap** draws a PNG (RGBA, zlib) with the app's palettes. Land and cells without data are transparent with
   `TRANSPARENT=TRUE`, else `BGCOLOR` (default white). One layer per request; up to 2048 × 2048 pixels.
@@ -93,6 +94,7 @@ curl "http://localhost:8080/api/v1/datasets/amphan-2020/profiles?bbox=80,10,92,2
   - `COLORSCALERANGE=min,max` sets the colour range (default: the variable's default range); values outside clamp
     to the end colours. `LOGSCALE=true` places values by log10 (min must be above 0).
   - `EPSG:4326` in WMS 1.3.0 takes `BBOX=minLat,minLon,maxLat,maxLon`; `CRS:84` takes longitude first.
+    `EPSG:3857` (web Mercator, the default of Leaflet, OpenLayers and most web maps) takes `BBOX` in metres.
 - **GetFeatureInfo** returns the values under pixel `I,J` for each of `QUERY_LAYERS`, as `application/json` or
   `text/plain`. Each layer reports the time it used, found among its own dataset's times.
 
@@ -166,7 +168,7 @@ http://localhost:8080/opendap/amphan-2020.dods?temp[0][0][0:32][0:62],time
   DAP4, `.html`/`.info` pages or Sequences for profiles. In a manual check (not part of the automated tests),
   netCDF-C 4.9.3, through netCDF4-python, opened `/opendap/amphan-2020` and read a hyperslab and a strided slice.
   pydap and Panoply have not been tried.
-- No WMS `GetLegendGraphic`, no reprojection beyond `CRS:84`/`EPSG:4326`, no WCS `rangeSubset`, scaling or
+- No WMS `GetLegendGraphic`, no projection beyond `CRS:84`, `EPSG:4326` and `EPSG:3857`, no WCS `rangeSubset`, scaling or
   POST/SOAP bindings, no WCS-T.
 - Model files are read by the project's own readers; `--engine xarray` reads them through xarray instead (`pip
   install xarray scipy h5netcdf`), with the same result.

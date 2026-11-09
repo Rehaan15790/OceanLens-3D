@@ -41,6 +41,17 @@ LINGER_SECONDS = 5                # after a response, the most time in all to wa
 HOST_RE = re.compile(r'(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?', re.I)    # the Host values a loopback bind answers
 CSP = "frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'none'"   # header-only: the page has its own policy
 DAY = 86400.0
+MERCATOR_R = 6378137.0            # EPSG:3857 sphere radius, metres
+
+
+def mx(lon):
+    """EPSG:3857 easting (m) of a longitude in degrees."""
+    return math.radians(lon) * MERCATOR_R
+
+
+def my(lat):
+    """EPSG:3857 northing (m) of a latitude in degrees."""
+    return math.asinh(math.tan(math.radians(lat))) * MERCATOR_R
 
 # Known variables. Keys match the app; units are CF/UDUNITS strings, `uom` is the UCUM code WCS wants.
 VARS = {
@@ -109,6 +120,7 @@ def parse_iso(s):
 class Dataset:
     """A gridded ocean state on a rectilinear grid, with optional profiles and a storm track.
     fields[key] is float32 [time][depth][lat][lon], NaN where there is no water or no data."""
+    model = None                        # a snapshot's meta.model.short ('GLORYS', 'IGORA', 'Forecast'), when it has one
 
     def __init__(self, id, title, source, lat, lon, depths, tsec, fields, info, profiles=(), track=None,
                  attrs=None, raw=None):
@@ -134,9 +146,12 @@ class Dataset:
             links['snapshot'] = u + '/snapshot'
         if self.track:
             links['track'] = u + '/track'
-        return {'id': self.id, 'title': self.title, 'source': self.source, 'times': self.times,
-                'depths': [num(z) for z in self.depths], 'bbox': self.bbox, 'profiles': len(self.profiles),
-                'variables': [self.var_summary(k) for k in self.fields], 'links': links}
+        out = {'id': self.id, 'title': self.title, 'source': self.source, 'times': self.times,
+               'depths': [num(z) for z in self.depths], 'bbox': self.bbox, 'profiles': len(self.profiles),
+               'variables': [self.var_summary(k) for k in self.fields], 'links': links}
+        if self.model:                  # the snapshots of one case share a title; the model tells them apart
+            out['model'] = self.model
+        return out
 
     def var_summary(self, key):
         """One variable as the API lists it, with its WMS layer name."""
@@ -274,8 +289,11 @@ def load_snapshot(path):
         fields[key] = f
     if 'u' in fields and 'v' in fields:
         fields['speed'] = np.hypot(fields['u'], fields['v'])
+    model = m.get('model') or {}
+    # GLORYS, IGORA and the forecast give potential temperature (meta.model.temperature); CF names the two apart
+    theta = {'standard_name': 'sea_water_potential_temperature'} if model.get('temperature') == 'potential' else None
     for key, f in fields.items():
-        info[key] = var_info(key, data=f[0])
+        info[key] = var_info(key, theta if key == 'temp' else None, data=f[0])
     lat = m['lat0'] + m['step'] * np.arange(ny)
     lon = m['lon0'] + m['step'] * np.arange(nx)
     tsec = [parse_iso(t) for t in m['times']]
@@ -286,8 +304,10 @@ def load_snapshot(path):
         track = {'name': T.get('name'), 'fields': T['fields'],
                  'fixes': [[iso(parse_iso(f[0]))] + list(f[1:]) for f in T['fixes']]}
     attrs = {k: m[k] for k in ('sources', 'citations', 'provenance') if k in m}
-    return Dataset(safe_id(Path(path).stem), m.get('title', Path(path).stem), 'snapshot', lat, lon, m['depths'],
-                   tsec, fields, info, profiles, track, attrs, raw)
+    ds = Dataset(safe_id(Path(path).stem), m.get('title', Path(path).stem), 'snapshot', lat, lon, m['depths'],
+                 tsec, fields, info, profiles, track, attrs, raw)
+    ds.model = model.get('short')
+    return ds
 
 
 def snapshot_profiles(d):
@@ -1135,7 +1155,17 @@ class Handler(BaseHTTPRequestHandler):
             a = [a[1], a[0], a[3], a[2]]
         if a[0] >= a[2] or a[1] >= a[3]:
             raise ApiError(400, 'InvalidParameterValue', 'BBOX minimum must be below maximum', 'bbox')
-        return a                                               # lon0, lat0, lon1, lat1
+        return a                                               # lon0, lat0, lon1, lat1 (EPSG:3857: x0, y0, x1, y1 in metres)
+
+    @staticmethod
+    def pixel_lonlat(box, w, h, crs):
+        """The longitude of every pixel column and the latitude of every row, at pixel centres, north first.
+        EPSG:3857 (web Mercator, what Leaflet, OpenLayers and most portals ask for) has BBOX in metres."""
+        xs = box[0] + (np.arange(w) + 0.5) * (box[2] - box[0]) / w
+        ys = box[3] - (np.arange(h) + 0.5) * (box[3] - box[1]) / h
+        if crs == 'EPSG:3857':
+            return np.degrees(xs / MERCATOR_R), np.degrees(np.arctan(np.sinh(ys / MERCATOR_R)))
+        return xs, ys
 
     # -- WMS 1.3.0
     def wms(self, q):
@@ -1155,8 +1185,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(400, 'LayerNotDefined', f'no layer {n!r}; see GetCapabilities', 'layers')
                 layers.append((ds, key))
             crs = (self.param(q, 'crs') or self.param(q, 'srs') or 'CRS:84').upper()
-            if crs not in ('CRS:84', 'EPSG:4326'):
-                raise ApiError(400, 'InvalidCRS', f'CRS {crs} is not served; use CRS:84 or EPSG:4326', 'crs')
+            if crs not in ('CRS:84', 'EPSG:4326', 'EPSG:3857'):
+                raise ApiError(400, 'InvalidCRS', f'CRS {crs} is not served; use CRS:84, EPSG:4326 or EPSG:3857', 'crs')
             box = self.bbox_of(q, crs, ver)
             try:
                 w, h = int(self.param(q, 'width', True)), int(self.param(q, 'height', True))
@@ -1171,13 +1201,15 @@ class Handler(BaseHTTPRequestHandler):
                 depth = abs(float(elev)) if elev not in (None, '') else float(ds.depths[0])
             except ValueError:
                 raise ApiError(400, 'InvalidDimensionValue', 'ELEVATION must be a number of metres', 'elevation')
+            lons, lats = self.pixel_lonlat(box, w, h, crs)
             if req == 'getmap':
-                return self.wms_map(q, ds, layers[0][1], box, w, h, ti, depth)
-            return self.wms_info(q, layers, box, w, h, depth, ver)
+                return self.wms_map(q, ds, layers[0][1], lons, lats, ti, depth)
+            return self.wms_info(q, layers, lons, lats, depth, ver)
         raise ApiError(400, 'OperationNotSupported', f'REQUEST {req} is not served', 'request')
 
-    def wms_map(self, q, ds, key, box, w, h, ti, depth):
+    def wms_map(self, q, ds, key, lons, lats, ti, depth):
         """GetMap: the layer sampled at every pixel centre and coloured by a palette, as PNG (a heavy slot)."""
+        w, h = len(lons), len(lats)
         fmt = (self.param(q, 'format') or 'image/png').lower()
         if fmt != 'image/png':
             raise ApiError(400, 'InvalidFormat', 'FORMAT must be image/png', 'format')
@@ -1204,8 +1236,6 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError
             except ValueError:
                 raise ApiError(400, 'InvalidParameterValue', 'BGCOLOR must be 0xRRGGBB', 'bgcolor')
-        lons = box[0] + (np.arange(w) + 0.5) * (box[2] - box[0]) / w
-        lats = box[3] - (np.arange(h) + 0.5) * (box[3] - box[1]) / h
         with self.busy():
             grid = ds.layer(key, ti, depth)
             rgba = np.zeros((h, w, 4), np.uint8)
@@ -1221,8 +1251,9 @@ class Handler(BaseHTTPRequestHandler):
             png = png_rgba(rgba)
         self.send(png, 'image/png', headers={'X-OceanLens-Time': ds.times[ti], 'X-OceanLens-Depth': f'{depth:g}'})
 
-    def wms_info(self, q, layers, box, w, h, depth, ver):
+    def wms_info(self, q, layers, lons, lats, depth, ver):
         """GetFeatureInfo: the value of each query layer at pixel (I, J)."""
+        w, h = len(lons), len(lats)
         try:
             i = int(self.param(q, 'i' if ver == '1.3.0' else 'x', True))
             j = int(self.param(q, 'j' if ver == '1.3.0' else 'y', True))
@@ -1230,8 +1261,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(400, 'InvalidPoint', 'I and J must be integer pixel positions', 'i')
         if not (0 <= i < w and 0 <= j < h):
             raise ApiError(400, 'InvalidPoint', 'I and J must lie inside WIDTH and HEIGHT', 'i')
-        lon = box[0] + (i + 0.5) * (box[2] - box[0]) / w
-        lat = box[3] - (j + 0.5) * (box[3] - box[1]) / h
+        lon, lat = float(lons[i]), float(lats[j])
         rows = []
         for ds, key in layers:                       # each dataset has its own times
             t = ds.time_index(self.param(q, 'time'))
@@ -1272,7 +1302,7 @@ class Handler(BaseHTTPRequestHandler):
              f'<GetMap><Format>image/png</Format>{dcp}</GetMap>',
              f'<GetFeatureInfo><Format>application/json</Format><Format>text/plain</Format>{dcp}</GetFeatureInfo>',
              '</Request><Exception><Format>XML</Format></Exception>',
-             f'<Layer><Title>OceanLens 3D</Title><CRS>CRS:84</CRS><CRS>EPSG:4326</CRS>{geo_box(w, s, e, n)}']
+             f'<Layer><Title>OceanLens 3D</Title><CRS>CRS:84</CRS><CRS>EPSG:4326</CRS><CRS>EPSG:3857</CRS>{geo_box(w, s, e, n)}']
         for ds in sets:
             times = ','.join(ds.times)
             elev = ','.join(f'{-z:g}' for z in ds.depths)
@@ -1287,6 +1317,7 @@ class Handler(BaseHTTPRequestHandler):
                          f'{geo_box(*ds.bbox)}'
                          f'<BoundingBox CRS="CRS:84" minx="{ds.bbox[0]:g}" miny="{ds.bbox[1]:g}" maxx="{ds.bbox[2]:g}" maxy="{ds.bbox[3]:g}"/>'
                          f'<BoundingBox CRS="EPSG:4326" minx="{ds.bbox[1]:g}" miny="{ds.bbox[0]:g}" maxx="{ds.bbox[3]:g}" maxy="{ds.bbox[2]:g}"/>'
+                         f'<BoundingBox CRS="EPSG:3857" minx="{mx(ds.bbox[0]):.0f}" miny="{my(ds.bbox[1]):.0f}" maxx="{mx(ds.bbox[2]):.0f}" maxy="{my(ds.bbox[3]):.0f}"/>'
                          f'<Dimension name="time" units="ISO8601" default="{ds.times[0]}" nearestValue="1">{times}</Dimension>'
                          f'<Dimension name="elevation" units="m" unitSymbol="m" default="{-ds.depths[0]:g}">{elev}</Dimension>'
                          + ''.join(f'<Style><Name>{p}</Name><Title>{p} palette</Title></Style>' for p in styles)

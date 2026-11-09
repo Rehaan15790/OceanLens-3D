@@ -255,7 +255,10 @@ const importUI = (()=>{
     grp.hidden = false;
     const sel = $('sourceSel'), cur = srv.current;
     sel.textContent = '';
-    (srv.datasets || []).forEach(d=>sel.add(new Option(d.title || d.name || d.id, d.id)));
+    // the snapshots of one case share a title: name the model too (a snapshot without one is HYCOM, as in data-real.js)
+    const titles = (srv.datasets || []).map(d=>d.title || d.name || d.id);
+    (srv.datasets || []).forEach((d, i)=>sel.add(new Option(titles.indexOf(titles[i])===titles.lastIndexOf(titles[i])
+      ? titles[i] : `${titles[i]} · ${d.model || (d.source==='snapshot' ? 'HYCOM' : d.id)}`, d.id)));
     if(cur!=null) sel.value = typeof cur==='object' ? cur.id : cur;
     setLive(srv.live ? 'live' : 'offline');
   }
