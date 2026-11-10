@@ -101,6 +101,11 @@ python data-pipeline/build_snapshot.py --model glorys --temperature-only --check
 ```
 
 - The browser is `$OCEANLENS_BROWSER` (or `$CHROME`), else Edge, Chrome or Chromium in their usual places (`docs/TESTING.md`).
+- The run on 10 November 2026 (`python tools/check.py`, the same desktop, Python 3.14), after WMS in EPSG:3857, the
+  potential-temperature standard name and the model names in the Data source list: 394 tests and the `fingerprint`
+  run, 388 passed, none failed, 6 skipped, 1 error: `test_wcs_subset_has_no_regex_blowup` timed out on the loopback
+  stall described in `docs/TESTING.md`. Its test class then passed 12 times out of 12 on its own, on this commit and
+  on the one before these changes.
 - The run on 9 November 2026 (`python tools/check.py`: every suite, headless Edge with software rendering, on a
   Ryzen 7 9800X3D desktop), after the audit fixes: 394 tests and the `fingerprint` run, 389 passed, none failed,
   6 skipped: the splash test, the three xarray tests (xarray is not installed on that desktop; CI installs it) and

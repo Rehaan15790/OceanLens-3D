@@ -1,6 +1,7 @@
 # OceanLens 3D
 
-**Interactive 3D viewer for ocean model output and Argo floats, in one offline HTML file.**
+**A web platform that shows ocean model output and in-situ observations together in 3D. The client is one HTML file
+that also runs offline.**
 
 [![check](https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml/badge.svg)](https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml)
 ![Smart India Hackathon 2026](https://img.shields.io/badge/SIH%202026-PS%2026067-1f6feb)
@@ -15,14 +16,51 @@ switch between: HYCOM, Copernicus Marine GLORYS and INCOIS's IGORA reanalysis fr
 It was built by **Team ByteForge** for Smart India Hackathon 2026, problem statement 26067 (problem owner: INCOIS).
 It is a student prototype and is not affiliated with or endorsed by INCOIS or the Ministry of Earth Sciences.
 
+| At a glance | |
+| --- | --- |
+| Problem statement | SIH 2026, PS 26067 (INCOIS, Ministry of Earth Sciences): a web-based interactive 3D visualization platform that integrates numerical ocean model outputs and in-situ observations |
+| Team | ByteForge, Team ID 142596 |
+| Case | Cyclone Amphan, May 2020 (a hindcast); a served case adds the latest Copernicus Marine forecast |
+| Models | HYCOM GOFS 3.1, Copernicus Marine GLORYS12V1 and INCOIS IGORA, switched with one click |
+| Observations | 206 Argo profiles from 70 floats, BGC-Argo chlorophyll and oxygen, 4 RAMA moorings, 12 NOAA drifting buoys, satellite SST and chlorophyll |
+| Server | REST, OGC WMS 1.3.0, OGC WCS 2.0.1 and OPeNDAP DAP2 |
+| Evidence | 394 automated tests; of the 39 requirement rows, 23 are met, 15 partly met and 1 not met ([Requirements](REQUIREMENTS.md)) |
+
 ## Try it
 
 1. Download [`OceanLens3D.html`](https://github.com/Rehaan15790/OceanLens-3D/raw/main/OceanLens3D.html) (about 7 MB).
 2. Double-click it. No install, no server, no internet connection.
 3. Press **Start the guided tour** for a 9-step walkthrough, or `?` for the keyboard shortcuts.
+4. Short on time? Press `M` to switch the model, click a float to compare it with the model, then press `T` and click
+   an amber buoy to release a drift.
 
-It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, on a laptop or desktop screen. The automated tests run in Chromium-based browsers. Firefox 157 was checked by hand on 14 October 2026
-(every view, a float comparison, no console errors). Safari has not been tested.
+It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, on a laptop or desktop screen. The
+automated tests run in Chromium-based browsers. Firefox 157 was checked by hand on 14 October 2026 (every view, a
+float comparison, no console errors). Safari has not been tested.
+
+**With the data server** (Python 3 and numpy):
+
+```
+python server/serve.py
+```
+
+Then open `http://127.0.0.1:8080/`. The page gains the forecast case under Data source, and the same data are served
+at `/api/v1/datasets`, `/wms`, `/wcs` and `/opendap/` ([Server API](docs/API.md)).
+
+## How it answers the problem statement
+
+| What the problem statement asks | What OceanLens 3D does | Status |
+| --- | --- | --- |
+| 3D rendering of temperature, salinity and currents, with depth slices, isosurfaces and time animation (WebGL, Three.js) | Five views in Three.js: surface, all depth levels, depth slice, depth of a value and a marching-cubes isosurface. Vertical sections, current streaks and arrows, a timeline with playback | Met for slices, isosurfaces and animation. The data stop at 1000 m, and the volume is stacked translucent layers, not ray marching |
+| Instrument overlay: Argo, glider, CTD and BGC data; a click opens a depth profile with timestamps | Real Argo and BGC-Argo floats and RAMA moorings are in the scene. A click draws the profile over the model column at the same place, with bias and RMSE. Glider, CTD, mooring and ADCP files import | Met for Argo and BGC-Argo. The real glider files are from 2016, and the CTD sample is synthetic |
+| Multi-format ingestion: NetCDF (xarray backend) and delimited text, modular | NetCDF-3 and NetCDF-4 readers in the browser and in Python, xarray as an option, CSV and TSV with column mapping | Met. A new model variable, region or event in the 3D view still needs pipeline code |
+| Colour bar and variable controls | Palette, min/max, linear or log scale, a variable selector, vertical exaggeration and layer opacity | Met. Opacity acts on the depth layers only |
+| Web-based, scalable architecture: a REST or OPeNDAP backend, no client-side dependencies | A Python standard-library server (REST, OPeNDAP, WMS, WCS, API keys, rate limits) and a client with nothing to install | Met for the API and the client. The client is plain JavaScript with no framework, by choice. The 3D view draws the data built into the page, or a model the server puts on the same grid |
+| Extensible plugin design: CTD, moorings, HF radar, ADCP, new variables, ML products | `window.OceanLens`: one call registers an instrument, variable, product or file format. Plugins ship for CTD, moorings, ADCP and HF radar | Met as plugins. Only the moorings carry real data, and no ML product ships |
+| Open standards: OGC WMS and WCS, CF conventions | WMS 1.3.0 (CRS:84, EPSG:4326 and web Mercator EPSG:3857), WCS 2.0.1, CF-1.8 NetCDF output, OPeNDAP DAP2 | Met for the core operations. Not run through the OGC test suite |
+| Public outreach and science communication | A 9-step guided tour with plain captions, PNG export, and one file that runs offline in a classroom | Partly met. English only, on laptop or desktop screens |
+
+[REQUIREMENTS.md](REQUIREMENTS.md) has all 39 rows, each with the code that implements it and the test that proves it.
 
 ## Features
 
@@ -62,7 +100,8 @@ It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, on a
 - **Bring your own data:** drop Argo (core, B and S files), glider, ERDDAP, CF NetCDF-3 or NetCDF-4, or CSV files on
   the view. They are read in the browser, by the project's own NetCDF readers, and never uploaded.
 - **Built for sharing:** a colour-bar editor, a timeline with playback, PNG export and a guided tour.
-- **A data server and a plugin API** for institutions: REST, OGC WMS 1.3.0, WCS 2.0.1 and OPeNDAP DAP2, optional API
+- **A data server and a plugin API** for institutions: REST, OGC WMS 1.3.0 (also in web Mercator, EPSG:3857, as web
+  maps ask for), WCS 2.0.1 and OPeNDAP DAP2, optional API
   keys and rate limits, plus `window.OceanLens` for new instruments, variables, products and file formats. A NetCDF
   model file given to the server that covers the map and the case's times joins the page's Model switch and is drawn
   in 3D, streamed from the server.
@@ -156,7 +195,7 @@ numbers, and a test fails if the two disagree.
 
 ## Development
 
-You need Python 3 (tested with 3.11 and 3.12) with numpy, and a Chromium-based browser (Edge, Chrome or Chromium)
+You need Python 3 (tested with 3.11, 3.12 and 3.14) with numpy, and a Chromium-based browser (Edge, Chrome or Chromium)
 for the browser tests.
 
 ```
