@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-labelledby="title desc">
+  <title id="title">OceanLens 3D</title>
+  <desc id="desc">Ocean models and observations in one 3D view. Smart India Hackathon 2026, problem statement 26067, Team ByteForge.</desc>
+  <style>
+    .sans { font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace; }
+    .cursor { animation: blink 1.1s steps(1, end) infinite; }
+    .track { animation: dash 6s linear infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes dash { to { stroke-dashoffset: -120; } }
+    @media (prefers-reduced-motion: reduce) { .cursor, .track { animation: none; } }
+  </style>
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#5aa9e6" stroke-opacity="0.05"/>
+    </pattern>
+    <pattern id="waves" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M0 20 Q12 10 24 20 T48 20" fill="none" stroke="#5aa9e6" stroke-width="2.5" stroke-opacity="0.8"/>
+      <path d="M0 32 Q12 22 24 32 T48 32" fill="none" stroke="#5aa9e6" stroke-width="2" stroke-opacity="0.35"/>
+    </pattern>
+    <linearGradient id="sst" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1d4e89"/>
+      <stop offset="0.5" stop-color="#4fb3bf"/>
+      <stop offset="1" stop-color="#f4a259"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="400" fill="#0e1318"/>
+  <rect width="1280" height="352" fill="url(#grid)"/>
+
+  <g fill="none" stroke="#5aa9e6">
+    <path d="M880 352 C930 300 960 250 1040 220 S1200 170 1280 120" stroke-opacity="0.18" stroke-width="1.5"/>
+    <path d="M840 352 C900 280 940 220 1030 190 S1190 130 1280 80" stroke-opacity="0.25" stroke-width="1.5"/>
+    <path d="M800 352 C870 260 920 190 1020 160 S1180 90 1280 40" stroke-opacity="0.32" stroke-width="1.5"/>
+    <path d="M770 340 C840 230 900 160 1010 130 S1170 50 1250 0" stroke-opacity="0.22" stroke-width="1.5"/>
+    <path d="M920 352 C960 320 990 290 1060 262 S1210 214 1280 170" stroke-opacity="0.12" stroke-width="1.5"/>
+  </g>
+  <path class="track" d="M1210 300 C1170 250 1150 200 1120 170 S1060 110 1050 70" fill="none" stroke="#f28b82" stroke-width="3" stroke-dasharray="10 10" stroke-linecap="round"/>
+  <g transform="translate(1050 62)" fill="none" stroke="#f28b82" stroke-width="3" stroke-linecap="round">
+    <path d="M0 -14 A14 14 0 0 1 14 0"/>
+    <path d="M0 14 A14 14 0 0 1 -14 0"/>
+    <circle r="4" fill="#f28b82" stroke="none"/>
+  </g>
+
+  <g transform="translate(106 76)">
+    <polygon points="0,128 70,98 140,128 70,158" fill="#1d4e89" stroke="#0e1318" stroke-width="2"/>
+    <polygon points="0,92 70,62 140,92 70,122" fill="#4fb3bf" fill-opacity="0.92" stroke="#0e1318" stroke-width="2"/>
+    <polygon points="0,56 70,26 140,56 70,86" fill="#f4a259" fill-opacity="0.95" stroke="#0e1318" stroke-width="2"/>
+    <path d="M70 0V26M70 158V184" stroke="#e8ecef" stroke-width="2" stroke-dasharray="4 5"/>
+    <circle cx="70" cy="56" r="5" fill="#e8ecef"/>
+  </g>
+
+  <g class="sans" font-size="82" font-weight="900">
+    <text x="300" y="196" textLength="700" lengthAdjust="spacing"><tspan fill="#e8ecef">OCEANLENS</tspan><tspan fill="#5aa9e6"> 3D</tspan></text>
+  </g>
+  <rect x="304" y="214" width="420" height="6" rx="3" fill="url(#sst)"/>
+  <text x="304" y="252" class="sans" font-size="18" font-weight="600" fill="#aeb8c1" textLength="610" lengthAdjust="spacing">OCEAN MODELS AND OBSERVATIONS IN ONE 3D VIEW</text>
+
+  <text x="304" y="306" class="mono" font-size="20" textLength="288" lengthAdjust="spacingAndGlyphs"><tspan fill="#5aa9e6">$</tspan><tspan fill="#e8ecef"> python server/serve.py</tspan></text>
+  <rect class="cursor" x="598" y="289" width="11" height="21" fill="#5aa9e6"/>
+
+  <rect y="352" width="1280" height="48" fill="#151b21"/>
+  <rect y="352" width="1280" height="48" fill="url(#waves)"/>
+  <rect x="96" y="362" width="386" height="28" fill="#0e1318"/>
+  <text x="112" y="382" class="sans" font-size="14" font-weight="700" fill="#5aa9e6" textLength="354" lengthAdjust="spacing">SIH 2026 · PS 26067 · TEAM BYTEFORGE</text>
+</svg>

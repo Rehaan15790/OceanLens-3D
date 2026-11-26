@@ -1,11 +1,31 @@
-# OceanLens 3D
+<p align="center">
+  <img src="docs/banner.svg" alt="OceanLens 3D: ocean models and observations in one 3D view. SIH 2026, PS 26067, Team ByteForge." width="100%">
+</p>
 
-**A web platform that shows ocean model output and in-situ observations together in 3D. The client is one HTML file
-that also runs offline.**
+<p align="center">
+  <b>A web platform that shows ocean model output and in-situ observations together in 3D.</b><br>
+  <b>The client is one HTML file that also runs offline.</b>
+</p>
 
-[![check](https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml/badge.svg)](https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml)
-![Smart India Hackathon 2026](https://img.shields.io/badge/SIH%202026-PS%2026067-1f6feb)
-![All rights reserved](https://img.shields.io/badge/licence-all%20rights%20reserved-lightgrey)
+<p align="center">
+  <a href="https://github.com/Rehaan15790/OceanLens-3D/raw/main/OceanLens3D.html"><img alt="Download OceanLens3D.html" src="https://img.shields.io/badge/download-OceanLens3D.html-5aa9e6?style=for-the-badge&labelColor=0e1318"></a>
+</p>
+
+<p align="center">
+  <a href="#try-it">Try it</a> ·
+  <a href="#how-it-answers-the-problem-statement">Problem statement</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#the-data">The data</a> ·
+  <a href="#development">Development</a> ·
+  <a href="#limitations-and-next-steps">Limitations</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml"><img alt="check" src="https://github.com/Rehaan15790/OceanLens-3D/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Smart India Hackathon 2026, PS 26067" src="https://img.shields.io/badge/SIH_2026-PS_26067-5aa9e6?style=flat-square&labelColor=0e1318">
+  <img alt="Version 0.9.0" src="https://img.shields.io/badge/version-0.9.0-5aa9e6?style=flat-square&labelColor=0e1318">
+  <img alt="Licence: all rights reserved" src="https://img.shields.io/badge/licence-all_rights_reserved-aeb8c1?style=flat-square&labelColor=0e1318">
+</p>
 
 ![OceanLens 3D: sea-surface temperature over the Arabian Sea and the Bay of Bengal, with Argo floats and Cyclone Amphan's track](docs/images/temperature-surface.png)
 
@@ -38,7 +58,9 @@ It needs WebGL with hardware acceleration: current Chrome, Edge or Firefox, on a
 automated tests run in Chromium-based browsers. Firefox 157 was checked by hand on 14 October 2026 (every view, a
 float comparison, no console errors). Safari has not been tested.
 
-**With the data server** (Python 3 and numpy):
+### `python server/serve.py`
+
+With the data server (Python 3 and numpy):
 
 ```
 python server/serve.py
@@ -216,7 +238,10 @@ machine, because the test browser renders WebGL in software: it fails on our slo
 on a fast desktop. Measured load times and frame rates, with and without a GPU, are in `docs/TESTING.md`.
 Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`data-pipeline/README.md`).
 
-### Repository layout
+<details>
+<summary><strong>Repository layout</strong></summary>
+
+<br>
 
 | Path | What it is |
 | --- | --- |
@@ -230,6 +255,8 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
 | `tools/`, `tests/` | The test runner, the headless-browser client and the tests |
 | `docs/` | The guides listed above |
 | `deck/` | The pitch deck (HTML source; the PDF at the root is printed from it) and the SIH portal text |
+
+</details>
 
 ## Limitations and next steps
 
@@ -260,6 +287,11 @@ Rebuilding the snapshot needs the raw cache, or network access with `--fetch` (`
 
 ## Data sources and citations
 
+<details>
+<summary><strong>Every data source, with its citation</strong></summary>
+
+<br>
+
 HYCOM GOFS 3.1 (HYCOM Consortium), GLORYS12V1 (E.U. Copernicus Marine Service Information,
 GLOBAL_MULTIYEAR_PHY_001_030, doi:10.48670/moi-00021), Argo (Argo GDAC, doi:10.17882/42182), ETOPO1 (NOAA NCEI, doi:10.7289/V5C8276M) and
 IBTrACS v04r01 (NOAA NCEI, doi:10.25921/82ty-9e16; winds from IMD and JTWC), NOAA Global Drifter Program hourly data
@@ -268,6 +300,8 @@ extracted from the INCOIS Live Access Server, RAMA moorings (NOAA PMEL GTMBA, Mc
 Marine OSTIA SST and GlobColour chlorophyll. The sample files come from the Argo GDAC
 (its Ifremer mirror and Ifremer ERDDAP) and the OceanGliders GDAC (the BoBBLE experiment, 2016). The full
 acknowledgements and citations are in `THIRD_PARTY_NOTICES.md`, `samples/README.md` and the app's About panel.
+
+</details>
 
 ## Copyright and licence
 
